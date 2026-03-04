@@ -1,0 +1,332 @@
+<?xml version='1.0' encoding='utf-8'?>
+<gexf xmlns="http://www.gexf.net/1.2draft" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.gexf.net/1.2draft http://www.gexf.net/1.2draft/gexf.xsd" version="1.2">
+  <meta lastmodifieddate="2026-03-03">
+    <creator>NetworkX 3.6.1</creator>
+  </meta>
+  <graph defaultedgetype="directed" mode="static" name="AMR_System_Map">
+    <attributes mode="static" class="edge">
+      <attribute id="2" title="sign" type="string" />
+      <attribute id="3" title="relation" type="string" />
+    </attributes>
+    <attributes mode="static" class="node">
+      <attribute id="0" title="layer" type="string" />
+      <attribute id="1" title="category" type="string" />
+    </attributes>
+    <nodes>
+      <node id="Community" label="Community">
+        <attvalues>
+          <attvalue for="0" value="external" />
+          <attvalue for="1" value="context" />
+        </attvalues>
+      </node>
+      <node id="Regulator" label="Regulator/Guidelines">
+        <attvalues>
+          <attvalue for="0" value="external" />
+          <attvalue for="1" value="context" />
+        </attvalues>
+      </node>
+      <node id="Hospitals" label="Hospitals (Macro)">
+        <attvalues>
+          <attvalue for="0" value="macro" />
+          <attvalue for="1" value="entity" />
+        </attvalues>
+      </node>
+      <node id="Patients" label="Patients">
+        <attvalues>
+          <attvalue for="0" value="macro" />
+          <attvalue for="1" value="entity" />
+        </attvalues>
+      </node>
+      <node id="Admissions" label="Admissions">
+        <attvalues>
+          <attvalue for="0" value="macro" />
+          <attvalue for="1" value="process" />
+        </attvalues>
+      </node>
+      <node id="IntraContact" label="Intra-hospital contacts">
+        <attvalues>
+          <attvalue for="0" value="macro" />
+          <attvalue for="1" value="process" />
+        </attvalues>
+      </node>
+      <node id="Screening" label="Screening &amp; testing">
+        <attvalues>
+          <attvalue for="0" value="macro" />
+          <attvalue for="1" value="intervention" />
+        </attvalues>
+      </node>
+      <node id="Isolation" label="Isolation / quarantine">
+        <attvalues>
+          <attvalue for="0" value="macro" />
+          <attvalue for="1" value="intervention" />
+        </attvalues>
+      </node>
+      <node id="Hygiene" label="Hygiene compliance">
+        <attvalues>
+          <attvalue for="0" value="macro" />
+          <attvalue for="1" value="intervention" />
+        </attvalues>
+      </node>
+      <node id="AbxUse" label="Antibiotic prescribing">
+        <attvalues>
+          <attvalue for="0" value="macro" />
+          <attvalue for="1" value="intervention" />
+        </attvalues>
+      </node>
+      <node id="IncompleteTx" label="Incomplete treatment">
+        <attvalues>
+          <attvalue for="0" value="macro" />
+          <attvalue for="1" value="behavior" />
+        </attvalues>
+      </node>
+      <node id="Transfers" label="Patient transfers">
+        <attvalues>
+          <attvalue for="0" value="macro" />
+          <attvalue for="1" value="process" />
+        </attvalues>
+      </node>
+      <node id="InterHospSpread" label="Inter-hospital spread">
+        <attvalues>
+          <attvalue for="0" value="macro" />
+          <attvalue for="1" value="outcome" />
+        </attvalues>
+      </node>
+      <node id="ColonPressure" label="Colonization pressure">
+        <attvalues>
+          <attvalue for="0" value="macro" />
+          <attvalue for="1" value="state" />
+        </attvalues>
+      </node>
+      <node id="TransProb" label="Transmission probability">
+        <attvalues>
+          <attvalue for="0" value="macro" />
+          <attvalue for="1" value="state" />
+        </attvalues>
+      </node>
+      <node id="DetectProb" label="Detection probability">
+        <attvalues>
+          <attvalue for="0" value="macro" />
+          <attvalue for="1" value="state" />
+        </attvalues>
+      </node>
+      <node id="TreatFailure" label="Treatment failure risk">
+        <attvalues>
+          <attvalue for="0" value="macro" />
+          <attvalue for="1" value="outcome" />
+        </attvalues>
+      </node>
+      <node id="InfectDuration" label="Infection/colonization duration">
+        <attvalues>
+          <attvalue for="0" value="macro" />
+          <attvalue for="1" value="state" />
+        </attvalues>
+      </node>
+      <node id="WithinHost" label="Within-host evolution">
+        <attvalues>
+          <attvalue for="0" value="micro" />
+          <attvalue for="1" value="process" />
+        </attvalues>
+      </node>
+      <node id="SelPressure" label="Selection pressure (antibiotics)">
+        <attvalues>
+          <attvalue for="0" value="micro" />
+          <attvalue for="1" value="mechanism" />
+        </attvalues>
+      </node>
+      <node id="MutationHGT" label="Mutation / HGT">
+        <attvalues>
+          <attvalue for="0" value="micro" />
+          <attvalue for="1" value="mechanism" />
+        </attvalues>
+      </node>
+      <node id="ResFrac" label="Resistant fraction">
+        <attvalues>
+          <attvalue for="0" value="micro" />
+          <attvalue for="1" value="state" />
+        </attvalues>
+      </node>
+      <node id="FitnessCost" label="Fitness cost (no antibiotics)">
+        <attvalues>
+          <attvalue for="0" value="micro" />
+          <attvalue for="1" value="mechanism" />
+        </attvalues>
+      </node>
+      <node id="TransFitness" label="Transmission fitness">
+        <attvalues>
+          <attvalue for="0" value="micro" />
+          <attvalue for="1" value="state" />
+        </attvalues>
+      </node>
+    </nodes>
+    <edges>
+      <edge source="Community" target="Admissions" id="0" weight="1.0">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Community inflow to hospital" />
+        </attvalues>
+      </edge>
+      <edge source="Regulator" target="Screening" id="1" weight="0.6">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Guidelines affect screening policy" />
+        </attvalues>
+      </edge>
+      <edge source="Regulator" target="AbxUse" id="2" weight="0.6">
+        <attvalues>
+          <attvalue for="2" value="-" />
+          <attvalue for="3" value="Stewardship can reduce unnecessary use" />
+        </attvalues>
+      </edge>
+      <edge source="Hospitals" target="Admissions" id="3" weight="1.0">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Hospitals receive admissions" />
+        </attvalues>
+      </edge>
+      <edge source="Patients" target="Admissions" id="4" weight="1.0">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Patients are admitted" />
+        </attvalues>
+      </edge>
+      <edge source="Admissions" target="IntraContact" id="5" weight="0.8">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="More admissions → more contacts" />
+        </attvalues>
+      </edge>
+      <edge source="IntraContact" target="TransProb" id="6" weight="0.8">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Contacts drive transmission probability" />
+        </attvalues>
+      </edge>
+      <edge source="Screening" target="DetectProb" id="7" weight="0.9">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Testing increases detection" />
+        </attvalues>
+      </edge>
+      <edge source="Isolation" target="TransProb" id="8" weight="0.9">
+        <attvalues>
+          <attvalue for="2" value="-" />
+          <attvalue for="3" value="Isolation reduces transmission" />
+        </attvalues>
+      </edge>
+      <edge source="Hygiene" target="TransProb" id="9" weight="0.9">
+        <attvalues>
+          <attvalue for="2" value="-" />
+          <attvalue for="3" value="Hygiene reduces transmission" />
+        </attvalues>
+      </edge>
+      <edge source="AbxUse" target="SelPressure" id="10" weight="1.0">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Antibiotics create selection" />
+        </attvalues>
+      </edge>
+      <edge source="IncompleteTx" target="WithinHost" id="11" weight="0.9">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Incomplete therapy selects resistance" />
+        </attvalues>
+      </edge>
+      <edge source="Transfers" target="InterHospSpread" id="12" weight="1.0">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Transfers drive between-hospital spread" />
+        </attvalues>
+      </edge>
+      <edge source="InterHospSpread" target="ColonPressure" id="13" weight="0.7">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Imported cases increase pressure" />
+        </attvalues>
+      </edge>
+      <edge source="ColonPressure" target="TransProb" id="14" weight="0.6">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Higher pressure increases spread" />
+        </attvalues>
+      </edge>
+      <edge source="ColonPressure" target="Screening" id="15" weight="0.4">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="High pressure triggers more screening" />
+        </attvalues>
+      </edge>
+      <edge source="ColonPressure" target="Isolation" id="16" weight="0.3">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="High pressure triggers more isolation" />
+        </attvalues>
+      </edge>
+      <edge source="TransProb" target="ColonPressure" id="17" weight="0.8">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Transmission increases pressure (feedback)" />
+        </attvalues>
+      </edge>
+      <edge source="DetectProb" target="Isolation" id="18" weight="0.8">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Detection enables isolation" />
+        </attvalues>
+      </edge>
+      <edge source="TreatFailure" target="InfectDuration" id="19" weight="0.7">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Failure prolongs duration" />
+        </attvalues>
+      </edge>
+      <edge source="InfectDuration" target="ColonPressure" id="20" weight="0.8">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Longer duration increases pressure" />
+        </attvalues>
+      </edge>
+      <edge source="WithinHost" target="ResFrac" id="21" weight="1.0">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Evolution changes resistant fraction" />
+        </attvalues>
+      </edge>
+      <edge source="SelPressure" target="WithinHost" id="22" weight="1.0">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Selection acts within host" />
+        </attvalues>
+      </edge>
+      <edge source="MutationHGT" target="WithinHost" id="23" weight="0.7">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="New variants arise" />
+        </attvalues>
+      </edge>
+      <edge source="ResFrac" target="TreatFailure" id="24" weight="0.9">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Resistance increases failure risk" />
+        </attvalues>
+      </edge>
+      <edge source="ResFrac" target="TransFitness" id="25" weight="0.6">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="If low cost, fitness remains high" />
+        </attvalues>
+      </edge>
+      <edge source="FitnessCost" target="ResFrac" id="26" weight="0.4">
+        <attvalues>
+          <attvalue for="2" value="-" />
+          <attvalue for="3" value="Cost reduces resistance without antibiotics" />
+        </attvalues>
+      </edge>
+      <edge source="TransFitness" target="TransProb" id="27" weight="0.4">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Fitter strains transmit better" />
+        </attvalues>
+      </edge>
+    </edges>
+  </graph>
+</gexf>

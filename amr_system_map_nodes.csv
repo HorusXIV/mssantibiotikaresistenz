@@ -1,0 +1,25 @@
+Id,Label,layer,category
+Community,Community,external,context
+Regulator,Regulator/Guidelines,external,context
+Hospitals,Hospitals (Macro),macro,entity
+Patients,Patients,macro,entity
+Admissions,Admissions,macro,process
+IntraContact,Intra-hospital contacts,macro,process
+Screening,Screening & testing,macro,intervention
+Isolation,Isolation / quarantine,macro,intervention
+Hygiene,Hygiene compliance,macro,intervention
+AbxUse,Antibiotic prescribing,macro,intervention
+IncompleteTx,Incomplete treatment,macro,behavior
+Transfers,Patient transfers,macro,process
+InterHospSpread,Inter-hospital spread,macro,outcome
+ColonPressure,Colonization pressure,macro,state
+TransProb,Transmission probability,macro,state
+DetectProb,Detection probability,macro,state
+TreatFailure,Treatment failure risk,macro,outcome
+InfectDuration,Infection/colonization duration,macro,state
+WithinHost,Within-host evolution,micro,process
+SelPressure,Selection pressure (antibiotics),micro,mechanism
+MutationHGT,Mutation / HGT,micro,mechanism
+ResFrac,Resistant fraction,micro,state
+FitnessCost,Fitness cost (no antibiotics),micro,mechanism
+TransFitness,Transmission fitness,micro,state

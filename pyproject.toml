@@ -1,0 +1,22 @@
+[project]
+name = "mss"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "Lukas Breiter",email = "lukas.breiter@students.fhnw.ch"}
+]
+readme = "README.md"
+requires-python = ">=3.12,<=3.14"
+dependencies = [
+    "pandas (>=3.0.1,<4.0.0)",
+    "networkx (>=3.6.1,<4.0.0)",
+    "ipykernel (>=7.2.0,<8.0.0)",
+    "notebook (>=7.5.4,<8.0.0)"
+]
+
+[tool.poetry]
+package-mode = false
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"

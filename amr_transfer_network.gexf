@@ -1,0 +1,194 @@
+<?xml version='1.0' encoding='utf-8'?>
+<gexf xmlns="http://www.gexf.net/1.2draft" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.gexf.net/1.2draft http://www.gexf.net/1.2draft/gexf.xsd" version="1.2">
+  <meta lastmodifieddate="2026-03-03">
+    <creator>NetworkX 3.6.1</creator>
+  </meta>
+  <graph defaultedgetype="directed" mode="static" name="Hospital_Transfer_Network">
+    <attributes mode="static" class="edge">
+      <attribute id="2" title="relation" type="string" />
+    </attributes>
+    <attributes mode="static" class="node">
+      <attribute id="0" title="layer" type="string" />
+      <attribute id="1" title="category" type="string" />
+    </attributes>
+    <nodes>
+      <node id="H01" label="Hospital H01">
+        <attvalues>
+          <attvalue for="0" value="macro" />
+          <attvalue for="1" value="hospital" />
+        </attvalues>
+      </node>
+      <node id="H02" label="Hospital H02">
+        <attvalues>
+          <attvalue for="0" value="macro" />
+          <attvalue for="1" value="hospital" />
+        </attvalues>
+      </node>
+      <node id="H03" label="Hospital H03">
+        <attvalues>
+          <attvalue for="0" value="macro" />
+          <attvalue for="1" value="hospital" />
+        </attvalues>
+      </node>
+      <node id="H04" label="Hospital H04">
+        <attvalues>
+          <attvalue for="0" value="macro" />
+          <attvalue for="1" value="hospital" />
+        </attvalues>
+      </node>
+      <node id="H05" label="Hospital H05">
+        <attvalues>
+          <attvalue for="0" value="macro" />
+          <attvalue for="1" value="hospital" />
+        </attvalues>
+      </node>
+      <node id="H06" label="Hospital H06">
+        <attvalues>
+          <attvalue for="0" value="macro" />
+          <attvalue for="1" value="hospital" />
+        </attvalues>
+      </node>
+      <node id="H07" label="Hospital H07">
+        <attvalues>
+          <attvalue for="0" value="macro" />
+          <attvalue for="1" value="hospital" />
+        </attvalues>
+      </node>
+      <node id="H08" label="Hospital H08">
+        <attvalues>
+          <attvalue for="0" value="macro" />
+          <attvalue for="1" value="hospital" />
+        </attvalues>
+      </node>
+      <node id="H09" label="Hospital H09">
+        <attvalues>
+          <attvalue for="0" value="macro" />
+          <attvalue for="1" value="hospital" />
+        </attvalues>
+      </node>
+      <node id="H10" label="Hospital H10">
+        <attvalues>
+          <attvalue for="0" value="macro" />
+          <attvalue for="1" value="hospital" />
+        </attvalues>
+      </node>
+    </nodes>
+    <edges>
+      <edge source="H01" target="H08" id="0" weight="15.0">
+        <attvalues>
+          <attvalue for="2" value="patient_transfer" />
+        </attvalues>
+      </edge>
+      <edge source="H03" target="H02" id="1" weight="24.0">
+        <attvalues>
+          <attvalue for="2" value="patient_transfer" />
+        </attvalues>
+      </edge>
+      <edge source="H03" target="H04" id="2" weight="25.0">
+        <attvalues>
+          <attvalue for="2" value="patient_transfer" />
+        </attvalues>
+      </edge>
+      <edge source="H03" target="H05" id="3" weight="18.0">
+        <attvalues>
+          <attvalue for="2" value="patient_transfer" />
+        </attvalues>
+      </edge>
+      <edge source="H03" target="H06" id="4" weight="5.0">
+        <attvalues>
+          <attvalue for="2" value="patient_transfer" />
+        </attvalues>
+      </edge>
+      <edge source="H04" target="H03" id="5" weight="15.0">
+        <attvalues>
+          <attvalue for="2" value="patient_transfer" />
+        </attvalues>
+      </edge>
+      <edge source="H04" target="H05" id="6" weight="29.0">
+        <attvalues>
+          <attvalue for="2" value="patient_transfer" />
+        </attvalues>
+      </edge>
+      <edge source="H04" target="H06" id="7" weight="21.0">
+        <attvalues>
+          <attvalue for="2" value="patient_transfer" />
+        </attvalues>
+      </edge>
+      <edge source="H04" target="H08" id="8" weight="18.0">
+        <attvalues>
+          <attvalue for="2" value="patient_transfer" />
+        </attvalues>
+      </edge>
+      <edge source="H04" target="H09" id="9" weight="25.0">
+        <attvalues>
+          <attvalue for="2" value="patient_transfer" />
+        </attvalues>
+      </edge>
+      <edge source="H05" target="H07" id="10" weight="8.0">
+        <attvalues>
+          <attvalue for="2" value="patient_transfer" />
+        </attvalues>
+      </edge>
+      <edge source="H06" target="H02" id="11" weight="16.0">
+        <attvalues>
+          <attvalue for="2" value="patient_transfer" />
+        </attvalues>
+      </edge>
+      <edge source="H06" target="H05" id="12" weight="12.0">
+        <attvalues>
+          <attvalue for="2" value="patient_transfer" />
+        </attvalues>
+      </edge>
+      <edge source="H07" target="H03" id="13" weight="24.0">
+        <attvalues>
+          <attvalue for="2" value="patient_transfer" />
+        </attvalues>
+      </edge>
+      <edge source="H07" target="H08" id="14" weight="12.0">
+        <attvalues>
+          <attvalue for="2" value="patient_transfer" />
+        </attvalues>
+      </edge>
+      <edge source="H07" target="H09" id="15" weight="29.0">
+        <attvalues>
+          <attvalue for="2" value="patient_transfer" />
+        </attvalues>
+      </edge>
+      <edge source="H08" target="H04" id="16" weight="25.0">
+        <attvalues>
+          <attvalue for="2" value="patient_transfer" />
+        </attvalues>
+      </edge>
+      <edge source="H08" target="H09" id="17" weight="25.0">
+        <attvalues>
+          <attvalue for="2" value="patient_transfer" />
+        </attvalues>
+      </edge>
+      <edge source="H08" target="H10" id="18" weight="22.0">
+        <attvalues>
+          <attvalue for="2" value="patient_transfer" />
+        </attvalues>
+      </edge>
+      <edge source="H09" target="H02" id="19" weight="27.0">
+        <attvalues>
+          <attvalue for="2" value="patient_transfer" />
+        </attvalues>
+      </edge>
+      <edge source="H09" target="H10" id="20" weight="29.0">
+        <attvalues>
+          <attvalue for="2" value="patient_transfer" />
+        </attvalues>
+      </edge>
+      <edge source="H10" target="H05" id="21" weight="26.0">
+        <attvalues>
+          <attvalue for="2" value="patient_transfer" />
+        </attvalues>
+      </edge>
+      <edge source="H10" target="H07" id="22" weight="27.0">
+        <attvalues>
+          <attvalue for="2" value="patient_transfer" />
+        </attvalues>
+      </edge>
+    </edges>
+  </graph>
+</gexf>

@@ -1,0 +1,29 @@
+Source,Target,Type,sign,weight,relation
+Community,Admissions,Directed,+,1.0,Community inflow to hospital
+Regulator,Screening,Directed,+,0.6,Guidelines affect screening policy
+Regulator,AbxUse,Directed,-,0.6,Stewardship can reduce unnecessary use
+Hospitals,Admissions,Directed,+,1.0,Hospitals receive admissions
+Patients,Admissions,Directed,+,1.0,Patients are admitted
+Admissions,IntraContact,Directed,+,0.8,More admissions → more contacts
+IntraContact,TransProb,Directed,+,0.8,Contacts drive transmission probability
+Screening,DetectProb,Directed,+,0.9,Testing increases detection
+Isolation,TransProb,Directed,-,0.9,Isolation reduces transmission
+Hygiene,TransProb,Directed,-,0.9,Hygiene reduces transmission
+AbxUse,SelPressure,Directed,+,1.0,Antibiotics create selection
+IncompleteTx,WithinHost,Directed,+,0.9,Incomplete therapy selects resistance
+Transfers,InterHospSpread,Directed,+,1.0,Transfers drive between-hospital spread
+InterHospSpread,ColonPressure,Directed,+,0.7,Imported cases increase pressure
+ColonPressure,TransProb,Directed,+,0.6,Higher pressure increases spread
+ColonPressure,Screening,Directed,+,0.4,High pressure triggers more screening
+ColonPressure,Isolation,Directed,+,0.3,High pressure triggers more isolation
+TransProb,ColonPressure,Directed,+,0.8,Transmission increases pressure (feedback)
+DetectProb,Isolation,Directed,+,0.8,Detection enables isolation
+TreatFailure,InfectDuration,Directed,+,0.7,Failure prolongs duration
+InfectDuration,ColonPressure,Directed,+,0.8,Longer duration increases pressure
+WithinHost,ResFrac,Directed,+,1.0,Evolution changes resistant fraction
+SelPressure,WithinHost,Directed,+,1.0,Selection acts within host
+MutationHGT,WithinHost,Directed,+,0.7,New variants arise
+ResFrac,TreatFailure,Directed,+,0.9,Resistance increases failure risk
+ResFrac,TransFitness,Directed,+,0.6,"If low cost, fitness remains high"
+FitnessCost,ResFrac,Directed,-,0.4,Cost reduces resistance without antibiotics
+TransFitness,TransProb,Directed,+,0.4,Fitter strains transmit better
