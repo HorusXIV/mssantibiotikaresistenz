@@ -223,13 +223,15 @@ class Patient:
         return max(0.0, self.sociability) * max(0.0, self.relative_transmissibility)
 
     def susceptibility_multiplier_for_macro(self) -> float:
-        """
-        Used for S->C infection/colonization probability in macro.
-        Keep it simple: vulnerability and immune_strength could influence it.
-        """
-        # Higher immune_strength reduces susceptibility.
+        # Vulnerability / Immunkraft
         immune_effect = 1.0 / max(0.1, self.immune_strength)
-        return max(0.0, self.vulnerability) * immune_effect
+        multiplier = self.vulnerability * immune_effect
+        
+        # Hat der Patient diesen Keim schon mal überlebt?
+        if "prior_infection_recovered" in self.history_flags:
+            multiplier *= 0.5  # 50% geringeres Risiko einer Neuansteckung
+            
+        return max(0.0, multiplier)
 
     def daily_death_risk_multiplier(self) -> float:
         """
