@@ -1,93 +1,144 @@
-# MSS - Antibiotikaresistenz
+# MSS - Antibiotic Resistance Simulation
 
+A multi-scale simulation framework for modeling antibiotic resistance dynamics in hospital environments. The system operates on two interconnected levels: a macro-level graph-based hospital network simulation and a micro-level evolutionary algorithm simulating bacterial strain dynamics within individual patients.
 
-
-## Getting started
-
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
-
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
-
-## Add your files
-
-* [Create](https://docs.gitlab.com/user/project/repository/web_editor/#create-a-file) or [upload](https://docs.gitlab.com/user/project/repository/web_editor/#upload-a-file) files
-* [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
+## System Architecture
 
 ```
-cd existing_repo
-git remote add origin https://gitlab.fhnw.ch/damianlukas/mssantibiotikaresistenz.git
-git branch -M main
-git push -uf origin main
++------------------+       +------------------+       +------------------+
+|                  |       |                  |       |                  |
+|  Macro Layer     | <---> |  Patient         | <---> |  Micro Layer     |
+|  (Hospital Net)  |       |  (Interface)     |       |  (Evolution Sim) |
+|                  |       |                  |       |                  |
++------------------+       +------------------+       +------------------+
+     |                           |                           |
+     | - Hospital graph          | - Base stats              | - Genetic algorithm
+     | - Patient transfers       | - Modifiers               | - Strain evolution
+     | - Admissions/discharges   | - State tracking          | - Resistance dynamics
+     | - Department management   | - Data exchange           | - Fitness landscapes
+     +---------------------------+---------------------------+
 ```
 
-## Integrate with your tools
+### Design Philosophy: Base Stats and Modifiers
 
-* [Set up project integrations](https://gitlab.fhnw.ch/damianlukas/mssantibiotikaresistenz/-/settings/integrations)
+The simulation employs a base stats and modifiers approach for tractability:
 
-## Collaborate with your team
+- **Base stats** represent intrinsic, stable patient characteristics (age, immune strength, vulnerability)
+- **Modifiers** are dynamic multipliers applied by environmental factors (hospital hygiene, antibiotic regimens) or strain-driven effects (lethality, transmissibility)
 
-* [Invite team members and collaborators](https://docs.gitlab.com/user/project/members/)
-* [Create a new merge request](https://docs.gitlab.com/user/project/merge_requests/creating_merge_requests/)
-* [Automatically close issues from merge requests](https://docs.gitlab.com/user/project/issues/managing_issues/#closing-issues-automatically)
-* [Enable merge request approvals](https://docs.gitlab.com/user/project/merge_requests/approvals/)
-* [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
+This separation allows clear attribution of effects and simplifies parameter tuning.
 
-## Test and Deploy
+## Simulation Levels
 
-Use the built-in continuous integration in GitLab.
+### Macro Level (Hospital Network)
 
-* [Get started with GitLab CI/CD](https://docs.gitlab.com/ci/quick_start/)
-* [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/user/application_security/sast/)
-* [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/topics/autodevops/requirements/)
-* [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/user/clusters/agent/)
-* [Set up protected environments](https://docs.gitlab.com/ci/environments/protected_environments/)
+The macro simulation models a graph-based hospital network with daily time steps. It manages:
 
-***
+| Component | Description |
+|-----------|-------------|
+| **Hospitals** | Nodes with diagnostic speed, patient capacity |
+| **Departments** | WARD and ICU with distinct hygiene levels |
+| **Patient Flow** | Admissions, discharges, inter-hospital transfers |
+| **Isolation** | Per-department isolation effectiveness |
+| **Antibiotic Policy** | Drug class selection, dosage levels |
+| **Hygiene Standards** | Per-department hygiene levels (0-1 scale) |
 
-# Editing this README
+The macro layer provides daily context to each patient via `PatientDailyContext`.
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
+### Micro Level (Evolutionary Simulation)
 
-## Suggestions for a good README
+The micro simulation runs 12 steps per day for carrier patients, using evolutionary algorithms to model:
 
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+| Aspect | Description |
+|--------|-------------|
+| **Bacterial Strains** | Multiple genotypes with distinct resistance profiles |
+| **Selection Pressure** | Antibiotic exposure drives resistance evolution |
+| **Fitness Landscapes** | Trade-offs between resistance and growth rate |
+| **Within-Host Dynamics** | Resistant fraction, dominant genotype tracking |
 
-## Name
-Choose a self-explaining name for your project.
+Strain-driven outputs returned to macro:
+- `lethality_modifier`: Increases patient baseline death risk
+- `severity_modifier`: Affects disease severity
+- `relative_transmissibility`: Modifies transmission probability
+- `p_clearance`: Daily probability of carriage clearance
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+## Patient Interface
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
+The `Patient` class (in `exchange/patient.py`) serves as the data exchange interface between macro and micro layers.
 
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+### Patient Base Stats
 
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+| Attribute | Type | Description |
+|-----------|------|-------------|
+| `age_years` | int | Patient age, affects multiple modifiers |
+| `compliance` | float (0-1) | Adherence to treatment, isolation protocols |
+| `vulnerability` | float | Susceptibility multiplier |
+| `immune_strength` | float | Immune system effectiveness multiplier |
+| `immune_status` | str | "normal" or "suppressed" |
+| `sociability` | float | Contact rate multiplier for transmission |
 
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
+### Patient State
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+| Attribute | Type | Description |
+|-----------|------|-------------|
+| `state` | HealthState | SUSCEPTIBLE (S) or CARRIER (C) |
+| `treatment_phase` | TreatmentPhase | NONE, ON_ABX, POST_ABX |
+| `history_flags` | Set[str] | Medical history markers |
+| `is_isolated` | bool | Current isolation status |
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+### Micro-Driven Modifiers
 
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
+| Attribute | Type | Source | Effect |
+|-----------|------|--------|--------|
+| `resistant_fraction` | float (0-1) | Micro | Proportion of resistant bacteria |
+| `dominant_genotype` | str | Micro | Current dominant strain identifier |
+| `relative_transmissibility` | float | Micro | Transmission rate multiplier |
+| `lethality_modifier` | float | Micro | Death risk multiplier |
+| `severity_modifier` | float | Micro | Disease severity multiplier |
+| `p_clearance` | float | Micro | Daily clearance probability |
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
+## Data Flow
 
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
+### Daily Simulation Cycle
 
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+1. **Macro provides context** via `patient.update_context(ctx)`:
+   - Hospital/department assignment
+   - Hygiene and isolation parameters
+   - Antibiotic regimen
 
-## License
-For open source projects, say how it is licensed.
+2. **Patient generates micro request** via `patient.make_micro_request()`:
+   - Host factors (age, immune status, vulnerability)
+   - Current antibiotic exposure
+   - Initial bacterial state
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+3. **Micro returns response** applied via `patient.apply_micro_response()`:
+   - Updated resistant fraction and dominant genotype
+   - Derived modifiers (transmissibility, lethality, clearance)
+
+4. **Macro uses patient methods** for transmission decisions:
+   - `transmission_multiplier_for_macro()`: Combined sociability and strain transmissibility
+   - `susceptibility_multiplier_for_macro()`: Vulnerability adjusted by immune status
+   - `daily_death_risk_multiplier()`: Vulnerability times lethality modifier
+   - `should_clear_today(rng)`: Stochastic clearance check
+
+## Project Structure
+
+```
+MSS/
+├── exchange/
+│   └── patient.py          # Patient interface class
+├── macro_simulation/       # Hospital network simulation
+├── micro_simulation/       # Evolutionary bacterial simulation
+├── build_gephi_graphs.py   # Network visualization export
+├── amr_system_map.*        # System-level network files
+└── amr_transfer_network.*  # Transfer network files
+```
+
+## Requirements
+
+- Python 3.10+
+- Dependencies listed in `pyproject.toml`
+
+## References
+
+This simulation framework is designed for research into antibiotic resistance spread dynamics. The model abstracts complex biological and epidemiological processes while maintaining sufficient fidelity for policy analysis and intervention testing.
