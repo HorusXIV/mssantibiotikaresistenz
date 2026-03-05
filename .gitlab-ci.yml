@@ -1,0 +1,67 @@
+stages:
+  - lint
+  - test
+
+variables:
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+  POETRY_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pypoetry"
+  POETRY_VIRTUALENVS_IN_PROJECT: "true"
+
+default:
+  image: python:3.12
+  cache:
+    key: "${CI_JOB_NAME}"
+    paths:
+      - .cache/pip
+      - .cache/pypoetry
+      - .venv
+
+.poetry-setup: &poetry-setup
+  before_script:
+    - pip install poetry
+    - poetry install --with dev
+
+# =============================================================================
+# Lint Stage
+# =============================================================================
+
+ruff:
+  stage: lint
+  <<: *poetry-setup
+  script:
+    - poetry run ruff check .
+  allow_failure: false
+
+black:
+  stage: lint
+  <<: *poetry-setup
+  script:
+    - poetry run black --check .
+  allow_failure: false
+
+# =============================================================================
+# Test Stage
+# =============================================================================
+
+test:
+  stage: test
+  <<: *poetry-setup
+  script:
+    - poetry run pytest tests/ -v --tb=short
+  coverage: '/TOTAL.*\s+(\d+%)$/'
+  artifacts:
+    when: always
+    reports:
+      junit: report.xml
+    paths:
+      - report.xml
+    expire_in: 1 week
+  rules:
+    - when: always
+
+integration-tests:
+  stage: test
+  <<: *poetry-setup
+  script:
+    - poetry run pytest tests/test_micro_patient_integration.py -v --tb=short
+  allow_failure: false
