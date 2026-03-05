@@ -29,6 +29,18 @@ dev = [
 [tool.poetry]
 package-mode = false
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--junitxml=report.xml"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.black]
+line-length = 100
+target-version = ["py312"]
+
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"

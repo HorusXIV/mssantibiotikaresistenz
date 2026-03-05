@@ -4,10 +4,10 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, Optional, Set
 
-
 # -------------------------
 # Small enums for clarity
 # -------------------------
+
 
 class HealthState(str, Enum):
     SUSCEPTIBLE = "S"
@@ -29,11 +29,12 @@ class TreatmentPhase(str, Enum):
 # Context snapshots (macro -> patient)
 # -------------------------
 
+
 @dataclass
 class AntibioticRegimen:
     on: bool = False
-    abx_class: str = "none"          # e.g. "beta_lactam", "fluoroquinolone"
-    dose_level: str = "std"          # "low"|"std"|"high" (or numeric)
+    abx_class: str = "none"  # e.g. "beta_lactam", "fluoroquinolone"
+    dose_level: str = "std"  # "low"|"std"|"high" (or numeric)
     # If you later want duration tracking, keep it in macro or add days_on_abx here.
 
 
@@ -43,13 +44,14 @@ class PatientDailyContext:
     A compact snapshot of the environment the patient is in today.
     This comes from the macro/hospital layer.
     """
+
     hospital_id: str
     department: Department
 
     # Location-level controls (macro-owned)
-    hygiene_level: float             # 0..1 (1 = best hygiene). Macro decides semantics.
-    isolation_effectiveness: float   # 0..1 (1 = perfect isolation)
-    diagnostic_speed: float          # e.g. tests/day or inverse delay; macro decides semantics.
+    hygiene_level: float  # 0..1 (1 = best hygiene). Macro decides semantics.
+    isolation_effectiveness: float  # 0..1 (1 = perfect isolation)
+    diagnostic_speed: float  # e.g. tests/day or inverse delay; macro decides semantics.
 
     # Patient-specific in macro
     is_isolated: bool
@@ -59,6 +61,7 @@ class PatientDailyContext:
 # -------------------------
 # Patient class (the interface object)
 # -------------------------
+
 
 @dataclass
 class Patient:
@@ -74,15 +77,15 @@ class Patient:
 
     # Intrinsic "base stats" (keep these stable during an episode)
     age_years: int = 50
-    compliance: float = 0.8          # 0..1 (affects adherence, isolation compliance, etc.)
-    vulnerability: float = 1.0       # multiplier >= ~0.5 .. 3.0 (your choice)
-    immune_strength: float = 1.0     # multiplier; 1.0 = normal
-    immune_status: str = "normal"    # "normal"|"suppressed" (or more categories)
-    sociability: float = 1.0         # contact-rate multiplier (macro uses)
+    compliance: float = 0.8  # 0..1 (affects adherence, isolation compliance, etc.)
+    vulnerability: float = 1.0  # multiplier >= ~0.5 .. 3.0 (your choice)
+    immune_strength: float = 1.0  # multiplier; 1.0 = normal
+    immune_status: str = "normal"  # "normal"|"suppressed" (or more categories)
+    sociability: float = 1.0  # contact-rate multiplier (macro uses)
 
     # Treatment info (patient-specific)
     treatment_phase: TreatmentPhase = TreatmentPhase.NONE
-    adherence: float = 1.0           # 0..1, can be derived from compliance each day
+    adherence: float = 1.0  # 0..1, can be derived from compliance each day
     regimen: AntibioticRegimen = field(default_factory=AntibioticRegimen)
 
     # Medical history (keep it simple: flags)
@@ -90,12 +93,12 @@ class Patient:
     # Examples: {"prior_abx", "diabetes", "recent_surgery", "immunosuppression"}
 
     # --- Micro outputs stored on patient (updated daily if carrier) ---
-    resistant_fraction: float = 0.0              # 0..1
-    dominant_genotype: str = "S"                 # "S", "R1", "R2", ...
-    relative_transmissibility: float = 1.0       # multiplies macro beta
-    p_clearance: float = 0.02                    # daily probability C->S
-    severity_modifier: float = 1.0              # strain-driven (optional for macro)
-    lethality_modifier: float = 1.0             # strain-driven (optional for macro)
+    resistant_fraction: float = 0.0  # 0..1
+    dominant_genotype: str = "S"  # "S", "R1", "R2", ...
+    relative_transmissibility: float = 1.0  # multiplies macro beta
+    p_clearance: float = 0.02  # daily probability C->S
+    severity_modifier: float = 1.0  # strain-driven (optional for macro)
+    lethality_modifier: float = 1.0  # strain-driven (optional for macro)
 
     # Store last daily context for reproducibility/debugging
     _ctx: Optional[PatientDailyContext] = field(default=None, repr=False)
@@ -131,7 +134,9 @@ class Patient:
     # -------------------------
     # Patient -> Micro request (daily if carrier)
     # -------------------------
-    def make_micro_request(self, run_id: str, day: int, dt_days: int, seed: int) -> Optional[Dict[str, Any]]:
+    def make_micro_request(
+        self, run_id: str, day: int, dt_days: int, seed: int
+    ) -> Optional[Dict[str, Any]]:
         """
         Returns a dict that your MicroAdapter writes to JSONL.
         Only returns a request if patient is a carrier.
@@ -148,7 +153,6 @@ class Patient:
             "patient_id": self.patient_id,
             "t_day": day,
             "dt_days": dt_days,
-
             # Environment / selection inputs
             "setting": self.department.value,
             "abx": {
@@ -157,7 +161,6 @@ class Patient:
                 "dose_level": self.regimen.dose_level,
             },
             "adherence": self.adherence,
-
             # Host factors (micro environment)
             "host": {
                 "age_years": self.age_years,
@@ -166,13 +169,11 @@ class Patient:
                 "vulnerability": self.vulnerability,
                 "history_flags": sorted(list(self.history_flags)),
             },
-
             # State handed over to micro
             "initial_state": {
                 "resistant_fraction": self.resistant_fraction,
                 "dominant_genotype": self.dominant_genotype,
             },
-
             # Reproducibility
             "seed": seed,
         }
@@ -226,11 +227,11 @@ class Patient:
         # Vulnerability / Immunkraft
         immune_effect = 1.0 / max(0.1, self.immune_strength)
         multiplier = self.vulnerability * immune_effect
-        
+
         # Hat der Patient diesen Keim schon mal überlebt?
         if "prior_infection_recovered" in self.history_flags:
             multiplier *= 0.5  # 50% geringeres Risiko einer Neuansteckung
-            
+
         return max(0.0, multiplier)
 
     def daily_death_risk_multiplier(self) -> float:

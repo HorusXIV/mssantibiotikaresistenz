@@ -4,16 +4,18 @@ Bacterial genome representation and fitness calculation.
 Uses NumPy arrays for vectorized operations across strain populations.
 Gene values are normalized floats in [0.0, 1.0].
 """
+
 from __future__ import annotations
 
 import numpy as np
-from dataclasses import dataclass, field
-from typing import Dict, Tuple
+from dataclasses import dataclass
+from typing import Dict
 from enum import Enum
 
 
 class GeneIndex(int, Enum):
     """Indices for genome array access."""
+
     # Metabolism
     GROWTH_BASE = 0
     METABOLIC_OPTIMIZATION = 1
@@ -36,6 +38,7 @@ NUM_GENES = len(GeneIndex)
 @dataclass
 class ResistanceCosts:
     """Base fitness costs for resistance genes."""
+
     efflux_pumps: float = 0.15
     target_modification: float = 0.12
     permeability_reduction: float = 0.08
@@ -52,12 +55,13 @@ class ResistanceCosts:
 @dataclass
 class ABXProfile:
     """Antibiotic class effectiveness against resistance mechanisms."""
+
     name: str
     # How much each resistance mechanism protects (0-1 multiplier on survival)
-    efflux_efficacy: float = 0.5       # How well efflux pumps work against this ABX
-    target_mod_efficacy: float = 0.5   # How well target modification works
-    permeability_efficacy: float = 0.3 # How well reduced permeability works
-    base_kill_rate: float = 0.8        # Base killing rate at standard dose
+    efflux_efficacy: float = 0.5  # How well efflux pumps work against this ABX
+    target_mod_efficacy: float = 0.5  # How well target modification works
+    permeability_efficacy: float = 0.3  # How well reduced permeability works
+    base_kill_rate: float = 0.8  # Base killing rate at standard dose
 
 
 # Predefined antibiotic profiles
@@ -81,7 +85,7 @@ DOSE_MULTIPLIERS = {
 def create_wild_type_genome() -> np.ndarray:
     """Create a susceptible wild-type genome."""
     genome = np.zeros(NUM_GENES, dtype=np.float32)
-    genome[GeneIndex.GROWTH_BASE] = 0.8           # Good baseline growth
+    genome[GeneIndex.GROWTH_BASE] = 0.8  # Good baseline growth
     genome[GeneIndex.METABOLIC_OPTIMIZATION] = 0.1
     genome[GeneIndex.VIRULENCE] = 0.3
     genome[GeneIndex.STEALTH] = 0.2
@@ -106,127 +110,119 @@ def create_resistant_genome(resistance_level: float = 0.5) -> np.ndarray:
     return genome
 
 
-def compute_resistance_costs(
-    genomes: np.ndarray,
-    costs: ResistanceCosts = None
-) -> np.ndarray:
+def compute_resistance_costs(genomes: np.ndarray, costs: ResistanceCosts = None) -> np.ndarray:
     """
     Compute net fitness cost from resistance genes.
-    
+
     Args:
         genomes: Shape (n_strains, NUM_GENES) or (NUM_GENES,)
         costs: ResistanceCosts parameters
-        
+
     Returns:
         Net costs array of shape (n_strains,) or scalar
     """
     if costs is None:
         costs = ResistanceCosts()
-    
+
     single = genomes.ndim == 1
     if single:
         genomes = genomes.reshape(1, -1)
-    
+
     cost_array = costs.as_array()
-    
+
     # Raw cost = sum(gene_value * gene_cost)
     raw_costs = np.sum(genomes * cost_array, axis=1)
-    
+
     # Metabolic optimization reduces costs (up to 80% reduction at max)
     optimization = genomes[:, GeneIndex.METABOLIC_OPTIMIZATION]
     cost_reduction = optimization * 0.8  # Max 80% cost reduction
-    
+
     net_costs = raw_costs * (1.0 - cost_reduction)
-    
+
     return net_costs[0] if single else net_costs
 
 
 def compute_abx_survival(
-    genomes: np.ndarray,
-    abx_class: str,
-    dose_level: str,
-    adherence: float
+    genomes: np.ndarray, abx_class: str, dose_level: str, adherence: float
 ) -> np.ndarray:
     """
     Compute survival factor under antibiotic pressure.
-    
+
     Args:
         genomes: Shape (n_strains, NUM_GENES) or (NUM_GENES,)
         abx_class: Antibiotic class name
         dose_level: "low", "std", or "high"
         adherence: Patient adherence 0-1
-        
+
     Returns:
         Survival factor array (0-1), shape (n_strains,) or scalar
     """
     profile = ABX_PROFILES.get(abx_class, ABX_PROFILES["none"])
-    
+
     if profile.base_kill_rate == 0.0:
         # No antibiotic pressure
         single = genomes.ndim == 1
         n = 1 if single else genomes.shape[0]
         return 1.0 if single else np.ones(n, dtype=np.float32)
-    
+
     single = genomes.ndim == 1
     if single:
         genomes = genomes.reshape(1, -1)
-    
+
     dose_mult = DOSE_MULTIPLIERS.get(dose_level, 1.0)
     effective_kill = profile.base_kill_rate * dose_mult * adherence
-    
+
     # Resistance protection
     efflux = genomes[:, GeneIndex.EFFLUX_PUMPS]
     target_mod = genomes[:, GeneIndex.TARGET_MODIFICATION]
     permeability = genomes[:, GeneIndex.PERMEABILITY_REDUCTION]
-    
+
     # Combined resistance effect (multiplicative protection)
     protection = (
-        efflux * profile.efflux_efficacy +
-        target_mod * profile.target_mod_efficacy +
-        permeability * profile.permeability_efficacy
+        efflux * profile.efflux_efficacy
+        + target_mod * profile.target_mod_efficacy
+        + permeability * profile.permeability_efficacy
     )
     # Normalize and cap at 0.95
     protection = np.clip(protection / 1.5, 0.0, 0.95)
-    
+
     # Survival = 1 - kill_rate * (1 - protection)
     survival = 1.0 - effective_kill * (1.0 - protection)
     survival = np.clip(survival, 0.01, 1.0)
-    
+
     return survival[0] if single else survival
 
 
 def compute_immune_survival(
-    genomes: np.ndarray,
-    immune_strength: float,
-    immune_status: str
+    genomes: np.ndarray, immune_strength: float, immune_status: str
 ) -> np.ndarray:
     """
     Compute survival factor against immune system.
-    
+
     Args:
         genomes: Shape (n_strains, NUM_GENES) or (NUM_GENES,)
         immune_strength: Patient immune strength multiplier
         immune_status: "normal" or "suppressed"
-        
+
     Returns:
         Survival factor array (0-1)
     """
     single = genomes.ndim == 1
     if single:
         genomes = genomes.reshape(1, -1)
-    
+
     # Base immune clearance rate
     base_clearance = 0.15 * immune_strength
     if immune_status == "suppressed":
         base_clearance *= 0.3
-    
+
     # Stealth gene reduces immune detection
     stealth = genomes[:, GeneIndex.STEALTH]
     evasion = stealth * 0.7  # Up to 70% immune evasion
-    
+
     survival = 1.0 - base_clearance * (1.0 - evasion)
     survival = np.clip(survival, 0.05, 1.0)
-    
+
     return survival[0] if single else survival
 
 
@@ -237,13 +233,13 @@ def compute_fitness(
     adherence: float = 1.0,
     immune_strength: float = 1.0,
     immune_status: str = "normal",
-    costs: ResistanceCosts = None
+    costs: ResistanceCosts = None,
 ) -> np.ndarray:
     """
     Compute overall fitness for bacterial genomes.
-    
+
     Fitness = (growth_base - net_costs) * ABX_survival * Immune_survival
-    
+
     Args:
         genomes: Shape (n_strains, NUM_GENES) or (NUM_GENES,)
         abx_class: Antibiotic class
@@ -252,110 +248,110 @@ def compute_fitness(
         immune_strength: Patient immune strength
         immune_status: Immune status
         costs: Resistance cost parameters
-        
+
     Returns:
         Fitness array, shape (n_strains,) or scalar
     """
     single = genomes.ndim == 1
     if single:
         genomes = genomes.reshape(1, -1)
-    
+
     # Base growth
     growth = genomes[:, GeneIndex.GROWTH_BASE]
-    
+
     # Subtract resistance costs
     net_costs = compute_resistance_costs(genomes, costs)
     base_fitness = np.clip(growth - net_costs, 0.01, 1.0)
-    
+
     # Multiply by survival factors
     abx_survival = compute_abx_survival(genomes, abx_class, dose_level, adherence)
     immune_survival = compute_immune_survival(genomes, immune_strength, immune_status)
-    
+
     fitness = base_fitness * abx_survival * immune_survival
     fitness = np.clip(fitness, 0.001, 1.0)
-    
+
     return fitness[0] if single else fitness
 
 
 def compute_transmissibility(genomes: np.ndarray) -> np.ndarray:
     """
     Compute relative transmissibility based on adhesion and virulence.
-    
+
     Args:
         genomes: Shape (n_strains, NUM_GENES) or (NUM_GENES,)
-        
+
     Returns:
         Transmissibility multiplier (centered around 1.0)
     """
     single = genomes.ndim == 1
     if single:
         genomes = genomes.reshape(1, -1)
-    
+
     adhesion = genomes[:, GeneIndex.ADHESION]
     virulence = genomes[:, GeneIndex.VIRULENCE]
-    
+
     # Adhesion is primary driver, virulence secondary
     transmissibility = 0.5 + adhesion * 0.8 + virulence * 0.2
-    
+
     return transmissibility[0] if single else transmissibility
 
 
 def compute_lethality(genomes: np.ndarray) -> np.ndarray:
     """
     Compute lethality modifier based on virulence.
-    
+
     Args:
         genomes: Shape (n_strains, NUM_GENES) or (NUM_GENES,)
-        
+
     Returns:
         Lethality multiplier (centered around 1.0)
     """
     single = genomes.ndim == 1
     if single:
         genomes = genomes.reshape(1, -1)
-    
+
     virulence = genomes[:, GeneIndex.VIRULENCE]
-    
+
     # Virulence directly increases lethality
     lethality = 0.5 + virulence * 1.5  # Range: 0.5 - 2.0
-    
+
     return lethality[0] if single else lethality
 
 
 def compute_severity(genomes: np.ndarray) -> np.ndarray:
     """
     Compute severity modifier based on virulence and adhesion.
-    
+
     Args:
         genomes: Shape (n_strains, NUM_GENES) or (NUM_GENES,)
-        
+
     Returns:
         Severity multiplier (centered around 1.0)
     """
     single = genomes.ndim == 1
     if single:
         genomes = genomes.reshape(1, -1)
-    
+
     virulence = genomes[:, GeneIndex.VIRULENCE]
     adhesion = genomes[:, GeneIndex.ADHESION]
-    
+
     severity = 0.6 + virulence * 0.8 + adhesion * 0.2
-    
+
     return severity[0] if single else severity
 
 
 def classify_genotype(genome: np.ndarray) -> str:
     """
     Classify a genome into a genotype category.
-    
+
     Returns: "S" (susceptible), "R1" (low resistance), "R2" (medium), "R3" (high)
     """
     resistance_score = (
-        genome[GeneIndex.EFFLUX_PUMPS] +
-        genome[GeneIndex.TARGET_MODIFICATION] +
-        genome[GeneIndex.PERMEABILITY_REDUCTION]
+        genome[GeneIndex.EFFLUX_PUMPS]
+        + genome[GeneIndex.TARGET_MODIFICATION]
+        + genome[GeneIndex.PERMEABILITY_REDUCTION]
     ) / 3.0
-    
+
     if resistance_score < 0.2:
         return "S"
     elif resistance_score < 0.4:
@@ -369,25 +365,25 @@ def classify_genotype(genome: np.ndarray) -> str:
 def compute_resistant_fraction(genomes: np.ndarray, populations: np.ndarray) -> float:
     """
     Compute fraction of population that is resistant.
-    
+
     Args:
         genomes: Shape (n_strains, NUM_GENES)
         populations: Shape (n_strains,) - population sizes
-        
+
     Returns:
         Fraction of total population with resistance score >= 0.3
     """
     resistance_scores = (
-        genomes[:, GeneIndex.EFFLUX_PUMPS] +
-        genomes[:, GeneIndex.TARGET_MODIFICATION] +
-        genomes[:, GeneIndex.PERMEABILITY_REDUCTION]
+        genomes[:, GeneIndex.EFFLUX_PUMPS]
+        + genomes[:, GeneIndex.TARGET_MODIFICATION]
+        + genomes[:, GeneIndex.PERMEABILITY_REDUCTION]
     ) / 3.0
-    
+
     total_pop = np.sum(populations)
     if total_pop == 0:
         return 0.0
-    
+
     resistant_mask = resistance_scores >= 0.3
     resistant_pop = np.sum(populations[resistant_mask])
-    
+
     return float(resistant_pop / total_pop)
