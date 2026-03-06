@@ -62,6 +62,105 @@ Strain-driven outputs returned to macro:
 - `relative_transmissibility`: Modifies transmission probability
 - `p_clearance`: Daily probability of carriage clearance
 
+## Macro-Simulation Implementation
+
+The macro-simulation module (`macro_simulation/`) implements a hospital-network carrier model with daily transmission and clearance events.
+
+### SimulationConfig
+
+All tunable parameters are collected in `SimulationConfig` (`macro_simulation/simulation.py`):
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `base_hygiene` | 0.7 | Hospital-wide hygiene level (0–1) |
+| `base_isolation_effectiveness` | 0.8 | Fraction by which isolation reduces transmission |
+| `base_diagnostic_speed` | 0.5 | Carrier detection speed (passed to PatientDailyContext) |
+| `base_transmission_rate` | 0.05 | Per-carrier-per-susceptible daily beta |
+| `icu_abx_probability` | 0.60 | Daily P(ABX=on) in ICU |
+| `ward_abx_probability` | 0.15 | Daily P(ABX=on) in WARD |
+| `carrier_isolation_probability` | 0.30 | Daily detection probability for non-isolated carriers |
+
+### Transmission Model
+
+Colonisation probability per susceptible patient per day:
+
+```
+p_colonize = min(1, carrier_force × susceptibility_multiplier_for_macro())
+```
+
+**Carrier Force:**
+- Summed over all carriers in the same hospital node
+- Each carrier contributes `base_transmission_rate × transmission_multiplier_for_macro()`
+- `transmission_multiplier_for_macro()` = `sociability × relative_transmissibility`
+- Isolated carriers are reduced by `(1 − isolation_effectiveness)`
+- Total force multiplied by `(1 − base_hygiene)`
+
+**Susceptibility:**
+- `susceptibility_multiplier_for_macro()` = `vulnerability / immune_strength`
+- Prior-infection history flag halves susceptibility
+
+### Antibiotic Profiles
+
+| Department | P(ABX=on) | Classes available | Dose levels |
+|------------|-----------|-------------------|-------------|
+| ICU | 60 % | beta_lactam, fluoroquinolone, glycopeptide, macrolide, aminoglycoside | low / std / high |
+| WARD | 15 % | beta_lactam, fluoroquinolone, glycopeptide, macrolide, aminoglycoside | low / std / high |
+
+### Daily Simulation Loop
+
+Each call to `step()` processes all hospitals in sequence:
+
+```
+for each hospital:
+    1. CLEARANCE:    patient.should_clear_today(rng) → C→S via patient.clear_carriage()
+    2. CONTEXT:      patient.update_context(ctx) for every patient
+    3. TRANSMISSION: force-of-infection model → S→C for susceptible patients
+```
+
+**Deterministic RNG:**
+- Single seeded `random.Random` instance for all stochastic decisions
+- Context building consumes exactly 4 draws per patient per step
+
+### State Classification
+
+| State | Value | Description |
+|-------|-------|-------------|
+| SUSCEPTIBLE | `"S"` | No active carriage; `episode_id=None`, `resistant_fraction=0.0` |
+| CARRIER | `"C"` | Active carriage; micro-derived fields populated |
+
+### Context Provided to Patient
+
+After each step, every patient holds an updated `PatientDailyContext`:
+
+```python
+PatientDailyContext(
+    hospital_id="hospital_001",
+    department=Department.WARD,          # or Department.ICU
+    hygiene_level=0.7,                   # base_hygiene
+    isolation_effectiveness=0.8,         # base_isolation_effectiveness
+    diagnostic_speed=0.5,               # base_diagnostic_speed
+    is_isolated=False,                   # updated daily by detection model
+    regimen=AntibioticRegimen(on=True, abx_class="beta_lactam", dose_level="std")
+)
+```
+
+### Usage
+
+```python
+from macro_simulation.simulator import MacroSimulator
+from macro_simulation.simulation import SimulationConfig
+
+config = SimulationConfig(base_hygiene=0.8, icu_abx_probability=0.7)
+sim = MacroSimulator(config=config, n_hospitals=10, seed=42)
+
+sim.admit(patient, hospital_id="hospital_001", department=Department.ICU)
+sim.transfer(patient, to_hospital_id="hospital_002")
+sim.discharge(patient)
+
+# Advance one day
+sim.step()
+```
+
 ## Micro-Simulation Implementation
 
 The micro-simulation module (`micro_simulation/`) implements a within-host evolutionary algorithm that models bacterial population dynamics under antibiotic pressure.
@@ -279,15 +378,24 @@ The `Patient` class (in `exchange/patient.py`) serves as the data exchange inter
 MSS/
 ├── exchange/
 │   └── patient.py              # Patient interface class
-├── macro_simulation/           # Hospital network simulation (planned)
+├── macro_simulation/
+│   ├── __init__.py
+│   ├── simulation.py           # SimulationConfig dataclass
+│   └── simulator.py            # MacroSimulator (admit/discharge/transfer/step)
 ├── micro_simulation/
 │   ├── __init__.py             # Module exports
 │   ├── genome.py               # BacterialGenome, fitness functions
 │   ├── simulation.py           # StrainPopulation, simulate_day()
 │   └── simulator.py            # MicroSimulator batch interface
-├── build_gephi_graphs.py       # Network visualization export
-├── amr_system_map.*            # System-level network files
-└── amr_transfer_network.*      # Transfer network files
+├── tests/
+│   └── integration_tests/
+│       ├── test_macro_patient_integration.py
+│       └── test_micro_patient_integration.py
+├── System_Overview/
+│   ├── build_gephi_graphs.py   # Network visualization export
+│   ├── amr_system_map.*        # System-level network files
+│   └── amr_transfer_network.*  # Transfer network files
+└── .gitlab-ci.yml              # CI: lint (ruff, black) + integration tests
 ```
 
 ## Requirements
