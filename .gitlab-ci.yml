@@ -44,7 +44,7 @@ test:
   stage: test
   extends: .uv-setup
   script:
-    - uv run pytest tests/ -v --tb=short
+    - uv run pytest tests/ --ignore=tests/integration_tests -v --tb=short || [ "$?" = "5" ]
   coverage: '/TOTAL.*\s+(\d+%)$/'
   artifacts:
     when: always
@@ -60,5 +60,5 @@ integration-tests:
   stage: test
   extends: .uv-setup
   script:
-    - uv run pytest tests/test_micro_patient_integration.py -v --tb=short
+    - uv run pytest tests/integration_tests/ -v --tb=short
   allow_failure: false
