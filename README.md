@@ -62,6 +62,158 @@ Strain-driven outputs returned to macro:
 - `relative_transmissibility`: Modifies transmission probability
 - `p_clearance`: Daily probability of carriage clearance
 
+## Micro-Simulation Implementation
+
+The micro-simulation module (`micro_simulation/`) implements a within-host evolutionary algorithm that models bacterial population dynamics under antibiotic pressure.
+
+### Bacterial Genome
+
+Each bacterial strain is represented by a 10-gene genome with normalized float values (0.0-1.0):
+
+| Gene | Index | Category | Function |
+|------|-------|----------|----------|
+| `GROWTH_BASE` | 0 | Metabolism | Baseline replication rate |
+| `METABOLIC_OPTIMIZATION` | 1 | Metabolism | Compensates resistance fitness costs |
+| `EFFLUX_PUMPS` | 2 | Resistance | Active drug efflux mechanism |
+| `TARGET_MODIFICATION` | 3 | Resistance | Altered antibiotic target sites |
+| `PERMEABILITY_REDUCTION` | 4 | Resistance | Reduced membrane permeability |
+| `VIRULENCE` | 5 | Virulence | Disease severity, lethality |
+| `STEALTH` | 6 | Survival | Immune evasion capability |
+| `ADHESION` | 7 | Survival | Host colonization, transmissibility |
+| `MUTATION_RATE_MODIFIER` | 8 | Evolvability | Intrinsic mutation rate |
+| `HGT_COMPETENCE` | 9 | Evolvability | Horizontal gene transfer receptivity |
+
+### Fitness Calculation
+
+Fitness is computed dynamically based on the current environment:
+
+```
+Fitness = (growth_base - net_resistance_costs) * ABX_survival * Immune_survival
+```
+
+**Epistasis and Compensation:**
+- Each resistance gene carries a base fitness cost (efflux: 0.15, target modification: 0.12, permeability: 0.08)
+- `metabolic_optimization` reduces total resistance costs by up to 80% (compensatory mutations)
+- Net cost = raw_cost * (1.0 - optimization * 0.8)
+
+**Antibiotic Survival:**
+- Each antibiotic class has a profile defining efficacy of each resistance mechanism
+- Protection = weighted sum of (resistance_gene * mechanism_efficacy)
+- Survival = 1 - effective_kill_rate * (1 - protection)
+
+**Immune Survival:**
+- Base clearance rate modulated by immune_strength and immune_status
+- `stealth` gene provides up to 70% immune evasion
+
+### Antibiotic Profiles
+
+| Class | Efflux Efficacy | Target Mod Efficacy | Permeability Efficacy | Base Kill Rate |
+|-------|-----------------|---------------------|----------------------|----------------|
+| beta_lactam | 0.3 | 0.8 | 0.4 | 0.75 |
+| fluoroquinolone | 0.6 | 0.7 | 0.3 | 0.80 |
+| aminoglycoside | 0.4 | 0.5 | 0.6 | 0.70 |
+| macrolide | 0.7 | 0.4 | 0.3 | 0.65 |
+| tetracycline | 0.8 | 0.3 | 0.2 | 0.60 |
+| glycopeptide | 0.2 | 0.9 | 0.5 | 0.85 |
+
+### Population Model
+
+The simulation tracks bacterial populations as **strains** rather than individual agents for computational efficiency:
+
+- `StrainPopulation`: Contains genome array (n_strains x 10) and population counts
+- Maximum 50 strains tracked simultaneously
+- Strains below threshold population are pruned
+- Carrying capacity: 10^9 bacteria
+
+### Daily Simulation Loop (12 Steps)
+
+Each day is divided into 12 discrete time steps:
+
+```
+for step in 1..12:
+    1. SELECTION: Grow/shrink populations based on relative fitness
+    2. MUTATION:  Apply Gaussian noise to genes, create new strains
+    3. HGT:       Transfer resistance genes between strains (every 3rd step)
+    4. CONSOLIDATE: Remove extinct strains, enforce max strain limit
+```
+
+**Mutation Dynamics:**
+- Base mutation rate: 0.01 per gene per step
+- Stress-induced boost: 3x under antibiotic pressure
+- Genome's `mutation_rate_modifier` further modulates rate
+- Mutations apply Gaussian noise (std=0.05) to selected genes
+
+**Horizontal Gene Transfer:**
+- Probability based on `hgt_competence` gene
+- Primarily transfers resistance genes (efflux, target modification, permeability, metabolic optimization)
+- Creates recombinant strains with blended gene values
+
+### Genotype Classification
+
+Strains are classified based on average resistance score:
+
+| Genotype | Resistance Score | Description |
+|----------|------------------|-------------|
+| S | < 0.2 | Susceptible |
+| R1 | 0.2 - 0.4 | Low resistance |
+| R2 | 0.4 - 0.7 | Medium resistance |
+| R3 | >= 0.7 | High resistance |
+
+### Output to Macro Layer
+
+After 12 steps, the micro-simulation returns:
+
+```python
+{
+    "updated_state": {
+        "resistant_fraction": 0.15,      # Population-weighted resistance
+        "dominant_genotype": "R1"        # Most populous strain's classification
+    },
+    "derived_effects": {
+        "relative_transmissibility": 1.2,  # Based on adhesion + virulence
+        "lethality_modifier": 0.95,        # Based on virulence
+        "severity_modifier": 1.1,          # Based on virulence + adhesion
+        "p_clearance": 0.02                # Based on population size + stealth
+    }
+}
+```
+
+### Usage
+
+```python
+from micro_simulation import MicroSimulator, SimulationConfig
+
+# Configure simulation
+config = SimulationConfig(
+    steps_per_day=12,
+    base_mutation_rate=0.01,
+    stress_mutation_boost=3.0
+)
+
+# Create simulator (maintains episode state)
+simulator = MicroSimulator(config=config)
+
+# Process patient request
+request = patient.make_micro_request(run_id="sim1", day=5, dt_days=1, seed=42)
+response = simulator.process_request(request)
+
+# Apply to patient
+patient.apply_micro_response(response)
+```
+
+### Batch Processing
+
+For HPC scenarios with thousands of patients:
+
+```python
+# Process multiple patients in parallel
+requests = [p.make_micro_request(...) for p in carrier_patients]
+responses = simulator.process_batch(requests, parallel=True)
+
+for patient, response in zip(carrier_patients, responses):
+    patient.apply_micro_response(response)
+```
+
 ## Patient Interface
 
 The `Patient` class (in `exchange/patient.py`) serves as the data exchange interface between macro and micro layers.
@@ -126,12 +278,16 @@ The `Patient` class (in `exchange/patient.py`) serves as the data exchange inter
 ```
 MSS/
 ├── exchange/
-│   └── patient.py          # Patient interface class
-├── macro_simulation/       # Hospital network simulation
-├── micro_simulation/       # Evolutionary bacterial simulation
-├── build_gephi_graphs.py   # Network visualization export
-├── amr_system_map.*        # System-level network files
-└── amr_transfer_network.*  # Transfer network files
+│   └── patient.py              # Patient interface class
+├── macro_simulation/           # Hospital network simulation (planned)
+├── micro_simulation/
+│   ├── __init__.py             # Module exports
+│   ├── genome.py               # BacterialGenome, fitness functions
+│   ├── simulation.py           # StrainPopulation, simulate_day()
+│   └── simulator.py            # MicroSimulator batch interface
+├── build_gephi_graphs.py       # Network visualization export
+├── amr_system_map.*            # System-level network files
+└── amr_transfer_network.*      # Transfer network files
 ```
 
 ## Requirements
