@@ -3,23 +3,20 @@ stages:
   - test
 
 variables:
-  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
-  POETRY_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pypoetry"
-  POETRY_VIRTUALENVS_IN_PROJECT: "true"
+  UV_CACHE_DIR: .uv-cache
 
 default:
-  image: python:3.12
+  image: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
   cache:
-    key: "${CI_JOB_NAME}"
+    key:
+      files:
+        - uv.lock
     paths:
-      - .cache/pip
-      - .cache/pypoetry
-      - .venv
+      - $UV_CACHE_DIR
 
-.poetry-setup: &poetry-setup
+.uv-setup:
   before_script:
-    - pip install poetry
-    - poetry install --with dev
+    - uv sync --frozen
 
 # =============================================================================
 # Lint Stage
@@ -27,16 +24,16 @@ default:
 
 ruff:
   stage: lint
-  <<: *poetry-setup
+  extends: .uv-setup
   script:
-    - poetry run ruff check .
+    - uv run ruff check .
   allow_failure: false
 
 black:
   stage: lint
-  <<: *poetry-setup
+  extends: .uv-setup
   script:
-    - poetry run black --check .
+    - uv run black --check .
   allow_failure: false
 
 # =============================================================================
@@ -45,9 +42,9 @@ black:
 
 test:
   stage: test
-  <<: *poetry-setup
+  extends: .uv-setup
   script:
-    - poetry run pytest tests/ -v --tb=short
+    - uv run pytest tests/ -v --tb=short
   coverage: '/TOTAL.*\s+(\d+%)$/'
   artifacts:
     when: always
@@ -61,7 +58,7 @@ test:
 
 integration-tests:
   stage: test
-  <<: *poetry-setup
+  extends: .uv-setup
   script:
-    - poetry run pytest tests/test_micro_patient_integration.py -v --tb=short
+    - uv run pytest tests/test_micro_patient_integration.py -v --tb=short
   allow_failure: false
