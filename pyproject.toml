@@ -1,8 +1,11 @@
 [project]
 name = "mss"
-version = "0.1.0"
+version = "0.2.0"
 description = ""
-authors = [{ name = "Lukas Breiter", email = "lukas.breiter@students.fhnw.ch" }]
+authors = [
+    { name = "Lukas Breiter", email = "lukas.breiter@students.fhnw.ch" },
+    { name = "Damian Szedalik", email = "damian.szedalik@students.fhnw.ch" }
+    ]
 requires-python = ">=3.12,<=3.14"
 readme = "README.md"
 classifiers = [
