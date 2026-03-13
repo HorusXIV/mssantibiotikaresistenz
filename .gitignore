@@ -262,3 +262,7 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Additional
+Organizational/*
+!Organizational/.gitkeep
