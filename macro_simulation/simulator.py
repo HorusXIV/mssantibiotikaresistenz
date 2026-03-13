@@ -4,8 +4,8 @@ MacroSimulator — hospital-level carrier transmission and clearance.
 Responsibilities:
 - admit / discharge / transfer patients across hospitals
 - daily PatientDailyContext updates (hygiene, isolation, ABX regimen)
-- stochastic S→C transmission based on carrier pressure and patient modifiers
-- stochastic C→S clearance via Patient.should_clear_today / clear_carriage
+- stochastic S->C transmission based on carrier pressure and patient modifiers
+- stochastic C->S clearance via Patient.should_clear_today / clear_carriage
 - seeded randomness for full reproducibility
 """
 
@@ -58,11 +58,11 @@ class MacroSimulator:
 
         # Build hospital registry
         self._hospital_ids = [f"hospital_{i:03d}" for i in range(1, n_hospitals + 1)]
-        # hospital_id → list of Patient objects currently admitted
+        # hospital_id -> list of Patient objects currently admitted
         self._patients: Dict[str, List[Patient]] = {hid: [] for hid in self._hospital_ids}
-        # patient_id → hospital_id (fast lookup)
+        # patient_id -> hospital_id (fast lookup)
         self._patient_hospital: Dict[str, str] = {}
-        # patient_id → department
+        # patient_id -> department
         self._patient_department: Dict[str, Department] = {}
 
         self._day = 0
@@ -78,7 +78,7 @@ class MacroSimulator:
         hospital_id: str,
         department: Department,
     ) -> None:
-        """Admit *patient* to *hospital_id* in the given *department*."""
+        """Admit patient to hospital_id in the given department."""
         if hospital_id not in self._patients:
             raise ValueError(f"Unknown hospital: {hospital_id}")
 
@@ -90,7 +90,7 @@ class MacroSimulator:
         self._patient_department[patient.patient_id] = department
 
     def discharge(self, patient: Patient) -> None:
-        """Remove *patient* from its current hospital."""
+        """Remove patient from its current hospital."""
         hid = self._patient_hospital.get(patient.patient_id)
         if hid is None:
             raise ValueError(f"Patient {patient.patient_id} is not currently admitted.")
@@ -101,7 +101,7 @@ class MacroSimulator:
         patient.hospital_id = None
 
     def transfer(self, patient: Patient, to_hospital_id: str) -> None:
-        """Transfer *patient* to *to_hospital_id*."""
+        """Transfer patient to to_hospital_id."""
         src = self._patient_hospital.get(patient.patient_id)
         if src is None:
             raise ValueError(f"Patient {patient.patient_id} is not currently admitted.")
@@ -116,11 +116,11 @@ class MacroSimulator:
         patient.hospital_id = to_hospital_id
 
     def get_occupancy(self, hospital_id: str) -> int:
-        """Return the number of patients currently in *hospital_id*."""
+        """Return the number of patients currently in hospital_id."""
         return len(self._patients.get(hospital_id, []))
 
     def get_patients(self, hospital_id: str) -> List[Patient]:
-        """Return a snapshot of patients currently in *hospital_id*."""
+        """Return a snapshot of patients currently in hospital_id."""
         return list(self._patients.get(hospital_id, []))
 
     # ------------------------------------------------------------------
@@ -131,9 +131,9 @@ class MacroSimulator:
         """Advance the simulation by one day.
 
         Order of operations per hospital:
-        1. Clearance: each carrier may revert to susceptible (C → S).
+        1. Clearance: each carrier may revert to susceptible (C -> S).
         2. Update PatientDailyContext for every patient.
-        3. Transmission: susceptible patients may become carriers (S → C).
+        3. Transmission: susceptible patients may become carriers (S -> C).
         """
         self._day += 1
 
@@ -142,7 +142,7 @@ class MacroSimulator:
             if not patients:
                 continue
 
-            # 1. Clearance (C → S)
+            # 1. Clearance (C -> S)
             for p in patients:
                 if p.state == HealthState.CARRIER:
                     if p.should_clear_today(self._rng):
@@ -153,7 +153,7 @@ class MacroSimulator:
                 ctx = self._build_context(p, hid)
                 p.update_context(ctx)
 
-            # 3. Transmission (S → C)
+            # 3. Transmission (S -> C)
             self._do_transmission(patients)
 
     # ------------------------------------------------------------------
@@ -161,7 +161,7 @@ class MacroSimulator:
     # ------------------------------------------------------------------
 
     def _build_context(self, patient: Patient, hospital_id: str) -> PatientDailyContext:
-        """Construct the daily context snapshot for *patient*.
+        """Construct the daily context snapshot for patient.
 
         Always consumes exactly 4 random draws from ``self._rng`` regardless
         of branching, so that downstream draws (clearance, transmission) land
@@ -208,7 +208,7 @@ class MacroSimulator:
         )
 
     def _do_transmission(self, patients: List[Patient]) -> None:
-        """Stochastic S → C transmission within one hospital ward."""
+        """Stochastic S -> C transmission within one hospital ward."""
         carriers = [p for p in patients if p.state == HealthState.CARRIER]
         susceptible = [p for p in patients if p.state == HealthState.SUSCEPTIBLE]
 
@@ -216,7 +216,7 @@ class MacroSimulator:
             return
 
         cfg = self._config
-        hygiene_factor = 1.0 - cfg.base_hygiene  # higher hygiene ⇒ lower factor
+        hygiene_factor = 1.0 - cfg.base_hygiene  # higher hygiene => lower factor
         iso_reduction = cfg.base_isolation_effectiveness
 
         # Sum up carrier-side force of infection
@@ -240,7 +240,7 @@ class MacroSimulator:
                 self._colonize(sus)
 
     def _colonize(self, patient: Patient) -> None:
-        """Transition a susceptible patient to carrier (S → C)."""
+        """Transition a susceptible patient to carrier (S -> C)."""
         self._episode_counter += 1
         patient.state = HealthState.CARRIER
         patient.episode_id = f"episode_new_{self._episode_counter}"
