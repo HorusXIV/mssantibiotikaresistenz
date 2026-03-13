@@ -1,6 +1,6 @@
 <?xml version='1.0' encoding='utf-8'?>
 <gexf xmlns="http://www.gexf.net/1.2draft" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.gexf.net/1.2draft http://www.gexf.net/1.2draft/gexf.xsd" version="1.2">
-  <meta lastmodifieddate="2026-03-03">
+  <meta lastmodifieddate="2026-03-10">
     <creator>NetworkX 3.6.1</creator>
   </meta>
   <graph defaultedgetype="directed" mode="static" name="AMR_System_Map">
@@ -13,22 +13,94 @@
       <attribute id="1" title="category" type="string" />
     </attributes>
     <nodes>
-      <node id="Community" label="Community">
+      <node id="Community" label="Community reservoir">
         <attvalues>
           <attvalue for="0" value="external" />
           <attvalue for="1" value="context" />
         </attvalues>
       </node>
-      <node id="Regulator" label="Regulator/Guidelines">
+      <node id="LongTermCare" label="Long-term care facilities">
         <attvalues>
           <attvalue for="0" value="external" />
           <attvalue for="1" value="context" />
         </attvalues>
       </node>
-      <node id="Hospitals" label="Hospitals (Macro)">
+      <node id="OutpatientCare" label="Outpatient care">
+        <attvalues>
+          <attvalue for="0" value="external" />
+          <attvalue for="1" value="context" />
+        </attvalues>
+      </node>
+      <node id="Travel" label="Travel and population mobility">
+        <attvalues>
+          <attvalue for="0" value="external" />
+          <attvalue for="1" value="context" />
+        </attvalues>
+      </node>
+      <node id="Agriculture" label="Animal and agricultural antibiotic use">
+        <attvalues>
+          <attvalue for="0" value="external" />
+          <attvalue for="1" value="context" />
+        </attvalues>
+      </node>
+      <node id="Regulator" label="Regulator and guidelines">
+        <attvalues>
+          <attvalue for="0" value="external" />
+          <attvalue for="1" value="governance" />
+        </attvalues>
+      </node>
+      <node id="PublicHealth" label="Public health surveillance">
+        <attvalues>
+          <attvalue for="0" value="external" />
+          <attvalue for="1" value="governance" />
+        </attvalues>
+      </node>
+      <node id="DiagnosticsMarket" label="Diagnostic technology availability">
+        <attvalues>
+          <attvalue for="0" value="external" />
+          <attvalue for="1" value="context" />
+        </attvalues>
+      </node>
+      <node id="DrugPipeline" label="Antibiotic pipeline">
+        <attvalues>
+          <attvalue for="0" value="external" />
+          <attvalue for="1" value="context" />
+        </attvalues>
+      </node>
+      <node id="Hospitals" label="Hospitals (macro)">
         <attvalues>
           <attvalue for="0" value="macro" />
           <attvalue for="1" value="entity" />
+        </attvalues>
+      </node>
+      <node id="Departments" label="Hospital departments">
+        <attvalues>
+          <attvalue for="0" value="macro" />
+          <attvalue for="1" value="entity" />
+        </attvalues>
+      </node>
+      <node id="Ward" label="General ward">
+        <attvalues>
+          <attvalue for="0" value="macro" />
+          <attvalue for="1" value="entity" />
+        </attvalues>
+      </node>
+      <node id="ICU" label="ICU">
+        <attvalues>
+          <attvalue for="0" value="macro" />
+          <attvalue for="1" value="entity" />
+        </attvalues>
+      </node>
+      <node id="Beds" label="Bed capacity">
+        <attvalues>
+          <attvalue for="0" value="macro" />
+          <attvalue for="1" value="resource" />
+        </attvalues>
+      </node>
+      <node id="Staffing" label="Staffing levels">
+        <attvalues>
+          <attvalue for="0" value="macro" />
+          <attvalue for="1" value="resource" />
         </attvalues>
       </node>
       <node id="Patients" label="Patients">
@@ -43,25 +115,85 @@
           <attvalue for="1" value="process" />
         </attvalues>
       </node>
+      <node id="Discharges" label="Discharges">
+        <attvalues>
+          <attvalue for="0" value="macro" />
+          <attvalue for="1" value="process" />
+        </attvalues>
+      </node>
+      <node id="Transfers" label="Patient transfers">
+        <attvalues>
+          <attvalue for="0" value="macro" />
+          <attvalue for="1" value="process" />
+        </attvalues>
+      </node>
+      <node id="LengthOfStay" label="Length of stay">
+        <attvalues>
+          <attvalue for="0" value="macro" />
+          <attvalue for="1" value="state" />
+        </attvalues>
+      </node>
       <node id="IntraContact" label="Intra-hospital contacts">
         <attvalues>
           <attvalue for="0" value="macro" />
           <attvalue for="1" value="process" />
         </attvalues>
       </node>
-      <node id="Screening" label="Screening &amp; testing">
+      <node id="EnvironmentalLoad" label="Environmental contamination">
+        <attvalues>
+          <attvalue for="0" value="macro" />
+          <attvalue for="1" value="state" />
+        </attvalues>
+      </node>
+      <node id="Screening" label="Screening and testing">
         <attvalues>
           <attvalue for="0" value="macro" />
           <attvalue for="1" value="intervention" />
         </attvalues>
       </node>
-      <node id="Isolation" label="Isolation / quarantine">
+      <node id="DiagnosticSpeed" label="Diagnostic speed">
+        <attvalues>
+          <attvalue for="0" value="macro" />
+          <attvalue for="1" value="state" />
+        </attvalues>
+      </node>
+      <node id="DetectProb" label="Detection probability">
+        <attvalues>
+          <attvalue for="0" value="macro" />
+          <attvalue for="1" value="state" />
+        </attvalues>
+      </node>
+      <node id="Isolation" label="Isolation and quarantine">
         <attvalues>
           <attvalue for="0" value="macro" />
           <attvalue for="1" value="intervention" />
+        </attvalues>
+      </node>
+      <node id="IsolationCapacity" label="Isolation capacity">
+        <attvalues>
+          <attvalue for="0" value="macro" />
+          <attvalue for="1" value="resource" />
         </attvalues>
       </node>
       <node id="Hygiene" label="Hygiene compliance">
+        <attvalues>
+          <attvalue for="0" value="macro" />
+          <attvalue for="1" value="intervention" />
+        </attvalues>
+      </node>
+      <node id="PPE" label="Barrier precautions and PPE">
+        <attvalues>
+          <attvalue for="0" value="macro" />
+          <attvalue for="1" value="intervention" />
+        </attvalues>
+      </node>
+      <node id="Cleaning" label="Environmental cleaning">
+        <attvalues>
+          <attvalue for="0" value="macro" />
+          <attvalue for="1" value="intervention" />
+        </attvalues>
+      </node>
+      <node id="AbxPolicy" label="Antibiotic policy and stewardship">
         <attvalues>
           <attvalue for="0" value="macro" />
           <attvalue for="1" value="intervention" />
@@ -73,22 +205,22 @@
           <attvalue for="1" value="intervention" />
         </attvalues>
       </node>
+      <node id="AbxClassMix" label="Antibiotic class mix">
+        <attvalues>
+          <attvalue for="0" value="macro" />
+          <attvalue for="1" value="state" />
+        </attvalues>
+      </node>
+      <node id="DoseLevel" label="Dose level">
+        <attvalues>
+          <attvalue for="0" value="macro" />
+          <attvalue for="1" value="state" />
+        </attvalues>
+      </node>
       <node id="IncompleteTx" label="Incomplete treatment">
         <attvalues>
           <attvalue for="0" value="macro" />
           <attvalue for="1" value="behavior" />
-        </attvalues>
-      </node>
-      <node id="Transfers" label="Patient transfers">
-        <attvalues>
-          <attvalue for="0" value="macro" />
-          <attvalue for="1" value="process" />
-        </attvalues>
-      </node>
-      <node id="InterHospSpread" label="Inter-hospital spread">
-        <attvalues>
-          <attvalue for="0" value="macro" />
-          <attvalue for="1" value="outcome" />
         </attvalues>
       </node>
       <node id="ColonPressure" label="Colonization pressure">
@@ -103,10 +235,10 @@
           <attvalue for="1" value="state" />
         </attvalues>
       </node>
-      <node id="DetectProb" label="Detection probability">
+      <node id="InterHospSpread" label="Inter-hospital spread">
         <attvalues>
           <attvalue for="0" value="macro" />
-          <attvalue for="1" value="state" />
+          <attvalue for="1" value="outcome" />
         </attvalues>
       </node>
       <node id="TreatFailure" label="Treatment failure risk">
@@ -115,9 +247,93 @@
           <attvalue for="1" value="outcome" />
         </attvalues>
       </node>
-      <node id="InfectDuration" label="Infection/colonization duration">
+      <node id="InfectDuration" label="Infection and colonization duration">
         <attvalues>
           <attvalue for="0" value="macro" />
+          <attvalue for="1" value="state" />
+        </attvalues>
+      </node>
+      <node id="MortalityRisk" label="Mortality risk">
+        <attvalues>
+          <attvalue for="0" value="macro" />
+          <attvalue for="1" value="outcome" />
+        </attvalues>
+      </node>
+      <node id="PatientSeverity" label="Clinical severity">
+        <attvalues>
+          <attvalue for="0" value="macro" />
+          <attvalue for="1" value="state" />
+        </attvalues>
+      </node>
+      <node id="Age" label="Age">
+        <attvalues>
+          <attvalue for="0" value="patient" />
+          <attvalue for="1" value="host" />
+        </attvalues>
+      </node>
+      <node id="Vulnerability" label="Vulnerability">
+        <attvalues>
+          <attvalue for="0" value="patient" />
+          <attvalue for="1" value="host" />
+        </attvalues>
+      </node>
+      <node id="ImmuneStrength" label="Immune strength">
+        <attvalues>
+          <attvalue for="0" value="patient" />
+          <attvalue for="1" value="host" />
+        </attvalues>
+      </node>
+      <node id="ImmuneStatus" label="Immune suppression status">
+        <attvalues>
+          <attvalue for="0" value="patient" />
+          <attvalue for="1" value="host" />
+        </attvalues>
+      </node>
+      <node id="Compliance" label="Compliance">
+        <attvalues>
+          <attvalue for="0" value="patient" />
+          <attvalue for="1" value="behavior" />
+        </attvalues>
+      </node>
+      <node id="Adherence" label="Adherence">
+        <attvalues>
+          <attvalue for="0" value="patient" />
+          <attvalue for="1" value="behavior" />
+        </attvalues>
+      </node>
+      <node id="Sociability" label="Sociability and contact propensity">
+        <attvalues>
+          <attvalue for="0" value="patient" />
+          <attvalue for="1" value="behavior" />
+        </attvalues>
+      </node>
+      <node id="HistoryFlags" label="Medical history flags">
+        <attvalues>
+          <attvalue for="0" value="patient" />
+          <attvalue for="1" value="history" />
+        </attvalues>
+      </node>
+      <node id="PriorABX" label="Prior antibiotic exposure">
+        <attvalues>
+          <attvalue for="0" value="patient" />
+          <attvalue for="1" value="history" />
+        </attvalues>
+      </node>
+      <node id="PriorInfection" label="Prior infection recovery">
+        <attvalues>
+          <attvalue for="0" value="patient" />
+          <attvalue for="1" value="history" />
+        </attvalues>
+      </node>
+      <node id="TreatmentPhase" label="Treatment phase">
+        <attvalues>
+          <attvalue for="0" value="patient" />
+          <attvalue for="1" value="state" />
+        </attvalues>
+      </node>
+      <node id="PatientState" label="Carrier state (S or C)">
+        <attvalues>
+          <attvalue for="0" value="patient" />
           <attvalue for="1" value="state" />
         </attvalues>
       </node>
@@ -127,13 +343,37 @@
           <attvalue for="1" value="process" />
         </attvalues>
       </node>
-      <node id="SelPressure" label="Selection pressure (antibiotics)">
+      <node id="Selection" label="Selection dynamics">
+        <attvalues>
+          <attvalue for="0" value="micro" />
+          <attvalue for="1" value="process" />
+        </attvalues>
+      </node>
+      <node id="SelPressure" label="Selection pressure">
         <attvalues>
           <attvalue for="0" value="micro" />
           <attvalue for="1" value="mechanism" />
         </attvalues>
       </node>
-      <node id="MutationHGT" label="Mutation / HGT">
+      <node id="BacterialPop" label="Bacterial population size">
+        <attvalues>
+          <attvalue for="0" value="micro" />
+          <attvalue for="1" value="state" />
+        </attvalues>
+      </node>
+      <node id="StrainDiversity" label="Strain diversity">
+        <attvalues>
+          <attvalue for="0" value="micro" />
+          <attvalue for="1" value="state" />
+        </attvalues>
+      </node>
+      <node id="MutationRate" label="Mutation rate">
+        <attvalues>
+          <attvalue for="0" value="micro" />
+          <attvalue for="1" value="mechanism" />
+        </attvalues>
+      </node>
+      <node id="MutationHGT" label="Mutation and HGT">
         <attvalues>
           <attvalue for="0" value="micro" />
           <attvalue for="1" value="mechanism" />
@@ -145,13 +385,121 @@
           <attvalue for="1" value="state" />
         </attvalues>
       </node>
-      <node id="FitnessCost" label="Fitness cost (no antibiotics)">
+      <node id="DominantGenotype" label="Dominant genotype">
+        <attvalues>
+          <attvalue for="0" value="micro" />
+          <attvalue for="1" value="state" />
+        </attvalues>
+      </node>
+      <node id="Fitness" label="Fitness">
+        <attvalues>
+          <attvalue for="0" value="micro" />
+          <attvalue for="1" value="state" />
+        </attvalues>
+      </node>
+      <node id="FitnessCost" label="Fitness cost without antibiotics">
         <attvalues>
           <attvalue for="0" value="micro" />
           <attvalue for="1" value="mechanism" />
         </attvalues>
       </node>
+      <node id="GrowthBase" label="Baseline growth">
+        <attvalues>
+          <attvalue for="0" value="micro" />
+          <attvalue for="1" value="mechanism" />
+        </attvalues>
+      </node>
+      <node id="MetabolicOpt" label="Metabolic optimization">
+        <attvalues>
+          <attvalue for="0" value="micro" />
+          <attvalue for="1" value="mechanism" />
+        </attvalues>
+      </node>
+      <node id="Efflux" label="Efflux pumps">
+        <attvalues>
+          <attvalue for="0" value="micro" />
+          <attvalue for="1" value="mechanism" />
+        </attvalues>
+      </node>
+      <node id="TargetMod" label="Target modification">
+        <attvalues>
+          <attvalue for="0" value="micro" />
+          <attvalue for="1" value="mechanism" />
+        </attvalues>
+      </node>
+      <node id="PermReduction" label="Permeability reduction">
+        <attvalues>
+          <attvalue for="0" value="micro" />
+          <attvalue for="1" value="mechanism" />
+        </attvalues>
+      </node>
+      <node id="Stealth" label="Immune evasion and stealth">
+        <attvalues>
+          <attvalue for="0" value="micro" />
+          <attvalue for="1" value="mechanism" />
+        </attvalues>
+      </node>
+      <node id="Adhesion" label="Adhesion">
+        <attvalues>
+          <attvalue for="0" value="micro" />
+          <attvalue for="1" value="mechanism" />
+        </attvalues>
+      </node>
+      <node id="Virulence" label="Virulence">
+        <attvalues>
+          <attvalue for="0" value="micro" />
+          <attvalue for="1" value="mechanism" />
+        </attvalues>
+      </node>
+      <node id="HGTCompetence" label="HGT competence">
+        <attvalues>
+          <attvalue for="0" value="micro" />
+          <attvalue for="1" value="mechanism" />
+        </attvalues>
+      </node>
+      <node id="MutationModifier" label="Mutation-rate modifier">
+        <attvalues>
+          <attvalue for="0" value="micro" />
+          <attvalue for="1" value="mechanism" />
+        </attvalues>
+      </node>
+      <node id="ImmuneClearance" label="Immune clearance">
+        <attvalues>
+          <attvalue for="0" value="micro" />
+          <attvalue for="1" value="mechanism" />
+        </attvalues>
+      </node>
+      <node id="ABXKilling" label="Antibiotic killing">
+        <attvalues>
+          <attvalue for="0" value="micro" />
+          <attvalue for="1" value="mechanism" />
+        </attvalues>
+      </node>
+      <node id="ClearanceProb" label="Clearance probability">
+        <attvalues>
+          <attvalue for="0" value="micro" />
+          <attvalue for="1" value="state" />
+        </attvalues>
+      </node>
       <node id="TransFitness" label="Transmission fitness">
+        <attvalues>
+          <attvalue for="0" value="micro" />
+          <attvalue for="1" value="state" />
+        </attvalues>
+      </node>
+      <node id="RelativeTrans" label="Relative transmissibility">
+        <attvalues>
+          <attvalue for="0" value="micro" />
+          <attvalue for="1" value="state" />
+        </attvalues>
+      </node>
+      <node id="SeverityMod" label="Severity modifier">
+        <attvalues>
+          <attvalue for="0" value="micro" />
+          <attvalue for="1" value="state" />
+        </attvalues>
+      </node>
+      <node id="LethalityMod" label="Lethality modifier">
         <attvalues>
           <attvalue for="0" value="micro" />
           <attvalue for="1" value="state" />
@@ -162,169 +510,823 @@
       <edge source="Community" target="Admissions" id="0" weight="1.0">
         <attvalues>
           <attvalue for="2" value="+" />
-          <attvalue for="3" value="Community inflow to hospital" />
+          <attvalue for="3" value="Community inflow seeds hospital admissions" />
         </attvalues>
       </edge>
-      <edge source="Regulator" target="Screening" id="1" weight="0.6">
+      <edge source="Community" target="ColonPressure" id="1" weight="0.5">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Imported community carriage increases hospital pressure" />
+        </attvalues>
+      </edge>
+      <edge source="LongTermCare" target="Admissions" id="2" weight="0.7">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Transfers from long-term care add admissions" />
+        </attvalues>
+      </edge>
+      <edge source="LongTermCare" target="InterHospSpread" id="3" weight="0.7">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Long-term care links hospitals through shared patients" />
+        </attvalues>
+      </edge>
+      <edge source="OutpatientCare" target="Admissions" id="4" weight="0.5">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Outpatient referrals feed hospital admissions" />
+        </attvalues>
+      </edge>
+      <edge source="Travel" target="Community" id="5" weight="0.4">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Mobility changes the community resistance pool" />
+        </attvalues>
+      </edge>
+      <edge source="Travel" target="InterHospSpread" id="6" weight="0.5">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Mobility connects distant care settings" />
+        </attvalues>
+      </edge>
+      <edge source="Agriculture" target="Community" id="7" weight="0.4">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Agricultural antibiotic use contributes to the wider resistance reservoir" />
+        </attvalues>
+      </edge>
+      <edge source="Regulator" target="PublicHealth" id="8" weight="0.7">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Guidelines shape surveillance priorities" />
+        </attvalues>
+      </edge>
+      <edge source="Regulator" target="Screening" id="9" weight="0.8">
         <attvalues>
           <attvalue for="2" value="+" />
           <attvalue for="3" value="Guidelines affect screening policy" />
         </attvalues>
       </edge>
-      <edge source="Regulator" target="AbxUse" id="2" weight="0.6">
+      <edge source="Regulator" target="AbxPolicy" id="10" weight="0.9">
         <attvalues>
-          <attvalue for="2" value="-" />
-          <attvalue for="3" value="Stewardship can reduce unnecessary use" />
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Guidelines define stewardship expectations" />
         </attvalues>
       </edge>
-      <edge source="Hospitals" target="Admissions" id="3" weight="1.0">
+      <edge source="PublicHealth" target="Screening" id="11" weight="0.6">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Surveillance programs increase testing uptake" />
+        </attvalues>
+      </edge>
+      <edge source="PublicHealth" target="Isolation" id="12" weight="0.4">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Outbreak response tightens isolation measures" />
+        </attvalues>
+      </edge>
+      <edge source="DiagnosticsMarket" target="DiagnosticSpeed" id="13" weight="0.8">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Better diagnostics improve turnaround speed" />
+        </attvalues>
+      </edge>
+      <edge source="DiagnosticsMarket" target="Screening" id="14" weight="0.5">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Diagnostic availability broadens testing scope" />
+        </attvalues>
+      </edge>
+      <edge source="DrugPipeline" target="AbxClassMix" id="15" weight="0.5">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="New agents expand the class portfolio" />
+        </attvalues>
+      </edge>
+      <edge source="Hospitals" target="Departments" id="16" weight="1.0">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Hospitals contain departments" />
+        </attvalues>
+      </edge>
+      <edge source="Hospitals" target="Beds" id="17" weight="0.8">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Hospital size determines available beds" />
+        </attvalues>
+      </edge>
+      <edge source="Hospitals" target="Staffing" id="18" weight="0.8">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Hospitals determine staffing resources" />
+        </attvalues>
+      </edge>
+      <edge source="Hospitals" target="Admissions" id="19" weight="1.0">
         <attvalues>
           <attvalue for="2" value="+" />
           <attvalue for="3" value="Hospitals receive admissions" />
         </attvalues>
       </edge>
-      <edge source="Patients" target="Admissions" id="4" weight="1.0">
+      <edge source="Hospitals" target="Transfers" id="20" weight="0.5">
         <attvalues>
           <attvalue for="2" value="+" />
-          <attvalue for="3" value="Patients are admitted" />
+          <attvalue for="3" value="Hospitals participate in transfer networks" />
         </attvalues>
       </edge>
-      <edge source="Admissions" target="IntraContact" id="5" weight="0.8">
+      <edge source="Departments" target="Ward" id="21" weight="1.0">
         <attvalues>
           <attvalue for="2" value="+" />
-          <attvalue for="3" value="More admissions → more contacts" />
+          <attvalue for="3" value="Ward is a department type" />
         </attvalues>
       </edge>
-      <edge source="IntraContact" target="TransProb" id="6" weight="0.8">
+      <edge source="Departments" target="ICU" id="22" weight="1.0">
         <attvalues>
           <attvalue for="2" value="+" />
-          <attvalue for="3" value="Contacts drive transmission probability" />
+          <attvalue for="3" value="ICU is a department type" />
         </attvalues>
       </edge>
-      <edge source="Screening" target="DetectProb" id="7" weight="0.9">
+      <edge source="Ward" target="AbxUse" id="23" weight="0.4">
         <attvalues>
           <attvalue for="2" value="+" />
-          <attvalue for="3" value="Testing increases detection" />
+          <attvalue for="3" value="Ward patients still receive antibiotics" />
         </attvalues>
       </edge>
-      <edge source="Isolation" target="TransProb" id="8" weight="0.9">
-        <attvalues>
-          <attvalue for="2" value="-" />
-          <attvalue for="3" value="Isolation reduces transmission" />
-        </attvalues>
-      </edge>
-      <edge source="Hygiene" target="TransProb" id="9" weight="0.9">
-        <attvalues>
-          <attvalue for="2" value="-" />
-          <attvalue for="3" value="Hygiene reduces transmission" />
-        </attvalues>
-      </edge>
-      <edge source="AbxUse" target="SelPressure" id="10" weight="1.0">
+      <edge source="Ward" target="IntraContact" id="24" weight="0.6">
         <attvalues>
           <attvalue for="2" value="+" />
-          <attvalue for="3" value="Antibiotics create selection" />
+          <attvalue for="3" value="General wards have broader contact networks" />
         </attvalues>
       </edge>
-      <edge source="IncompleteTx" target="WithinHost" id="11" weight="0.9">
+      <edge source="ICU" target="AbxUse" id="25" weight="0.9">
         <attvalues>
           <attvalue for="2" value="+" />
-          <attvalue for="3" value="Incomplete therapy selects resistance" />
+          <attvalue for="3" value="ICU care uses antibiotics more frequently" />
         </attvalues>
       </edge>
-      <edge source="Transfers" target="InterHospSpread" id="12" weight="1.0">
+      <edge source="ICU" target="Screening" id="26" weight="0.7">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="ICU settings often trigger more testing" />
+        </attvalues>
+      </edge>
+      <edge source="ICU" target="Isolation" id="27" weight="0.5">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="ICU patients are more likely to be isolated" />
+        </attvalues>
+      </edge>
+      <edge source="ICU" target="LengthOfStay" id="28" weight="0.5">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="ICU admissions often stay longer" />
+        </attvalues>
+      </edge>
+      <edge source="Beds" target="Admissions" id="29" weight="0.5">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="More capacity allows more admissions" />
+        </attvalues>
+      </edge>
+      <edge source="Beds" target="IsolationCapacity" id="30" weight="0.7">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Bed stock constrains isolation rooms" />
+        </attvalues>
+      </edge>
+      <edge source="Staffing" target="Hygiene" id="31" weight="0.6">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="More staff supports protocol adherence" />
+        </attvalues>
+      </edge>
+      <edge source="Staffing" target="Screening" id="32" weight="0.5">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Staff availability enables testing workflows" />
+        </attvalues>
+      </edge>
+      <edge source="Staffing" target="Cleaning" id="33" weight="0.6">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Environmental cleaning depends on staffing" />
+        </attvalues>
+      </edge>
+      <edge source="Patients" target="Admissions" id="34" weight="1.0">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Patients are admitted into hospitals" />
+        </attvalues>
+      </edge>
+      <edge source="Admissions" target="Patients" id="35" weight="1.0">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Admissions increase the inpatient population" />
+        </attvalues>
+      </edge>
+      <edge source="Admissions" target="IntraContact" id="36" weight="0.7">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="More admitted patients create more contact opportunities" />
+        </attvalues>
+      </edge>
+      <edge source="Discharges" target="Community" id="37" weight="0.4">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Discharged patients return organisms to the community reservoir" />
+        </attvalues>
+      </edge>
+      <edge source="Transfers" target="InterHospSpread" id="38" weight="1.0">
         <attvalues>
           <attvalue for="2" value="+" />
           <attvalue for="3" value="Transfers drive between-hospital spread" />
         </attvalues>
       </edge>
-      <edge source="InterHospSpread" target="ColonPressure" id="13" weight="0.7">
+      <edge source="LengthOfStay" target="IntraContact" id="39" weight="0.5">
         <attvalues>
           <attvalue for="2" value="+" />
-          <attvalue for="3" value="Imported cases increase pressure" />
+          <attvalue for="3" value="Longer stays create more exposure time" />
         </attvalues>
       </edge>
-      <edge source="ColonPressure" target="TransProb" id="14" weight="0.6">
+      <edge source="LengthOfStay" target="ColonPressure" id="40" weight="0.6">
         <attvalues>
           <attvalue for="2" value="+" />
-          <attvalue for="3" value="Higher pressure increases spread" />
+          <attvalue for="3" value="Longer stays keep carriers in the system longer" />
         </attvalues>
       </edge>
-      <edge source="ColonPressure" target="Screening" id="15" weight="0.4">
+      <edge source="EnvironmentalLoad" target="TransProb" id="41" weight="0.6">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Environmental contamination supports transmission" />
+        </attvalues>
+      </edge>
+      <edge source="Screening" target="DetectProb" id="42" weight="0.9">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Testing increases detection" />
+        </attvalues>
+      </edge>
+      <edge source="DiagnosticSpeed" target="DetectProb" id="43" weight="0.7">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Faster diagnostics improve detection probability" />
+        </attvalues>
+      </edge>
+      <edge source="DetectProb" target="Isolation" id="44" weight="0.8">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Detection enables isolation action" />
+        </attvalues>
+      </edge>
+      <edge source="DetectProb" target="AbxUse" id="45" weight="0.4">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Detected infection can trigger treatment" />
+        </attvalues>
+      </edge>
+      <edge source="Isolation" target="TransProb" id="46" weight="0.9">
+        <attvalues>
+          <attvalue for="2" value="-" />
+          <attvalue for="3" value="Isolation reduces onward spread" />
+        </attvalues>
+      </edge>
+      <edge source="IsolationCapacity" target="Isolation" id="47" weight="0.8">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Available rooms limit how much isolation can be applied" />
+        </attvalues>
+      </edge>
+      <edge source="Hygiene" target="EnvironmentalLoad" id="48" weight="0.5">
+        <attvalues>
+          <attvalue for="2" value="-" />
+          <attvalue for="3" value="Better hygiene reduces environmental shedding" />
+        </attvalues>
+      </edge>
+      <edge source="Hygiene" target="TransProb" id="49" weight="0.9">
+        <attvalues>
+          <attvalue for="2" value="-" />
+          <attvalue for="3" value="Hygiene reduces direct transmission" />
+        </attvalues>
+      </edge>
+      <edge source="PPE" target="TransProb" id="50" weight="0.7">
+        <attvalues>
+          <attvalue for="2" value="-" />
+          <attvalue for="3" value="Barrier precautions reduce contact transmission" />
+        </attvalues>
+      </edge>
+      <edge source="Cleaning" target="EnvironmentalLoad" id="51" weight="0.8">
+        <attvalues>
+          <attvalue for="2" value="-" />
+          <attvalue for="3" value="Cleaning lowers environmental contamination" />
+        </attvalues>
+      </edge>
+      <edge source="AbxPolicy" target="AbxUse" id="52" weight="0.7">
+        <attvalues>
+          <attvalue for="2" value="-" />
+          <attvalue for="3" value="Stewardship reduces unnecessary prescribing" />
+        </attvalues>
+      </edge>
+      <edge source="AbxPolicy" target="AbxClassMix" id="53" weight="0.7">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Policy shapes which antibiotic classes are used" />
+        </attvalues>
+      </edge>
+      <edge source="AbxUse" target="AbxClassMix" id="54" weight="0.9">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Prescribing determines class exposure" />
+        </attvalues>
+      </edge>
+      <edge source="AbxUse" target="DoseLevel" id="55" weight="0.7">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Prescribing determines dose intensity" />
+        </attvalues>
+      </edge>
+      <edge source="AbxUse" target="TreatmentPhase" id="56" weight="0.8">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Active prescriptions move patients onto therapy" />
+        </attvalues>
+      </edge>
+      <edge source="AbxUse" target="SelPressure" id="57" weight="1.0">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Antibiotics create selection pressure" />
+        </attvalues>
+      </edge>
+      <edge source="AbxClassMix" target="ABXKilling" id="58" weight="0.8">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Drug class determines mechanism-specific killing" />
+        </attvalues>
+      </edge>
+      <edge source="DoseLevel" target="ABXKilling" id="59" weight="0.8">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Higher dose increases antibiotic kill pressure" />
+        </attvalues>
+      </edge>
+      <edge source="IncompleteTx" target="SelPressure" id="60" weight="0.8">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Incomplete therapy promotes resistance selection" />
+        </attvalues>
+      </edge>
+      <edge source="ColonPressure" target="Screening" id="61" weight="0.5">
         <attvalues>
           <attvalue for="2" value="+" />
           <attvalue for="3" value="High pressure triggers more screening" />
         </attvalues>
       </edge>
-      <edge source="ColonPressure" target="Isolation" id="16" weight="0.3">
+      <edge source="ColonPressure" target="Isolation" id="62" weight="0.4">
         <attvalues>
           <attvalue for="2" value="+" />
-          <attvalue for="3" value="High pressure triggers more isolation" />
+          <attvalue for="3" value="High pressure triggers stricter isolation" />
         </attvalues>
       </edge>
-      <edge source="TransProb" target="ColonPressure" id="17" weight="0.8">
+      <edge source="ColonPressure" target="TransProb" id="63" weight="0.7">
         <attvalues>
           <attvalue for="2" value="+" />
-          <attvalue for="3" value="Transmission increases pressure (feedback)" />
+          <attvalue for="3" value="Higher pressure increases exposure risk" />
         </attvalues>
       </edge>
-      <edge source="DetectProb" target="Isolation" id="18" weight="0.8">
+      <edge source="TransProb" target="ColonPressure" id="64" weight="0.8">
         <attvalues>
           <attvalue for="2" value="+" />
-          <attvalue for="3" value="Detection enables isolation" />
+          <attvalue for="3" value="Successful transmission raises pressure further" />
         </attvalues>
       </edge>
-      <edge source="TreatFailure" target="InfectDuration" id="19" weight="0.7">
+      <edge source="InterHospSpread" target="ColonPressure" id="65" weight="0.8">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Imported carriers increase colonization pressure" />
+        </attvalues>
+      </edge>
+      <edge source="TreatFailure" target="InfectDuration" id="66" weight="0.8">
         <attvalues>
           <attvalue for="2" value="+" />
           <attvalue for="3" value="Failure prolongs duration" />
         </attvalues>
       </edge>
-      <edge source="InfectDuration" target="ColonPressure" id="20" weight="0.8">
+      <edge source="PatientSeverity" target="LengthOfStay" id="67" weight="0.6">
         <attvalues>
           <attvalue for="2" value="+" />
-          <attvalue for="3" value="Longer duration increases pressure" />
+          <attvalue for="3" value="Sicker patients stay longer" />
         </attvalues>
       </edge>
-      <edge source="WithinHost" target="ResFrac" id="21" weight="1.0">
+      <edge source="PatientSeverity" target="MortalityRisk" id="68" weight="0.7">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Sicker patients have higher death risk" />
+        </attvalues>
+      </edge>
+      <edge source="Age" target="Vulnerability" id="69" weight="0.6">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Age increases vulnerability in the host model" />
+        </attvalues>
+      </edge>
+      <edge source="Age" target="ImmuneStrength" id="70" weight="0.4">
+        <attvalues>
+          <attvalue for="2" value="-" />
+          <attvalue for="3" value="Age can lower immune strength" />
+        </attvalues>
+      </edge>
+      <edge source="Vulnerability" target="TransProb" id="71" weight="0.7">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="More vulnerable patients are easier to colonize" />
+        </attvalues>
+      </edge>
+      <edge source="Vulnerability" target="PatientSeverity" id="72" weight="0.7">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Vulnerability worsens clinical severity" />
+        </attvalues>
+      </edge>
+      <edge source="Vulnerability" target="MortalityRisk" id="73" weight="0.6">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Vulnerability raises death risk" />
+        </attvalues>
+      </edge>
+      <edge source="ImmuneStrength" target="TransProb" id="74" weight="0.6">
+        <attvalues>
+          <attvalue for="2" value="-" />
+          <attvalue for="3" value="Stronger immunity lowers susceptibility" />
+        </attvalues>
+      </edge>
+      <edge source="ImmuneStrength" target="ImmuneClearance" id="75" weight="0.9">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Immune strength improves clearance pressure" />
+        </attvalues>
+      </edge>
+      <edge source="ImmuneStrength" target="ClearanceProb" id="76" weight="0.7">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Stronger immunity increases clearance probability" />
+        </attvalues>
+      </edge>
+      <edge source="ImmuneStatus" target="ImmuneClearance" id="77" weight="0.8">
+        <attvalues>
+          <attvalue for="2" value="-" />
+          <attvalue for="3" value="Immune suppression weakens clearance" />
+        </attvalues>
+      </edge>
+      <edge source="ImmuneStatus" target="MortalityRisk" id="78" weight="0.5">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Immune suppression raises death risk" />
+        </attvalues>
+      </edge>
+      <edge source="ImmuneStatus" target="ClearanceProb" id="79" weight="0.6">
+        <attvalues>
+          <attvalue for="2" value="-" />
+          <attvalue for="3" value="Immune suppression reduces clearance" />
+        </attvalues>
+      </edge>
+      <edge source="Compliance" target="Adherence" id="80" weight="0.9">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Compliance supports therapy adherence" />
+        </attvalues>
+      </edge>
+      <edge source="Compliance" target="Isolation" id="81" weight="0.4">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Compliant patients follow isolation rules better" />
+        </attvalues>
+      </edge>
+      <edge source="Compliance" target="Hygiene" id="82" weight="0.3">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Compliant behaviour supports hygiene measures" />
+        </attvalues>
+      </edge>
+      <edge source="Adherence" target="ABXKilling" id="83" weight="0.8">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Higher adherence increases effective antibiotic exposure" />
+        </attvalues>
+      </edge>
+      <edge source="Sociability" target="IntraContact" id="84" weight="0.8">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="More sociable patients generate more contacts" />
+        </attvalues>
+      </edge>
+      <edge source="HistoryFlags" target="PriorABX" id="85" weight="0.7">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Medical history captures prior antibiotic exposure" />
+        </attvalues>
+      </edge>
+      <edge source="HistoryFlags" target="PriorInfection" id="86" weight="0.6">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="History flags capture prior infection events" />
+        </attvalues>
+      </edge>
+      <edge source="HistoryFlags" target="Vulnerability" id="87" weight="0.7">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Comorbidities increase vulnerability" />
+        </attvalues>
+      </edge>
+      <edge source="HistoryFlags" target="ImmuneStatus" id="88" weight="0.6">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="History can include immunosuppression" />
+        </attvalues>
+      </edge>
+      <edge source="PriorABX" target="ResFrac" id="89" weight="0.5">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Past antibiotic exposure enriches resistant strains" />
+        </attvalues>
+      </edge>
+      <edge source="PriorInfection" target="TransProb" id="90" weight="0.4">
+        <attvalues>
+          <attvalue for="2" value="-" />
+          <attvalue for="3" value="Recovered patients may be less susceptible to recolonization" />
+        </attvalues>
+      </edge>
+      <edge source="TreatmentPhase" target="SelPressure" id="91" weight="0.6">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Active or recent treatment shapes selection" />
+        </attvalues>
+      </edge>
+      <edge source="PatientState" target="ColonPressure" id="92" weight="0.8">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Carriers contribute to colonization pressure" />
+        </attvalues>
+      </edge>
+      <edge source="PatientState" target="WithinHost" id="93" weight="0.5">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Within-host dynamics only matter while carriage persists" />
+        </attvalues>
+      </edge>
+      <edge source="WithinHost" target="BacterialPop" id="94" weight="0.7">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Within-host dynamics determine total bacterial burden" />
+        </attvalues>
+      </edge>
+      <edge source="WithinHost" target="StrainDiversity" id="95" weight="0.7">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Within-host evolution changes strain diversity" />
+        </attvalues>
+      </edge>
+      <edge source="WithinHost" target="ResFrac" id="96" weight="1.0">
         <attvalues>
           <attvalue for="2" value="+" />
           <attvalue for="3" value="Evolution changes resistant fraction" />
         </attvalues>
       </edge>
-      <edge source="SelPressure" target="WithinHost" id="22" weight="1.0">
+      <edge source="WithinHost" target="DominantGenotype" id="97" weight="0.8">
         <attvalues>
           <attvalue for="2" value="+" />
-          <attvalue for="3" value="Selection acts within host" />
+          <attvalue for="3" value="Evolution changes the dominant genotype" />
         </attvalues>
       </edge>
-      <edge source="MutationHGT" target="WithinHost" id="23" weight="0.7">
+      <edge source="Selection" target="WithinHost" id="98" weight="0.9">
         <attvalues>
           <attvalue for="2" value="+" />
-          <attvalue for="3" value="New variants arise" />
+          <attvalue for="3" value="Selection is a core within-host process" />
         </attvalues>
       </edge>
-      <edge source="ResFrac" target="TreatFailure" id="24" weight="0.9">
+      <edge source="Selection" target="ResFrac" id="99" weight="0.8">
         <attvalues>
           <attvalue for="2" value="+" />
-          <attvalue for="3" value="Resistance increases failure risk" />
+          <attvalue for="3" value="Selection changes the resistant fraction" />
         </attvalues>
       </edge>
-      <edge source="ResFrac" target="TransFitness" id="25" weight="0.6">
+      <edge source="Selection" target="DominantGenotype" id="100" weight="0.7">
         <attvalues>
           <attvalue for="2" value="+" />
-          <attvalue for="3" value="If low cost, fitness remains high" />
+          <attvalue for="3" value="Selection shifts which genotype dominates" />
         </attvalues>
       </edge>
-      <edge source="FitnessCost" target="ResFrac" id="26" weight="0.4">
+      <edge source="SelPressure" target="Selection" id="101" weight="1.0">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Antibiotic pressure drives selection" />
+        </attvalues>
+      </edge>
+      <edge source="SelPressure" target="MutationRate" id="102" weight="0.5">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Stress can elevate mutation rates" />
+        </attvalues>
+      </edge>
+      <edge source="BacterialPop" target="ClearanceProb" id="103" weight="0.8">
         <attvalues>
           <attvalue for="2" value="-" />
-          <attvalue for="3" value="Cost reduces resistance without antibiotics" />
+          <attvalue for="3" value="Large populations are harder to clear" />
         </attvalues>
       </edge>
-      <edge source="TransFitness" target="TransProb" id="27" weight="0.4">
+      <edge source="BacterialPop" target="PatientSeverity" id="104" weight="0.5">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Higher burden can worsen symptoms" />
+        </attvalues>
+      </edge>
+      <edge source="StrainDiversity" target="MutationHGT" id="105" weight="0.4">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="More strains create more HGT opportunities" />
+        </attvalues>
+      </edge>
+      <edge source="MutationRate" target="MutationHGT" id="106" weight="0.8">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Higher mutation rate increases new variants" />
+        </attvalues>
+      </edge>
+      <edge source="MutationHGT" target="WithinHost" id="107" weight="0.8">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Mutation and HGT generate new variants" />
+        </attvalues>
+      </edge>
+      <edge source="ResFrac" target="TreatFailure" id="108" weight="0.9">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Resistance increases treatment failure risk" />
+        </attvalues>
+      </edge>
+      <edge source="ResFrac" target="TransFitness" id="109" weight="0.6">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Resistance can persist if costs are low" />
+        </attvalues>
+      </edge>
+      <edge source="DominantGenotype" target="TransFitness" id="110" weight="0.4">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Genotype identity influences transmission performance" />
+        </attvalues>
+      </edge>
+      <edge source="Fitness" target="Selection" id="111" weight="0.9">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Relative fitness shapes selection outcomes" />
+        </attvalues>
+      </edge>
+      <edge source="FitnessCost" target="Fitness" id="112" weight="0.8">
+        <attvalues>
+          <attvalue for="2" value="-" />
+          <attvalue for="3" value="Fitness costs reduce competitive success" />
+        </attvalues>
+      </edge>
+      <edge source="GrowthBase" target="Fitness" id="113" weight="0.9">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Baseline growth increases fitness" />
+        </attvalues>
+      </edge>
+      <edge source="MetabolicOpt" target="FitnessCost" id="114" weight="0.8">
+        <attvalues>
+          <attvalue for="2" value="-" />
+          <attvalue for="3" value="Compensatory metabolism offsets resistance costs" />
+        </attvalues>
+      </edge>
+      <edge source="Efflux" target="ABXKilling" id="115" weight="0.7">
+        <attvalues>
+          <attvalue for="2" value="-" />
+          <attvalue for="3" value="Efflux protects against antibiotic killing" />
+        </attvalues>
+      </edge>
+      <edge source="Efflux" target="FitnessCost" id="116" weight="0.6">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Resistance mechanisms carry growth costs" />
+        </attvalues>
+      </edge>
+      <edge source="TargetMod" target="ABXKilling" id="117" weight="0.8">
+        <attvalues>
+          <attvalue for="2" value="-" />
+          <attvalue for="3" value="Target changes reduce antibiotic effect" />
+        </attvalues>
+      </edge>
+      <edge source="TargetMod" target="FitnessCost" id="118" weight="0.6">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Target modification carries a fitness cost" />
+        </attvalues>
+      </edge>
+      <edge source="PermReduction" target="ABXKilling" id="119" weight="0.7">
+        <attvalues>
+          <attvalue for="2" value="-" />
+          <attvalue for="3" value="Reduced permeability limits drug entry" />
+        </attvalues>
+      </edge>
+      <edge source="PermReduction" target="FitnessCost" id="120" weight="0.5">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Reduced permeability carries a fitness cost" />
+        </attvalues>
+      </edge>
+      <edge source="Stealth" target="ImmuneClearance" id="121" weight="0.9">
+        <attvalues>
+          <attvalue for="2" value="-" />
+          <attvalue for="3" value="Stealth reduces immune detection" />
+        </attvalues>
+      </edge>
+      <edge source="Adhesion" target="TransFitness" id="122" weight="0.9">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Adhesion directly improves transmission fitness" />
+        </attvalues>
+      </edge>
+      <edge source="Virulence" target="TransFitness" id="123" weight="0.3">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Virulence can modestly affect transmission fitness" />
+        </attvalues>
+      </edge>
+      <edge source="Virulence" target="SeverityMod" id="124" weight="0.9">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Virulence raises severity" />
+        </attvalues>
+      </edge>
+      <edge source="Virulence" target="LethalityMod" id="125" weight="0.9">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Virulence raises lethality" />
+        </attvalues>
+      </edge>
+      <edge source="HGTCompetence" target="MutationHGT" id="126" weight="0.9">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="HGT competence increases recombination events" />
+        </attvalues>
+      </edge>
+      <edge source="MutationModifier" target="MutationRate" id="127" weight="0.9">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Genome-level mutation modifiers tune mutation rate" />
+        </attvalues>
+      </edge>
+      <edge source="ImmuneClearance" target="Fitness" id="128" weight="0.6">
+        <attvalues>
+          <attvalue for="2" value="-" />
+          <attvalue for="3" value="Immune pressure reduces bacterial fitness" />
+        </attvalues>
+      </edge>
+      <edge source="ABXKilling" target="SelPressure" id="129" weight="0.9">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="More effective killing intensifies selection on survivors" />
+        </attvalues>
+      </edge>
+      <edge source="ABXKilling" target="Fitness" id="130" weight="0.7">
+        <attvalues>
+          <attvalue for="2" value="-" />
+          <attvalue for="3" value="Antibiotic kill pressure reduces fitness of exposed strains" />
+        </attvalues>
+      </edge>
+      <edge source="ClearanceProb" target="InfectDuration" id="131" weight="0.8">
+        <attvalues>
+          <attvalue for="2" value="-" />
+          <attvalue for="3" value="Higher clearance shortens carriage duration" />
+        </attvalues>
+      </edge>
+      <edge source="ClearanceProb" target="PatientState" id="132" weight="0.8">
+        <attvalues>
+          <attvalue for="2" value="-" />
+          <attvalue for="3" value="Clearance moves patients out of carriage" />
+        </attvalues>
+      </edge>
+      <edge source="TransFitness" target="RelativeTrans" id="133" weight="0.9">
         <attvalues>
           <attvalue for="2" value="+" />
           <attvalue for="3" value="Fitter strains transmit better" />
+        </attvalues>
+      </edge>
+      <edge source="RelativeTrans" target="TransProb" id="134" weight="0.7">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="More transmissible strains increase spread probability" />
+        </attvalues>
+      </edge>
+      <edge source="SeverityMod" target="PatientSeverity" id="135" weight="0.8">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Micro severity feeds back into macro severity" />
+        </attvalues>
+      </edge>
+      <edge source="LethalityMod" target="MortalityRisk" id="136" weight="0.8">
+        <attvalues>
+          <attvalue for="2" value="+" />
+          <attvalue for="3" value="Micro lethality increases death risk" />
         </attvalues>
       </edge>
     </edges>

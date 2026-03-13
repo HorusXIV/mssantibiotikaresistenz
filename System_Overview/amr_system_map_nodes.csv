@@ -1,25 +1,83 @@
 Id,Label,layer,category
-Community,Community,external,context
-Regulator,Regulator/Guidelines,external,context
-Hospitals,Hospitals (Macro),macro,entity
+Community,Community reservoir,external,context
+LongTermCare,Long-term care facilities,external,context
+OutpatientCare,Outpatient care,external,context
+Travel,Travel and population mobility,external,context
+Agriculture,Animal and agricultural antibiotic use,external,context
+Regulator,Regulator and guidelines,external,governance
+PublicHealth,Public health surveillance,external,governance
+DiagnosticsMarket,Diagnostic technology availability,external,context
+DrugPipeline,Antibiotic pipeline,external,context
+Hospitals,Hospitals (macro),macro,entity
+Departments,Hospital departments,macro,entity
+Ward,General ward,macro,entity
+ICU,ICU,macro,entity
+Beds,Bed capacity,macro,resource
+Staffing,Staffing levels,macro,resource
 Patients,Patients,macro,entity
 Admissions,Admissions,macro,process
-IntraContact,Intra-hospital contacts,macro,process
-Screening,Screening & testing,macro,intervention
-Isolation,Isolation / quarantine,macro,intervention
-Hygiene,Hygiene compliance,macro,intervention
-AbxUse,Antibiotic prescribing,macro,intervention
-IncompleteTx,Incomplete treatment,macro,behavior
+Discharges,Discharges,macro,process
 Transfers,Patient transfers,macro,process
-InterHospSpread,Inter-hospital spread,macro,outcome
+LengthOfStay,Length of stay,macro,state
+IntraContact,Intra-hospital contacts,macro,process
+EnvironmentalLoad,Environmental contamination,macro,state
+Screening,Screening and testing,macro,intervention
+DiagnosticSpeed,Diagnostic speed,macro,state
+DetectProb,Detection probability,macro,state
+Isolation,Isolation and quarantine,macro,intervention
+IsolationCapacity,Isolation capacity,macro,resource
+Hygiene,Hygiene compliance,macro,intervention
+PPE,Barrier precautions and PPE,macro,intervention
+Cleaning,Environmental cleaning,macro,intervention
+AbxPolicy,Antibiotic policy and stewardship,macro,intervention
+AbxUse,Antibiotic prescribing,macro,intervention
+AbxClassMix,Antibiotic class mix,macro,state
+DoseLevel,Dose level,macro,state
+IncompleteTx,Incomplete treatment,macro,behavior
 ColonPressure,Colonization pressure,macro,state
 TransProb,Transmission probability,macro,state
-DetectProb,Detection probability,macro,state
+InterHospSpread,Inter-hospital spread,macro,outcome
 TreatFailure,Treatment failure risk,macro,outcome
-InfectDuration,Infection/colonization duration,macro,state
+InfectDuration,Infection and colonization duration,macro,state
+MortalityRisk,Mortality risk,macro,outcome
+PatientSeverity,Clinical severity,macro,state
+Age,Age,patient,host
+Vulnerability,Vulnerability,patient,host
+ImmuneStrength,Immune strength,patient,host
+ImmuneStatus,Immune suppression status,patient,host
+Compliance,Compliance,patient,behavior
+Adherence,Adherence,patient,behavior
+Sociability,Sociability and contact propensity,patient,behavior
+HistoryFlags,Medical history flags,patient,history
+PriorABX,Prior antibiotic exposure,patient,history
+PriorInfection,Prior infection recovery,patient,history
+TreatmentPhase,Treatment phase,patient,state
+PatientState,Carrier state (S or C),patient,state
 WithinHost,Within-host evolution,micro,process
-SelPressure,Selection pressure (antibiotics),micro,mechanism
-MutationHGT,Mutation / HGT,micro,mechanism
+Selection,Selection dynamics,micro,process
+SelPressure,Selection pressure,micro,mechanism
+BacterialPop,Bacterial population size,micro,state
+StrainDiversity,Strain diversity,micro,state
+MutationRate,Mutation rate,micro,mechanism
+MutationHGT,Mutation and HGT,micro,mechanism
 ResFrac,Resistant fraction,micro,state
-FitnessCost,Fitness cost (no antibiotics),micro,mechanism
+DominantGenotype,Dominant genotype,micro,state
+Fitness,Fitness,micro,state
+FitnessCost,Fitness cost without antibiotics,micro,mechanism
+GrowthBase,Baseline growth,micro,mechanism
+MetabolicOpt,Metabolic optimization,micro,mechanism
+Efflux,Efflux pumps,micro,mechanism
+TargetMod,Target modification,micro,mechanism
+PermReduction,Permeability reduction,micro,mechanism
+Stealth,Immune evasion and stealth,micro,mechanism
+Adhesion,Adhesion,micro,mechanism
+Virulence,Virulence,micro,mechanism
+HGTCompetence,HGT competence,micro,mechanism
+MutationModifier,Mutation-rate modifier,micro,mechanism
+ImmuneClearance,Immune clearance,micro,mechanism
+ABXKilling,Antibiotic killing,micro,mechanism
+ClearanceProb,Clearance probability,micro,state
 TransFitness,Transmission fitness,micro,state
+RelativeTrans,Relative transmissibility,micro,state
+SeverityMod,Severity modifier,micro,state
+LethalityMod,Lethality modifier,micro,state
