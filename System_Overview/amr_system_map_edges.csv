@@ -1,89 +1,41 @@
 Source,Target,Type,sign,weight,relation
-Community,Admissions,Directed,+,1.0,Community inflow seeds hospital admissions
-Community,ColonPressure,Directed,+,0.5,Imported community carriage increases hospital pressure
-LongTermCare,Admissions,Directed,+,0.7,Transfers from long-term care add admissions
-LongTermCare,InterHospSpread,Directed,+,0.7,Long-term care links hospitals through shared patients
-OutpatientCare,Admissions,Directed,+,0.5,Outpatient referrals feed hospital admissions
-Travel,Community,Directed,+,0.4,Mobility changes the community resistance pool
-Travel,InterHospSpread,Directed,+,0.5,Mobility connects distant care settings
-Agriculture,Community,Directed,+,0.4,Agricultural antibiotic use contributes to the wider resistance reservoir
-Regulator,PublicHealth,Directed,+,0.7,Guidelines shape surveillance priorities
-Regulator,Screening,Directed,+,0.8,Guidelines affect screening policy
-Regulator,AbxPolicy,Directed,+,0.9,Guidelines define stewardship expectations
-PublicHealth,Screening,Directed,+,0.6,Surveillance programs increase testing uptake
-PublicHealth,Isolation,Directed,+,0.4,Outbreak response tightens isolation measures
-DiagnosticsMarket,DiagnosticSpeed,Directed,+,0.8,Better diagnostics improve turnaround speed
-DiagnosticsMarket,Screening,Directed,+,0.5,Diagnostic availability broadens testing scope
-DrugPipeline,AbxClassMix,Directed,+,0.5,New agents expand the class portfolio
 Hospitals,Departments,Directed,+,1.0,Hospitals contain departments
-Hospitals,Beds,Directed,+,0.8,Hospital size determines available beds
-Hospitals,Staffing,Directed,+,0.8,Hospitals determine staffing resources
 Hospitals,Admissions,Directed,+,1.0,Hospitals receive admissions
 Hospitals,Transfers,Directed,+,0.5,Hospitals participate in transfer networks
 Departments,Ward,Directed,+,1.0,Ward is a department type
 Departments,ICU,Directed,+,1.0,ICU is a department type
 Ward,AbxUse,Directed,+,0.4,Ward patients still receive antibiotics
-Ward,IntraContact,Directed,+,0.6,General wards have broader contact networks
 ICU,AbxUse,Directed,+,0.9,ICU care uses antibiotics more frequently
-ICU,Screening,Directed,+,0.7,ICU settings often trigger more testing
 ICU,Isolation,Directed,+,0.5,ICU patients are more likely to be isolated
-ICU,LengthOfStay,Directed,+,0.5,ICU admissions often stay longer
-Beds,Admissions,Directed,+,0.5,More capacity allows more admissions
-Beds,IsolationCapacity,Directed,+,0.7,Bed stock constrains isolation rooms
-Staffing,Hygiene,Directed,+,0.6,More staff supports protocol adherence
-Staffing,Screening,Directed,+,0.5,Staff availability enables testing workflows
-Staffing,Cleaning,Directed,+,0.6,Environmental cleaning depends on staffing
 Patients,Admissions,Directed,+,1.0,Patients are admitted into hospitals
 Admissions,Patients,Directed,+,1.0,Admissions increase the inpatient population
-Admissions,IntraContact,Directed,+,0.7,More admitted patients create more contact opportunities
-Discharges,Community,Directed,+,0.4,Discharged patients return organisms to the community reservoir
-Transfers,InterHospSpread,Directed,+,1.0,Transfers drive between-hospital spread
-LengthOfStay,IntraContact,Directed,+,0.5,Longer stays create more exposure time
-LengthOfStay,ColonPressure,Directed,+,0.6,Longer stays keep carriers in the system longer
-EnvironmentalLoad,TransProb,Directed,+,0.6,Environmental contamination supports transmission
-Screening,DetectProb,Directed,+,0.9,Testing increases detection
 DiagnosticSpeed,DetectProb,Directed,+,0.7,Faster diagnostics improve detection probability
 DetectProb,Isolation,Directed,+,0.8,Detection enables isolation action
 DetectProb,AbxUse,Directed,+,0.4,Detected infection can trigger treatment
 Isolation,TransProb,Directed,-,0.9,Isolation reduces onward spread
-IsolationCapacity,Isolation,Directed,+,0.8,Available rooms limit how much isolation can be applied
-Hygiene,EnvironmentalLoad,Directed,-,0.5,Better hygiene reduces environmental shedding
 Hygiene,TransProb,Directed,-,0.9,Hygiene reduces direct transmission
-PPE,TransProb,Directed,-,0.7,Barrier precautions reduce contact transmission
-Cleaning,EnvironmentalLoad,Directed,-,0.8,Cleaning lowers environmental contamination
-AbxPolicy,AbxUse,Directed,-,0.7,Stewardship reduces unnecessary prescribing
-AbxPolicy,AbxClassMix,Directed,+,0.7,Policy shapes which antibiotic classes are used
 AbxUse,AbxClassMix,Directed,+,0.9,Prescribing determines class exposure
 AbxUse,DoseLevel,Directed,+,0.7,Prescribing determines dose intensity
 AbxUse,TreatmentPhase,Directed,+,0.8,Active prescriptions move patients onto therapy
 AbxUse,SelPressure,Directed,+,1.0,Antibiotics create selection pressure
 AbxClassMix,ABXKilling,Directed,+,0.8,Drug class determines mechanism-specific killing
 DoseLevel,ABXKilling,Directed,+,0.8,Higher dose increases antibiotic kill pressure
-IncompleteTx,SelPressure,Directed,+,0.8,Incomplete therapy promotes resistance selection
-ColonPressure,Screening,Directed,+,0.5,High pressure triggers more screening
-ColonPressure,Isolation,Directed,+,0.4,High pressure triggers stricter isolation
+ColonPressure,Isolation,Directed,+,0.4,High colonization pressure triggers stricter isolation
 ColonPressure,TransProb,Directed,+,0.7,Higher pressure increases exposure risk
 TransProb,ColonPressure,Directed,+,0.8,Successful transmission raises pressure further
-InterHospSpread,ColonPressure,Directed,+,0.8,Imported carriers increase colonization pressure
-TreatFailure,InfectDuration,Directed,+,0.8,Failure prolongs duration
-PatientSeverity,LengthOfStay,Directed,+,0.6,Sicker patients stay longer
-PatientSeverity,MortalityRisk,Directed,+,0.7,Sicker patients have higher death risk
 Age,Vulnerability,Directed,+,0.6,Age increases vulnerability in the host model
 Age,ImmuneStrength,Directed,-,0.4,Age can lower immune strength
 Vulnerability,TransProb,Directed,+,0.7,More vulnerable patients are easier to colonize
-Vulnerability,PatientSeverity,Directed,+,0.7,Vulnerability worsens clinical severity
-Vulnerability,MortalityRisk,Directed,+,0.6,Vulnerability raises death risk
 ImmuneStrength,TransProb,Directed,-,0.6,Stronger immunity lowers susceptibility
 ImmuneStrength,ImmuneClearance,Directed,+,0.9,Immune strength improves clearance pressure
 ImmuneStrength,ClearanceProb,Directed,+,0.7,Stronger immunity increases clearance probability
 ImmuneStatus,ImmuneClearance,Directed,-,0.8,Immune suppression weakens clearance
-ImmuneStatus,MortalityRisk,Directed,+,0.5,Immune suppression raises death risk
 ImmuneStatus,ClearanceProb,Directed,-,0.6,Immune suppression reduces clearance
 Compliance,Adherence,Directed,+,0.9,Compliance supports therapy adherence
 Compliance,Isolation,Directed,+,0.4,Compliant patients follow isolation rules better
 Compliance,Hygiene,Directed,+,0.3,Compliant behaviour supports hygiene measures
 Adherence,ABXKilling,Directed,+,0.8,Higher adherence increases effective antibiotic exposure
-Sociability,IntraContact,Directed,+,0.8,More sociable patients generate more contacts
+Sociability,TransProb,Directed,+,0.8,Patient sociability multiplies carrier force in transmission
 HistoryFlags,PriorABX,Directed,+,0.7,Medical history captures prior antibiotic exposure
 HistoryFlags,PriorInfection,Directed,+,0.6,History flags capture prior infection events
 HistoryFlags,Vulnerability,Directed,+,0.7,Comorbidities increase vulnerability
@@ -103,11 +55,9 @@ Selection,DominantGenotype,Directed,+,0.7,Selection shifts which genotype domina
 SelPressure,Selection,Directed,+,1.0,Antibiotic pressure drives selection
 SelPressure,MutationRate,Directed,+,0.5,Stress can elevate mutation rates
 BacterialPop,ClearanceProb,Directed,-,0.8,Large populations are harder to clear
-BacterialPop,PatientSeverity,Directed,+,0.5,Higher burden can worsen symptoms
 StrainDiversity,MutationHGT,Directed,+,0.4,More strains create more HGT opportunities
 MutationRate,MutationHGT,Directed,+,0.8,Higher mutation rate increases new variants
 MutationHGT,WithinHost,Directed,+,0.8,Mutation and HGT generate new variants
-ResFrac,TreatFailure,Directed,+,0.9,Resistance increases treatment failure risk
 ResFrac,TransFitness,Directed,+,0.6,Resistance can persist if costs are low
 DominantGenotype,TransFitness,Directed,+,0.4,Genotype identity influences transmission performance
 Fitness,Selection,Directed,+,0.9,Relative fitness shapes selection outcomes
@@ -130,9 +80,6 @@ MutationModifier,MutationRate,Directed,+,0.9,Genome-level mutation modifiers tun
 ImmuneClearance,Fitness,Directed,-,0.6,Immune pressure reduces bacterial fitness
 ABXKilling,SelPressure,Directed,+,0.9,More effective killing intensifies selection on survivors
 ABXKilling,Fitness,Directed,-,0.7,Antibiotic kill pressure reduces fitness of exposed strains
-ClearanceProb,InfectDuration,Directed,-,0.8,Higher clearance shortens carriage duration
 ClearanceProb,PatientState,Directed,-,0.8,Clearance moves patients out of carriage
 TransFitness,RelativeTrans,Directed,+,0.9,Fitter strains transmit better
 RelativeTrans,TransProb,Directed,+,0.7,More transmissible strains increase spread probability
-SeverityMod,PatientSeverity,Directed,+,0.8,Micro severity feeds back into macro severity
-LethalityMod,MortalityRisk,Directed,+,0.8,Micro lethality increases death risk

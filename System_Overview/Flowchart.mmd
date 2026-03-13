@@ -1,0 +1,75 @@
+flowchart TD
+
+START([MacroSimulator.step]) --> LOOP
+
+subgraph MACRO["macro_simulation / simulator.py"]
+
+    LOOP["for each hospital"] --> PH1_HEAD
+
+    subgraph PH1["Phase 1 — Clearance  C to S"]
+        PH1_HEAD["for each CARRIER"] --> SHD{"should_clear_today?<br/>p_clearance from micro"}
+        SHD -->|Yes| DO_CLR["state = SUSCEPTIBLE<br/>episode reset<br/>modifiers cleared"]
+        SHD -->|No| STAY_C["stays CARRIER"]
+    end
+
+    PH1_HEAD --> PH2_HEAD
+
+    subgraph PH2["Phase 2 — Build Context"]
+        PH2_HEAD["for each patient"] --> ISO{"isolate carrier?"}
+        ISO -->|Yes| ISO_Y["is_isolated = True"]
+        ISO -->|No| ISO_N["unchanged"]
+        ISO_Y --> ABX
+        ISO_N --> ABX
+        ABX{"start antibiotic treatment?<br/>prob depends on department"} -->|Yes| ABX_Y["regimen.on = True<br/>class + dose selected"]
+        ABX -->|No| ABX_N["regimen.on = False"]
+        ABX_Y --> CTX["PatientDailyContext assembled"]
+        ABX_N --> CTX
+    end
+
+    subgraph PH4["Phase 4 — Transmission  S to C"]
+        CF["compute carrier_force<br/>sociability x transmissibility<br/>x isolation x hygiene"] --> PC["compute p_colonize<br/>carrier_force x vulnerability<br/>/ immune_strength"]
+        PC --> CDRAW{"colonization event?"}
+        CDRAW -->|Yes| NEW_C["state = CARRIER<br/>new episode started"]
+        CDRAW -->|No| KEEP_S["stays SUSCEPTIBLE"]
+    end
+
+end
+
+subgraph EXCHANGE["exchange / patient.py  —  Patient Interface"]
+    UPDCTX["update_context<br/>hospital, dept, isolation<br/>regimen, adherence, treatment_phase"]
+    CKCARR{"state == CARRIER<br/>and episode active?"}
+    MKREQ["make_micro_request<br/>antibiotic config + adherence<br/>host properties<br/>current resistance state"]
+    APPLIC["apply_micro_response<br/>resistant_fraction + dominant_genotype<br/>relative_transmissibility + p_clearance<br/>severity + lethality modifiers"]
+    NOREQ["no micro call<br/>modifiers unchanged"]
+end
+
+subgraph MICRO["micro_simulation/"]
+
+    EP["EpisodeState<br/>bacterial population<br/>persists between days"]
+    PRREQ["process_request<br/>parallel batch support"]
+
+    subgraph SIMDAY["simulate_day — 12 steps"]
+        SEL["Selection<br/>fitness-based growth and death<br/>antibiotic pressure + immune clearance<br/>logistic population cap"]
+        MUT["Mutation<br/>random gene changes per strain<br/>mutation rate boosted under ABX<br/>new mutant strains emerge"]
+        HGT["HGT  every 3rd step<br/>horizontal gene transfer<br/>resistance genes blend<br/>between strains"]
+        CON["Consolidate<br/>prune small strains<br/>keep top 50 only"]
+        SEL --> MUT --> HGT --> CON
+    end
+
+    P2R["population_to_response<br/>dominant genotype: S / R1 / R2 / R3<br/>resistant fraction<br/>transmissibility, lethality, p_clearance"]
+
+end
+
+%% Cross-layer connections
+CTX      -->|PatientDailyContext| UPDCTX
+UPDCTX   --> CKCARR
+CKCARR   -->|Yes - CARRIER| MKREQ
+CKCARR   -->|No - SUSCEPTIBLE| NOREQ
+MKREQ    -->|request dict| PRREQ
+EP       --> PRREQ
+PRREQ    --> SIMDAY
+SIMDAY   --> P2R
+P2R      -->|response dict| APPLIC
+APPLIC   --> EP
+NOREQ    --> CF
+APPLIC   --> CF

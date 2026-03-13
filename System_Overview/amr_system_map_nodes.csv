@@ -1,46 +1,21 @@
 Id,Label,layer,category
-Community,Community reservoir,external,context
-LongTermCare,Long-term care facilities,external,context
-OutpatientCare,Outpatient care,external,context
-Travel,Travel and population mobility,external,context
-Agriculture,Animal and agricultural antibiotic use,external,context
-Regulator,Regulator and guidelines,external,governance
-PublicHealth,Public health surveillance,external,governance
-DiagnosticsMarket,Diagnostic technology availability,external,context
-DrugPipeline,Antibiotic pipeline,external,context
 Hospitals,Hospitals (macro),macro,entity
 Departments,Hospital departments,macro,entity
 Ward,General ward,macro,entity
 ICU,ICU,macro,entity
-Beds,Bed capacity,macro,resource
-Staffing,Staffing levels,macro,resource
 Patients,Patients,macro,entity
 Admissions,Admissions,macro,process
 Discharges,Discharges,macro,process
 Transfers,Patient transfers,macro,process
-LengthOfStay,Length of stay,macro,state
-IntraContact,Intra-hospital contacts,macro,process
-EnvironmentalLoad,Environmental contamination,macro,state
-Screening,Screening and testing,macro,intervention
 DiagnosticSpeed,Diagnostic speed,macro,state
 DetectProb,Detection probability,macro,state
-Isolation,Isolation and quarantine,macro,intervention
-IsolationCapacity,Isolation capacity,macro,resource
-Hygiene,Hygiene compliance,macro,intervention
-PPE,Barrier precautions and PPE,macro,intervention
-Cleaning,Environmental cleaning,macro,intervention
-AbxPolicy,Antibiotic policy and stewardship,macro,intervention
+Isolation,Isolation,macro,intervention
+Hygiene,Hygiene,macro,intervention
 AbxUse,Antibiotic prescribing,macro,intervention
 AbxClassMix,Antibiotic class mix,macro,state
 DoseLevel,Dose level,macro,state
-IncompleteTx,Incomplete treatment,macro,behavior
 ColonPressure,Colonization pressure,macro,state
 TransProb,Transmission probability,macro,state
-InterHospSpread,Inter-hospital spread,macro,outcome
-TreatFailure,Treatment failure risk,macro,outcome
-InfectDuration,Infection and colonization duration,macro,state
-MortalityRisk,Mortality risk,macro,outcome
-PatientSeverity,Clinical severity,macro,state
 Age,Age,patient,host
 Vulnerability,Vulnerability,patient,host
 ImmuneStrength,Immune strength,patient,host
