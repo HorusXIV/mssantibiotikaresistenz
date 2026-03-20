@@ -53,6 +53,24 @@ class SimulationConfig:
     # Population dynamics
     growth_rate_per_step: float = 0.3  # Max growth per step (before fitness)
     death_rate_per_step: float = 0.1  # Base death rate per step
+    strain_prune_threshold: float = 1.0  # Drop numerically negligible strains
+
+    # Lifecycle / turnover dynamics
+    base_damage_per_step: float = 0.03  # Background wear per step
+    replication_damage_factor: float = 0.25  # Extra wear from fast turnover
+    stress_damage_factor: float = 0.20  # Extra wear under environmental stress
+    repair_rate_per_step: float = 0.08  # Damage repair / maintenance capacity
+    age_mortality_scale: float = 0.015  # How strongly lineage age raises death risk
+    damage_mortality_scale: float = 0.20  # How strongly accumulated damage raises death risk
+    lifecycle_half_life_steps: float = 36.0  # Age scale for senescence-like pressure
+    max_damage_load: float = 5.0  # Saturation point for damage effects
+    dormancy_growth_penalty: float = 0.25  # Persistence trades growth for survival
+    synergy_repair_dormancy_bonus: float = 0.25  # Quiescent repair synergy
+    synergy_stress_tolerance_bonus: float = 0.20  # Stress hardening synergy
+
+    # Demographic stochasticity
+    stochastic_threshold: float = 1e5  # Exact Poisson dynamics below this size
+    stochastic_noise_scale: float = 1.0  # Scales demographic noise above threshold
 
 
 @dataclass
@@ -65,11 +83,21 @@ class StrainPopulation:
 
     genomes: np.ndarray  # Shape (n_strains, NUM_GENES)
     populations: np.ndarray  # Shape (n_strains,) - population sizes
+    lineage_ages: np.ndarray | None = None  # Shape (n_strains,) - cumulative lineage age
+    damage_loads: np.ndarray | None = None  # Shape (n_strains,) - accumulated stress / damage
 
     def __post_init__(self):
         assert self.genomes.ndim == 2
         assert self.genomes.shape[1] == NUM_GENES
         assert len(self.populations) == len(self.genomes)
+        if self.lineage_ages is None:
+            self.lineage_ages = np.zeros(len(self.populations), dtype=np.float64)
+        if self.damage_loads is None:
+            self.damage_loads = np.zeros(len(self.populations), dtype=np.float64)
+        self.lineage_ages = np.asarray(self.lineage_ages, dtype=np.float64)
+        self.damage_loads = np.asarray(self.damage_loads, dtype=np.float64)
+        assert len(self.lineage_ages) == len(self.genomes)
+        assert len(self.damage_loads) == len(self.genomes)
 
     @property
     def n_strains(self) -> int:
@@ -80,7 +108,12 @@ class StrainPopulation:
         return float(np.sum(self.populations))
 
     def clone(self) -> StrainPopulation:
-        return StrainPopulation(genomes=self.genomes.copy(), populations=self.populations.copy())
+        return StrainPopulation(
+            genomes=self.genomes.copy(),
+            populations=self.populations.copy(),
+            lineage_ages=self.lineage_ages.copy(),
+            damage_loads=self.damage_loads.copy(),
+        )
 
     @classmethod
     def create_initial(
@@ -121,8 +154,15 @@ class StrainPopulation:
 
         genomes = np.array(strains, dtype=np.float32)
         populations = np.array(pops, dtype=np.float64)
+        lineage_ages = np.zeros(len(populations), dtype=np.float64)
+        damage_loads = np.zeros(len(populations), dtype=np.float64)
 
-        return cls(genomes=genomes, populations=populations)
+        return cls(
+            genomes=genomes,
+            populations=populations,
+            lineage_ages=lineage_ages,
+            damage_loads=damage_loads,
+        )
 
 
 def mutate_population(
@@ -145,6 +185,8 @@ def mutate_population(
     """
     genomes = population.genomes.copy()
     populations = population.populations.copy()
+    lineage_ages = population.lineage_ages.copy()
+    damage_loads = population.damage_loads.copy()
 
     # Stress-induced mutation rate increase
     stress_mult = 1.0 + abx_stress * (config.stress_mutation_boost - 1.0)
@@ -156,6 +198,8 @@ def mutate_population(
 
     new_strains = []
     new_pops = []
+    new_ages = []
+    new_damage = []
 
     for i in range(len(genomes)):
         if populations[i] < 1:
@@ -182,13 +226,22 @@ def mutate_population(
 
             new_strains.append(mutant)
             new_pops.append(transfer_pop)
+            new_ages.append(max(0.0, lineage_ages[i] * 0.5))
+            new_damage.append(max(0.0, damage_loads[i] * 0.7))
 
     # Add new strains
     if new_strains:
         genomes = np.vstack([genomes, np.array(new_strains, dtype=np.float32)])
         populations = np.concatenate([populations, np.array(new_pops)])
+        lineage_ages = np.concatenate([lineage_ages, np.array(new_ages, dtype=np.float64)])
+        damage_loads = np.concatenate([damage_loads, np.array(new_damage, dtype=np.float64)])
 
-    return StrainPopulation(genomes=genomes, populations=populations)
+    return StrainPopulation(
+        genomes=genomes,
+        populations=populations,
+        lineage_ages=lineage_ages,
+        damage_loads=damage_loads,
+    )
 
 
 def horizontal_gene_transfer(
@@ -197,13 +250,15 @@ def horizontal_gene_transfer(
     """
     Simulate horizontal gene transfer between strains.
 
-    Primarily transfers resistance genes.
+    Primarily transfers resistance and persistence genes.
     """
     if population.n_strains < 2:
         return population
 
     genomes = population.genomes.copy()
     populations = population.populations.copy()
+    lineage_ages = population.lineage_ages.copy()
+    damage_loads = population.damage_loads.copy()
 
     # HGT probability based on competence
     competence = genomes[:, GeneIndex.HGT_COMPETENCE]
@@ -214,10 +269,15 @@ def horizontal_gene_transfer(
         GeneIndex.TARGET_MODIFICATION,
         GeneIndex.PERMEABILITY_REDUCTION,
         GeneIndex.METABOLIC_OPTIMIZATION,
+        GeneIndex.DORMANCY_PROPENSITY,
+        GeneIndex.STRESS_RESPONSE,
+        GeneIndex.DAMAGE_TOLERANCE,
     ]
 
     new_strains = []
     new_pops = []
+    new_ages = []
+    new_damage = []
 
     for i in range(population.n_strains):
         if populations[i] < 1000:
@@ -252,12 +312,42 @@ def horizontal_gene_transfer(
 
             new_strains.append(recombinant)
             new_pops.append(transfer_pop)
+            new_ages.append(max(0.0, min(lineage_ages[i], lineage_ages[donor_idx]) * 0.7))
+            new_damage.append(max(0.0, 0.5 * (damage_loads[i] + damage_loads[donor_idx]) * 0.8))
 
     if new_strains:
         genomes = np.vstack([genomes, np.array(new_strains, dtype=np.float32)])
         populations = np.concatenate([populations, np.array(new_pops)])
+        lineage_ages = np.concatenate([lineage_ages, np.array(new_ages, dtype=np.float64)])
+        damage_loads = np.concatenate([damage_loads, np.array(new_damage, dtype=np.float64)])
 
-    return StrainPopulation(genomes=genomes, populations=populations)
+    return StrainPopulation(
+        genomes=genomes,
+        populations=populations,
+        lineage_ages=lineage_ages,
+        damage_loads=damage_loads,
+    )
+
+
+def apply_demographic_stochasticity(
+    populations: np.ndarray,
+    config: SimulationConfig,
+    rng: np.random.Generator,
+) -> np.ndarray:
+    """Realize finite-population noise so small strains can die out by chance."""
+    realized = np.zeros_like(populations, dtype=np.float64)
+
+    for i, expected in enumerate(populations):
+        if expected <= 0.0:
+            continue
+        if expected <= config.stochastic_threshold:
+            realized[i] = float(rng.poisson(expected))
+            continue
+
+        sd = np.sqrt(expected) * config.stochastic_noise_scale
+        realized[i] = float(max(0.0, rng.normal(expected, sd)))
+
+    return realized
 
 
 def selection_step(
@@ -280,6 +370,8 @@ def selection_step(
 
     genomes = population.genomes
     populations = population.populations.copy()
+    lineage_ages = population.lineage_ages.copy()
+    damage_loads = population.damage_loads.copy()
 
     # Compute fitness for all strains
     fitness = compute_fitness(
@@ -301,21 +393,89 @@ def selection_step(
 
     # Population dynamics
     growth = config.growth_rate_per_step * selection_factor * fitness
-    death = config.death_rate_per_step * (1.0 / (fitness + 0.1))
+    metabolic_support = np.clip(genomes[:, GeneIndex.METABOLIC_OPTIMIZATION], 0.0, 1.0)
+    repair_gene = np.clip(genomes[:, GeneIndex.DNA_REPAIR], 0.0, 1.0)
+    dormancy_gene = np.clip(genomes[:, GeneIndex.DORMANCY_PROPENSITY], 0.0, 1.0)
+    stress_gene = np.clip(genomes[:, GeneIndex.STRESS_RESPONSE], 0.0, 1.0)
+    tolerance_gene = np.clip(genomes[:, GeneIndex.DAMAGE_TOLERANCE], 0.0, 1.0)
+
+    repair_dormancy_combo = repair_gene * dormancy_gene
+    stress_tolerance_combo = stress_gene * tolerance_gene
+
+    repair_capacity = np.clip(
+        0.65 * repair_gene
+        + 0.20 * metabolic_support
+        + 0.15 * stress_gene
+        + config.synergy_repair_dormancy_bonus * repair_dormancy_combo,
+        0.0,
+        1.5,
+    )
+    dormancy_capacity = np.clip(
+        0.75 * dormancy_gene + 0.15 * stress_gene + 0.10 * genomes[:, GeneIndex.STEALTH],
+        0.0,
+        1.2,
+    )
+    tolerance_capacity = np.clip(
+        0.70 * tolerance_gene
+        + 0.20 * stress_gene
+        + 0.10 * metabolic_support
+        + config.synergy_stress_tolerance_bonus * stress_tolerance_combo,
+        0.0,
+        1.5,
+    )
+
+    environmental_stress = 1.0 - fitness
+    active_dormancy = dormancy_capacity * (0.2 + 0.8 * environmental_stress)
+
+    growth *= np.clip(1.0 - config.dormancy_growth_penalty * active_dormancy, 0.2, 1.0)
+
+    replication_pressure = np.maximum(growth, 0.0) * (1.0 - 0.7 * active_dormancy)
+    damage_gain = (
+        config.base_damage_per_step
+        + config.replication_damage_factor * replication_pressure
+        + config.stress_damage_factor * environmental_stress
+    )
+    damage_gain *= np.clip(1.0 - 0.45 * repair_capacity - 0.20 * tolerance_capacity, 0.10, 1.0)
+
+    repair = config.repair_rate_per_step * (
+        0.15 + repair_capacity + 0.35 * active_dormancy + 0.25 * stress_tolerance_combo
+    )
+    damage_loads = np.clip(damage_loads + damage_gain - repair, 0.0, config.max_damage_load)
+
+    lineage_ages += 1.0 + replication_pressure
+    age_pressure = lineage_ages / config.lifecycle_half_life_steps
+    damage_pressure = damage_loads / config.max_damage_load
+    turnover_pressure = (
+        config.age_mortality_scale * age_pressure + config.damage_mortality_scale * damage_pressure
+    )
+    turnover_pressure *= np.clip(
+        1.0
+        - 0.35 * repair_capacity
+        - 0.20 * active_dormancy
+        - 0.25 * tolerance_capacity
+        - 0.10 * repair_dormancy_combo,
+        0.08,
+        1.0,
+    )
+
+    death = config.death_rate_per_step * (1.0 / (fitness + 0.1)) + turnover_pressure
 
     # Net growth
     net_growth = growth - death
-    populations = populations * (1.0 + net_growth)
+    populations = np.maximum(populations * (1.0 + net_growth), 0.0)
+    populations = apply_demographic_stochasticity(populations, config, rng)
 
     # Apply carrying capacity (logistic)
     total = np.sum(populations)
     if total > config.carrying_capacity:
         populations *= config.carrying_capacity / total
 
-    # Remove extinct strains
-    populations = np.maximum(populations, 0)
-
-    return StrainPopulation(genomes=genomes, populations=populations)
+    return StrainPopulation(
+        genomes=genomes,
+        populations=populations,
+        lineage_ages=lineage_ages,
+        damage_loads=damage_loads,
+    )
 
 
 def consolidate_strains(population: StrainPopulation, config: SimulationConfig) -> StrainPopulation:
@@ -323,24 +483,35 @@ def consolidate_strains(population: StrainPopulation, config: SimulationConfig) 
     Remove very small strains and merge similar ones to limit strain count.
     """
     # Remove strains below threshold
-    mask = population.populations > 10
+    mask = population.populations > config.strain_prune_threshold
 
     if not np.any(mask):
-        # All strains extinct - return minimal susceptible
         return StrainPopulation(
-            genomes=create_wild_type_genome().reshape(1, -1), populations=np.array([1.0])
+            genomes=np.empty((0, NUM_GENES), dtype=np.float32),
+            populations=np.empty(0, dtype=np.float64),
+            lineage_ages=np.empty(0, dtype=np.float64),
+            damage_loads=np.empty(0, dtype=np.float64),
         )
 
     genomes = population.genomes[mask]
     populations = population.populations[mask]
+    lineage_ages = population.lineage_ages[mask]
+    damage_loads = population.damage_loads[mask]
 
     # If too many strains, keep the largest ones
     if len(populations) > config.max_strains:
         indices = np.argsort(populations)[-config.max_strains :]
         genomes = genomes[indices]
         populations = populations[indices]
+        lineage_ages = lineage_ages[indices]
+        damage_loads = damage_loads[indices]
 
-    return StrainPopulation(genomes=genomes, populations=populations)
+    return StrainPopulation(
+        genomes=genomes,
+        populations=populations,
+        lineage_ages=lineage_ages,
+        damage_loads=damage_loads,
+    )
 
 
 def simulate_day(
@@ -425,6 +596,9 @@ def compute_clearance_probability(
         config = SimulationConfig()
 
     total_pop = population.total_population
+
+    if total_pop <= 0:
+        return 1.0
 
     if total_pop < config.clearance_threshold:
         return 0.95  # Very likely to clear

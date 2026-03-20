@@ -76,6 +76,7 @@ All tunable parameters are collected in `SimulationConfig` (`macro_simulation/si
 | `base_isolation_effectiveness` | 0.8 | Fraction by which isolation reduces transmission |
 | `base_diagnostic_speed` | 0.5 | Carrier detection speed (passed to PatientDailyContext) |
 | `base_transmission_rate` | 0.05 | Per-carrier-per-susceptible daily beta |
+| `daily_contact_attempts` | 80.0 | Effective daily contact opportunities used in the macro hazard model |
 | `icu_abx_probability` | 0.60 | Daily P(ABX=on) in ICU |
 | `ward_abx_probability` | 0.15 | Daily P(ABX=on) in WARD |
 | `carrier_isolation_probability` | 0.30 | Daily detection probability for non-isolated carriers |
@@ -88,12 +89,13 @@ Colonisation probability per susceptible patient per day:
 p_colonize = min(1, carrier_force × susceptibility_multiplier_for_macro())
 ```
 
-**Carrier Force:**
+**Carrier Force / Hazard:**
 - Summed over all carriers in the same hospital node
 - Each carrier contributes `base_transmission_rate × transmission_multiplier_for_macro()`
 - `transmission_multiplier_for_macro()` = `sociability × relative_transmissibility`
 - Isolated carriers are reduced by `(1 − isolation_effectiveness)`
-- Total force multiplied by `(1 − base_hygiene)`
+- Total infectiousness is normalized by hospital occupancy
+- Colonisation uses a hazard model with `daily_contact_attempts`, which prevents immediate saturation in large hospitals
 
 **Susceptibility:**
 - `susceptibility_multiplier_for_macro()` = `vulnerability / immune_strength`
@@ -193,7 +195,7 @@ The micro-simulation module (`micro_simulation/`) implements a within-host evolu
 
 ### Bacterial Genome
 
-Each bacterial strain is represented by a 10-gene genome with normalized float values (0.0-1.0):
+Each bacterial strain is represented by a 14-gene genome with normalized float values (0.0-1.0):
 
 | Gene | Index | Category | Function |
 |------|-------|----------|----------|
@@ -207,6 +209,10 @@ Each bacterial strain is represented by a 10-gene genome with normalized float v
 | `ADHESION` | 7 | Survival | Host colonization, transmissibility |
 | `MUTATION_RATE_MODIFIER` | 8 | Evolvability | Intrinsic mutation rate |
 | `HGT_COMPETENCE` | 9 | Evolvability | Horizontal gene transfer receptivity |
+| `DNA_REPAIR` | 10 | Lifecycle | Repairs lineage damage, slows senescence |
+| `DORMANCY_PROPENSITY` | 11 | Lifecycle | Enables low-growth persistence under stress |
+| `STRESS_RESPONSE` | 12 | Lifecycle | Activates protective stress programs |
+| `DAMAGE_TOLERANCE` | 13 | Lifecycle | Buffers mortality from accumulated damage |
 
 ### Fitness Calculation
 

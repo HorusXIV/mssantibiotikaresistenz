@@ -30,6 +30,11 @@ class GeneIndex(int, Enum):
     # Evolvability
     MUTATION_RATE_MODIFIER = 8
     HGT_COMPETENCE = 9
+    # Lifecycle / persistence
+    DNA_REPAIR = 10
+    DORMANCY_PROPENSITY = 11
+    STRESS_RESPONSE = 12
+    DAMAGE_TOLERANCE = 13
 
 
 NUM_GENES = len(GeneIndex)
@@ -92,6 +97,10 @@ def create_wild_type_genome() -> np.ndarray:
     genome[GeneIndex.ADHESION] = 0.4
     genome[GeneIndex.MUTATION_RATE_MODIFIER] = 0.1
     genome[GeneIndex.HGT_COMPETENCE] = 0.2
+    genome[GeneIndex.DNA_REPAIR] = 0.2
+    genome[GeneIndex.DORMANCY_PROPENSITY] = 0.1
+    genome[GeneIndex.STRESS_RESPONSE] = 0.2
+    genome[GeneIndex.DAMAGE_TOLERANCE] = 0.15
     # Resistance genes start near zero
     genome[GeneIndex.EFFLUX_PUMPS] = 0.05
     genome[GeneIndex.TARGET_MODIFICATION] = 0.05
@@ -106,6 +115,10 @@ def create_resistant_genome(resistance_level: float = 0.5) -> np.ndarray:
     genome[GeneIndex.TARGET_MODIFICATION] = resistance_level * 0.6
     genome[GeneIndex.PERMEABILITY_REDUCTION] = resistance_level * 0.4
     genome[GeneIndex.METABOLIC_OPTIMIZATION] = resistance_level * 0.5  # Compensatory
+    genome[GeneIndex.DNA_REPAIR] = 0.15 + resistance_level * 0.35
+    genome[GeneIndex.STRESS_RESPONSE] = 0.20 + resistance_level * 0.40
+    genome[GeneIndex.DAMAGE_TOLERANCE] = 0.10 + resistance_level * 0.35
+    genome[GeneIndex.DORMANCY_PROPENSITY] = 0.05 + resistance_level * 0.20
     genome[GeneIndex.GROWTH_BASE] = 0.7  # Slightly reduced
     return genome
 

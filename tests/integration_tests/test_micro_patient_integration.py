@@ -19,7 +19,9 @@ from exchange.patient import (
     Department,
 )
 from micro_simulation.simulator import MicroSimulator
-from micro_simulation.simulation import SimulationConfig
+from micro_simulation.simulation import SimulationConfig, StrainPopulation, simulate_day
+from micro_simulation.genome import GeneIndex, create_wild_type_genome
+import numpy as np
 
 # =============================================================================
 # Fixtures
@@ -698,3 +700,124 @@ class TestReproducibility:
         clearances = [r["derived_effects"]["p_clearance"] for r in results]
         # With 10 different seeds, we expect some variation
         assert len(set(clearances)) > 1, "All seeds produced identical p_clearance values"
+
+
+# =============================================================================
+# Lifecycle / Stochasticity Tests
+# =============================================================================
+
+
+class TestLifecycleDynamics:
+    """Tests lineage aging, genetic buffering, and stochastic extinction."""
+
+    def test_episode_state_tracks_lifecycle_fields(self, carrier_patient: Patient):
+        sim = MicroSimulator(config=SimulationConfig())
+
+        request = carrier_patient.make_micro_request(run_id="run_001", day=1, dt_days=1, seed=42)
+        sim.process_request(request)
+
+        state = sim.get_episode_state("episode_001")
+        assert state is not None
+        assert len(state.population.lineage_ages) == state.population.n_strains
+        assert len(state.population.damage_loads) == state.population.n_strains
+        assert np.all(state.population.lineage_ages >= 0.0)
+        assert np.all(state.population.damage_loads >= 0.0)
+
+    def test_repair_and_persistence_reduce_turnover_costs(self):
+        fragile = create_wild_type_genome()
+        fragile[GeneIndex.DNA_REPAIR] = 0.0
+        fragile[GeneIndex.DORMANCY_PROPENSITY] = 0.0
+        fragile[GeneIndex.STRESS_RESPONSE] = 0.0
+        fragile[GeneIndex.DAMAGE_TOLERANCE] = 0.0
+
+        buffered = create_wild_type_genome()
+        buffered[GeneIndex.DNA_REPAIR] = 1.0
+        buffered[GeneIndex.DORMANCY_PROPENSITY] = 1.0
+        buffered[GeneIndex.STRESS_RESPONSE] = 1.0
+        buffered[GeneIndex.DAMAGE_TOLERANCE] = 1.0
+
+        population = StrainPopulation(
+            genomes=np.vstack([fragile, buffered]).astype(np.float32),
+            populations=np.array([5e4, 5e4], dtype=np.float64),
+        )
+
+        final_pop, _ = simulate_day(
+            population=population,
+            abx_class="beta_lactam",
+            dose_level="std",
+            adherence=1.0,
+            immune_strength=0.8,
+            immune_status="normal",
+            config=SimulationConfig(
+                base_mutation_rate=0.0,
+                base_hgt_rate=0.0,
+                stochastic_threshold=0.0,
+                stochastic_noise_scale=0.0,
+            ),
+            seed=7,
+        )
+
+        assert final_pop.damage_loads[1] < final_pop.damage_loads[0]
+        assert final_pop.populations[1] > final_pop.populations[0]
+
+    def test_gene_combinations_outperform_single_specialists(self):
+        repair_only = create_wild_type_genome()
+        repair_only[GeneIndex.DNA_REPAIR] = 1.0
+        repair_only[GeneIndex.DORMANCY_PROPENSITY] = 0.0
+        repair_only[GeneIndex.STRESS_RESPONSE] = 0.0
+        repair_only[GeneIndex.DAMAGE_TOLERANCE] = 0.0
+
+        dormancy_only = create_wild_type_genome()
+        dormancy_only[GeneIndex.DNA_REPAIR] = 0.0
+        dormancy_only[GeneIndex.DORMANCY_PROPENSITY] = 1.0
+        dormancy_only[GeneIndex.STRESS_RESPONSE] = 0.0
+        dormancy_only[GeneIndex.DAMAGE_TOLERANCE] = 0.0
+
+        combo = create_wild_type_genome()
+        combo[GeneIndex.DNA_REPAIR] = 1.0
+        combo[GeneIndex.DORMANCY_PROPENSITY] = 1.0
+        combo[GeneIndex.STRESS_RESPONSE] = 1.0
+        combo[GeneIndex.DAMAGE_TOLERANCE] = 1.0
+
+        population = StrainPopulation(
+            genomes=np.vstack([repair_only, dormancy_only, combo]).astype(np.float32),
+            populations=np.array([4e4, 4e4, 4e4], dtype=np.float64),
+        )
+
+        final_pop, _ = simulate_day(
+            population=population,
+            abx_class="beta_lactam",
+            dose_level="std",
+            adherence=1.0,
+            immune_strength=0.8,
+            immune_status="normal",
+            config=SimulationConfig(
+                base_mutation_rate=0.0,
+                base_hgt_rate=0.0,
+                stochastic_threshold=0.0,
+                stochastic_noise_scale=0.0,
+            ),
+            seed=17,
+        )
+
+        assert final_pop.populations[2] > final_pop.populations[0]
+        assert final_pop.populations[2] > final_pop.populations[1]
+
+    def test_small_population_can_die_out_stochastically(self):
+        population = StrainPopulation(
+            genomes=create_wild_type_genome().reshape(1, -1),
+            populations=np.array([5.0], dtype=np.float64),
+        )
+
+        final_pop, _ = simulate_day(
+            population=population,
+            abx_class="glycopeptide",
+            dose_level="high",
+            adherence=1.0,
+            immune_strength=2.0,
+            immune_status="normal",
+            config=SimulationConfig(base_mutation_rate=0.0, base_hgt_rate=0.0),
+            seed=123,
+        )
+
+        assert final_pop.total_population == 0.0

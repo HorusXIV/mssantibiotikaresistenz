@@ -18,6 +18,7 @@ from .simulation import (
     simulate_day,
     population_to_response,
 )
+from .genome import NUM_GENES
 
 
 @dataclass
@@ -37,17 +38,28 @@ class EpisodeState:
             "day": self.day,
             "genomes": self.population.genomes.tolist(),
             "populations": self.population.populations.tolist(),
+            "lineage_ages": self.population.lineage_ages.tolist(),
+            "damage_loads": self.population.damage_loads.tolist(),
         }
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> EpisodeState:
         """Deserialize from storage."""
         genomes = np.array(data["genomes"], dtype=np.float32)
+        if genomes.size == 0:
+            genomes = genomes.reshape(0, NUM_GENES)
         populations = np.array(data["populations"], dtype=np.float64)
+        lineage_ages = np.array(data.get("lineage_ages", []), dtype=np.float64)
+        damage_loads = np.array(data.get("damage_loads", []), dtype=np.float64)
         return cls(
             episode_id=data["episode_id"],
             patient_id=data["patient_id"],
-            population=StrainPopulation(genomes=genomes, populations=populations),
+            population=StrainPopulation(
+                genomes=genomes,
+                populations=populations,
+                lineage_ages=lineage_ages if len(lineage_ages) else None,
+                damage_loads=damage_loads if len(damage_loads) else None,
+            ),
             day=data.get("day", 0),
         )
 
@@ -171,6 +183,20 @@ class MicroSimulator:
             "selection_strength": self.config.selection_strength,
             "growth_rate_per_step": self.config.growth_rate_per_step,
             "death_rate_per_step": self.config.death_rate_per_step,
+            "strain_prune_threshold": self.config.strain_prune_threshold,
+            "base_damage_per_step": self.config.base_damage_per_step,
+            "replication_damage_factor": self.config.replication_damage_factor,
+            "stress_damage_factor": self.config.stress_damage_factor,
+            "repair_rate_per_step": self.config.repair_rate_per_step,
+            "age_mortality_scale": self.config.age_mortality_scale,
+            "damage_mortality_scale": self.config.damage_mortality_scale,
+            "lifecycle_half_life_steps": self.config.lifecycle_half_life_steps,
+            "max_damage_load": self.config.max_damage_load,
+            "dormancy_growth_penalty": self.config.dormancy_growth_penalty,
+            "synergy_repair_dormancy_bonus": self.config.synergy_repair_dormancy_bonus,
+            "synergy_stress_tolerance_bonus": self.config.synergy_stress_tolerance_bonus,
+            "stochastic_threshold": self.config.stochastic_threshold,
+            "stochastic_noise_scale": self.config.stochastic_noise_scale,
         }
 
         response = _process_single_request((request, state_dict, config_dict))
@@ -215,6 +241,20 @@ class MicroSimulator:
             "selection_strength": self.config.selection_strength,
             "growth_rate_per_step": self.config.growth_rate_per_step,
             "death_rate_per_step": self.config.death_rate_per_step,
+            "strain_prune_threshold": self.config.strain_prune_threshold,
+            "base_damage_per_step": self.config.base_damage_per_step,
+            "replication_damage_factor": self.config.replication_damage_factor,
+            "stress_damage_factor": self.config.stress_damage_factor,
+            "repair_rate_per_step": self.config.repair_rate_per_step,
+            "age_mortality_scale": self.config.age_mortality_scale,
+            "damage_mortality_scale": self.config.damage_mortality_scale,
+            "lifecycle_half_life_steps": self.config.lifecycle_half_life_steps,
+            "max_damage_load": self.config.max_damage_load,
+            "dormancy_growth_penalty": self.config.dormancy_growth_penalty,
+            "synergy_repair_dormancy_bonus": self.config.synergy_repair_dormancy_bonus,
+            "synergy_stress_tolerance_bonus": self.config.synergy_stress_tolerance_bonus,
+            "stochastic_threshold": self.config.stochastic_threshold,
+            "stochastic_noise_scale": self.config.stochastic_noise_scale,
         }
 
         args_list = []
