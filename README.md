@@ -114,7 +114,9 @@ Each call to `step()` processes all hospitals in sequence:
 for each hospital:
     1. CLEARANCE:    patient.should_clear_today(rng) → C→S via patient.clear_carriage()
     2. CONTEXT:      patient.update_context(ctx) for every patient
-    3. TRANSMISSION: force-of-infection model → S→C for susceptible patients
+    3. MICRO (opt):  for each carrier, make_micro_request() -> micro.process_batch() -> apply_micro_response()
+                     (one micro day per macro day; default micro day = 12 internal steps)
+    4. TRANSMISSION: force-of-infection model → S→C for susceptible patients
 ```
 
 **Deterministic RNG:**
@@ -159,6 +161,30 @@ sim.discharge(patient)
 
 # Advance one day
 sim.step()
+```
+
+### Coupled Runner (Macro + Micro)
+
+Use the dedicated project runner to execute a full coupled simulation:
+
+```bash
+uv run python run_coupled_simulation.py --days 60 --hospitals 3 --susceptible 300 --seed-carriers 20 --steps-per-day 12 --seed 42
+```
+
+Common options:
+
+- `--days`: number of macro days
+- `--hospitals`: number of hospital nodes
+- `--susceptible`: initial susceptible patients
+- `--seed-carriers`: initial carrier patients
+- `--steps-per-day`: micro steps per macro day (default `12`)
+- `--department`: initial placement (`ward` or `icu`)
+- `--quiet`: print only start/end summary
+
+Quick smoke run:
+
+```bash
+uv run python run_coupled_simulation.py --days 10 --susceptible 80 --seed-carriers 5
 ```
 
 ## Micro-Simulation Implementation

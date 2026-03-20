@@ -1170,6 +1170,89 @@ class TestPatientInterfaceCompatibility:
         for _ in range(5):
             hospital.step()
 
+    def test_macro_step_calls_micro_once_per_carrier_per_day(self, hospital: MacroSimulator):
+        """When micro is provided, each active carrier is processed once per macro day."""
+
+        class _RecordingMicro:
+            def __init__(self):
+                self.calls = 0
+                self.request_batches: list[list[dict]] = []
+
+            def process_batch(self, requests: list[dict], parallel: bool = True) -> list[dict]:
+                self.calls += 1
+                self.request_batches.append(list(requests))
+                return [
+                    {
+                        "episode_id": req["episode_id"],
+                        "patient_id": req["patient_id"],
+                        "updated_state": {
+                            "resistant_fraction": req["initial_state"]["resistant_fraction"],
+                            "dominant_genotype": req["initial_state"]["dominant_genotype"],
+                        },
+                        "derived_effects": {
+                            "relative_transmissibility": 1.0,
+                            "p_clearance": 0.0,
+                            "severity_modifier": 1.0,
+                            "lethality_modifier": 1.0,
+                        },
+                    }
+                    for req in requests
+                ]
+
+        micro = _RecordingMicro()
+        carrier_a = Patient(patient_id="car_a", state=HealthState.CARRIER, episode_id="ep_a")
+        carrier_b = Patient(patient_id="car_b", state=HealthState.CARRIER, episode_id="ep_b")
+        susceptible = Patient(patient_id="sus_a", state=HealthState.SUSCEPTIBLE)
+
+        for p in (carrier_a, carrier_b, susceptible):
+            hospital.admit(p, hospital_id=_H1, department=Department.WARD)
+
+        hospital.step(micro_simulator=micro, run_id="run_micro_phase")
+
+        assert micro.calls == 1
+        assert len(micro.request_batches[0]) == 2
+        assert {req["patient_id"] for req in micro.request_batches[0]} == {"car_a", "car_b"}
+        assert all(req["dt_days"] == 1 for req in micro.request_batches[0])
+
+    def test_macro_applies_micro_response_before_next_clearance(self, hospital: MacroSimulator):
+        """Micro-updated p_clearance should affect the next macro-day clearance phase."""
+
+        class _ClearanceMicro:
+            def process_batch(self, requests: list[dict], parallel: bool = True) -> list[dict]:
+                return [
+                    {
+                        "episode_id": req["episode_id"],
+                        "patient_id": req["patient_id"],
+                        "updated_state": {
+                            "resistant_fraction": req["initial_state"]["resistant_fraction"],
+                            "dominant_genotype": req["initial_state"]["dominant_genotype"],
+                        },
+                        "derived_effects": {
+                            "relative_transmissibility": 1.0,
+                            "p_clearance": 1.0,
+                            "severity_modifier": 1.0,
+                            "lethality_modifier": 1.0,
+                        },
+                    }
+                    for req in requests
+                ]
+
+        patient = Patient(
+            patient_id="carrier_clear",
+            state=HealthState.CARRIER,
+            episode_id="ep_clear",
+            p_clearance=0.0,
+        )
+        hospital.admit(patient, hospital_id=_H1, department=Department.WARD)
+
+        micro = _ClearanceMicro()
+        hospital.step(micro_simulator=micro, run_id="run_clear")
+        assert patient.state == HealthState.CARRIER
+        assert patient.p_clearance == 1.0
+
+        hospital.step(micro_simulator=micro, run_id="run_clear")
+        assert patient.state == HealthState.SUSCEPTIBLE
+
     def test_micro_request_valid_after_macro_days(self, hospital: MacroSimulator):
         """After several macro days a carrier still produces a valid micro request."""
         patient = Patient(

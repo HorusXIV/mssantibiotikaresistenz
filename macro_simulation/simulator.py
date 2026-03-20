@@ -4,6 +4,7 @@ MacroSimulator — hospital-level carrier transmission and clearance.
 Responsibilities:
 - admit / discharge / transfer patients across hospitals
 - daily PatientDailyContext updates (hygiene, isolation, ABX regimen)
+- optional daily micro exchange for all active carrier episodes
 - stochastic S->C transmission based on carrier pressure and patient modifiers
 - stochastic C->S clearance via Patient.should_clear_today / clear_carriage
 - seeded randomness for full reproducibility
@@ -12,7 +13,7 @@ Responsibilities:
 from __future__ import annotations
 
 import random
-from typing import Dict, List
+from typing import Any, Dict, List
 
 from exchange.patient import (
     AntibioticRegimen,
@@ -127,13 +128,21 @@ class MacroSimulator:
     # Daily step
     # ------------------------------------------------------------------
 
-    def step(self) -> None:
+    def step(self, micro_simulator: Any = None, run_id: str = "run_001") -> None:
         """Advance the simulation by one day.
 
         Order of operations per hospital:
         1. Clearance: each carrier may revert to susceptible (C -> S).
         2. Update PatientDailyContext for every patient.
-        3. Transmission: susceptible patients may become carriers (S -> C).
+        3. Optional micro phase for carriers (one micro day per macro day).
+        4. Transmission: susceptible patients may become carriers (S -> C).
+
+        Notes
+        -----
+        If ``micro_simulator`` is provided, it must implement a
+        ``process_batch(requests, parallel=True)`` method that accepts the
+        request schema produced by ``Patient.make_micro_request`` and returns
+        responses compatible with ``Patient.apply_micro_response``.
         """
         self._day += 1
 
@@ -153,7 +162,13 @@ class MacroSimulator:
                 ctx = self._build_context(p, hid)
                 p.update_context(ctx)
 
-            # 3. Transmission (S -> C)
+            # 3. Micro exchange (carrier episodes)
+            if micro_simulator is not None:
+                self._run_micro_phase(
+                    micro_simulator=micro_simulator, patients=patients, run_id=run_id
+                )
+
+            # 4. Transmission (S -> C)
             self._do_transmission(patients)
 
     # ------------------------------------------------------------------
@@ -238,6 +253,38 @@ class MacroSimulator:
 
             if self._rng.random() < p_colonize:
                 self._colonize(sus)
+
+    def _run_micro_phase(self, micro_simulator: Any, patients: List[Patient], run_id: str) -> None:
+        """Run micro once per active carrier episode for this macro day.
+
+        Each request represents one macro day (``dt_days=1``). In the default
+        micro configuration, this maps to 12 internal micro steps per request.
+        """
+        requests: List[Dict[str, Any]] = []
+        request_patients: List[Patient] = []
+
+        for patient in patients:
+            req = patient.make_micro_request(
+                run_id=run_id,
+                day=self._day,
+                dt_days=1,
+                seed=self._rng.randint(0, 2**31 - 1),
+            )
+            if req is not None:
+                requests.append(req)
+                request_patients.append(patient)
+
+        if not requests:
+            return
+
+        responses = micro_simulator.process_batch(requests, parallel=True)
+        if len(responses) != len(request_patients):
+            raise RuntimeError(
+                "Micro simulator returned a different number of responses than requests."
+            )
+
+        for patient, response in zip(request_patients, responses):
+            patient.apply_micro_response(response)
 
     def _colonize(self, patient: Patient) -> None:
         """Transition a susceptible patient to carrier (S -> C)."""
