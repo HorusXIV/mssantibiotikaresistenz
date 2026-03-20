@@ -9,19 +9,19 @@ These tests verify that:
 
 from __future__ import annotations
 
+import numpy as np
 import pytest
 
 from exchange.patient import (
+    AntibioticRegimen,
+    Department,
+    HealthState,
     Patient,
     PatientDailyContext,
-    AntibioticRegimen,
-    HealthState,
-    Department,
 )
-from micro_simulation.simulator import MicroSimulator
-from micro_simulation.simulation import SimulationConfig, StrainPopulation, simulate_day
 from micro_simulation.genome import GeneIndex, create_wild_type_genome
-import numpy as np
+from micro_simulation.simulation import SimulationConfig, StrainPopulation, simulate_day
+from micro_simulation.simulator import MicroSimulator
 
 # =============================================================================
 # Fixtures
@@ -68,7 +68,9 @@ def susceptible_patient() -> Patient:
 @pytest.fixture
 def micro_simulator() -> MicroSimulator:
     """Create a micro simulator with default config."""
-    return MicroSimulator(config=SimulationConfig())
+    sim = MicroSimulator(config=SimulationConfig())
+    yield sim
+    sim.close()
 
 
 # =============================================================================
@@ -523,6 +525,62 @@ class TestBatchProcessing:
         for patient, response in zip(patients, responses):
             patient.apply_micro_response(response)
             # Should all complete without error
+
+    def test_parallel_batch_matches_sequential(self):
+        """Parallel batch execution must preserve deterministic results."""
+        requests = []
+        for i in range(12):
+            patient = Patient(
+                patient_id=f"patient_{i}",
+                state=HealthState.CARRIER,
+                episode_id=f"episode_{i}",
+            )
+            ctx = PatientDailyContext(
+                hospital_id="hospital_001",
+                department=Department.WARD,
+                hygiene_level=0.8,
+                isolation_effectiveness=0.7,
+                diagnostic_speed=0.5,
+                is_isolated=False,
+                regimen=AntibioticRegimen(on=True, abx_class="beta_lactam", dose_level="std"),
+            )
+            patient.update_context(ctx)
+            requests.append(
+                patient.make_micro_request(run_id="run_001", day=1, dt_days=1, seed=42 + i)
+            )
+
+        seq = MicroSimulator(config=SimulationConfig(), n_workers=2)
+        par = MicroSimulator(config=SimulationConfig(), n_workers=2)
+        try:
+            seq_responses = seq.process_batch(requests, parallel=False)
+            par_responses = par.process_batch(requests, parallel=True)
+        finally:
+            seq.close()
+            par.close()
+
+        assert par_responses == seq_responses
+
+    def test_duplicate_episode_ids_in_batch_raise(self, micro_simulator: MicroSimulator):
+        """The same episode cannot be advanced twice in one parallel batch."""
+        patient = Patient(
+            patient_id="patient_dup",
+            state=HealthState.CARRIER,
+            episode_id="episode_dup",
+        )
+        ctx = PatientDailyContext(
+            hospital_id="hospital_001",
+            department=Department.WARD,
+            hygiene_level=0.8,
+            isolation_effectiveness=0.7,
+            diagnostic_speed=0.5,
+            is_isolated=False,
+            regimen=AntibioticRegimen(),
+        )
+        patient.update_context(ctx)
+        request = patient.make_micro_request(run_id="run_001", day=1, dt_days=1, seed=42)
+
+        with pytest.raises(ValueError, match="Duplicate episode_id"):
+            micro_simulator.process_batch([request, dict(request)], parallel=True)
 
 
 # =============================================================================

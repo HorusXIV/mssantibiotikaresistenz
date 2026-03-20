@@ -132,11 +132,11 @@ class MacroSimulator:
     def step(self, micro_simulator: Any = None, run_id: str = "run_001") -> None:
         """Advance the simulation by one day.
 
-        Order of operations per hospital:
-        1. Clearance: each carrier may revert to susceptible (C -> S).
-        2. Update PatientDailyContext for every patient.
-        3. Optional micro phase for carriers (one micro day per macro day).
-        4. Transmission: susceptible patients may become carriers (S -> C).
+        Order of operations per day:
+        1. Per hospital clearance: each carrier may revert to susceptible (C -> S).
+        2. Per hospital PatientDailyContext update for every patient.
+        3. One optional global micro batch for all active carriers.
+        4. Per hospital transmission: susceptible patients may become carriers (S -> C).
 
         Notes
         -----
@@ -147,15 +147,24 @@ class MacroSimulator:
         """
         self._day += 1
 
+        all_micro_requests: List[Dict[str, Any]] = []
+        request_patients: List[Patient] = []
+        active_hospitals: List[List[Patient]] = []
+
         for hid in self._hospital_ids:
             patients = self._patients[hid]
             if not patients:
                 continue
+            active_hospitals.append(patients)
 
             # 1. Clearance (C -> S)
             for p in patients:
                 if p.state == HealthState.CARRIER:
                     if p.should_clear_today(self._rng):
+                        if micro_simulator is not None and p.episode_id is not None:
+                            clear_episode = getattr(micro_simulator, "clear_episode", None)
+                            if clear_episode is not None:
+                                clear_episode(p.episode_id)
                         p.clear_carriage()
 
             # 2. Context update
@@ -165,11 +174,21 @@ class MacroSimulator:
 
             # 3. Micro exchange (carrier episodes)
             if micro_simulator is not None:
-                self._run_micro_phase(
-                    micro_simulator=micro_simulator, patients=patients, run_id=run_id
+                requests, batch_patients = self._collect_micro_requests(
+                    patients=patients, run_id=run_id
                 )
+                all_micro_requests.extend(requests)
+                request_patients.extend(batch_patients)
 
-            # 4. Transmission (S -> C)
+        if micro_simulator is not None and all_micro_requests:
+            self._apply_micro_phase(
+                micro_simulator=micro_simulator,
+                requests=all_micro_requests,
+                request_patients=request_patients,
+            )
+
+        # 4. Transmission (S -> C)
+        for patients in active_hospitals:
             self._do_transmission(patients)
 
     # ------------------------------------------------------------------
@@ -258,12 +277,10 @@ class MacroSimulator:
             if self._rng.random() < p_colonize:
                 self._colonize(sus)
 
-    def _run_micro_phase(self, micro_simulator: Any, patients: List[Patient], run_id: str) -> None:
-        """Run micro once per active carrier episode for this macro day.
-
-        Each request represents one macro day (``dt_days=1``). In the default
-        micro configuration, this maps to 12 internal micro steps per request.
-        """
+    def _collect_micro_requests(
+        self, patients: List[Patient], run_id: str
+    ) -> tuple[List[Dict[str, Any]], List[Patient]]:
+        """Build one daily micro request per active carrier."""
         requests: List[Dict[str, Any]] = []
         request_patients: List[Patient] = []
 
@@ -278,6 +295,15 @@ class MacroSimulator:
                 requests.append(req)
                 request_patients.append(patient)
 
+        return requests, request_patients
+
+    def _apply_micro_phase(
+        self,
+        micro_simulator: Any,
+        requests: List[Dict[str, Any]],
+        request_patients: List[Patient],
+    ) -> None:
+        """Run one global micro batch for all active carrier episodes this day."""
         if not requests:
             return
 

@@ -48,6 +48,12 @@ def _build_parser() -> argparse.ArgumentParser:
         default=12,
         help="Micro steps per macro day (default 12).",
     )
+    parser.add_argument(
+        "--micro-workers",
+        type=int,
+        default=None,
+        help="Number of parallel micro workers (default: CPU count). Use 1 to disable parallel micro batching.",
+    )
     parser.add_argument("--seed", type=int, default=42, help="RNG seed for reproducible runs.")
     parser.add_argument(
         "--run-id",
@@ -137,11 +143,16 @@ def main() -> None:
         raise ValueError("--seed-carriers must be >= 0")
     if args.steps_per_day <= 0:
         raise ValueError("--steps-per-day must be > 0")
+    if args.micro_workers is not None and args.micro_workers <= 0:
+        raise ValueError("--micro-workers must be > 0")
 
     department = Department.WARD if args.department == "ward" else Department.ICU
 
     macro = MacroSimulator(config=MacroConfig(), n_hospitals=args.hospitals, seed=args.seed)
-    micro = MicroSimulator(config=MicroConfig(steps_per_day=args.steps_per_day))
+    micro = MicroSimulator(
+        config=MicroConfig(steps_per_day=args.steps_per_day),
+        n_workers=args.micro_workers,
+    )
 
     _admit_initial_population(
         macro=macro,
@@ -154,7 +165,8 @@ def main() -> None:
     print(
         "run_start "
         f"days={args.days} hospitals={args.hospitals} susceptible={args.susceptible} "
-        f"seed_carriers={args.seed_carriers} micro_steps_per_day={args.steps_per_day} seed={args.seed}"
+        f"seed_carriers={args.seed_carriers} micro_steps_per_day={args.steps_per_day} "
+        f"micro_workers={micro.n_workers} seed={args.seed}"
     )
 
     final_summary = None

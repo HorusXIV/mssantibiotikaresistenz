@@ -24,14 +24,14 @@ from typing import Callable
 import pytest
 
 from exchange.patient import (
+    AntibioticRegimen,
+    Department,
+    HealthState,
     Patient,
     PatientDailyContext,
-    AntibioticRegimen,
-    HealthState,
-    Department,
 )
-from macro_simulation.simulator import MacroSimulator
 from macro_simulation.simulation import SimulationConfig
+from macro_simulation.simulator import MacroSimulator
 
 # -- valid states in the macro carrier model ----------------------------------
 _VALID_STATES = (HealthState.SUSCEPTIBLE, HealthState.CARRIER)
@@ -1214,6 +1214,53 @@ class TestPatientInterfaceCompatibility:
         assert {req["patient_id"] for req in micro.request_batches[0]} == {"car_a", "car_b"}
         assert all(req["dt_days"] == 1 for req in micro.request_batches[0])
 
+    def test_macro_batches_carriers_across_hospitals_once_per_day(self):
+        """All active carriers for a day should be sent in one global micro batch."""
+
+        class _RecordingMicro:
+            def __init__(self):
+                self.calls = 0
+                self.batch_sizes: list[int] = []
+
+            def process_batch(self, requests: list[dict], parallel: bool = True) -> list[dict]:
+                self.calls += 1
+                self.batch_sizes.append(len(requests))
+                return [
+                    {
+                        "episode_id": req["episode_id"],
+                        "patient_id": req["patient_id"],
+                        "updated_state": {
+                            "resistant_fraction": req["initial_state"]["resistant_fraction"],
+                            "dominant_genotype": req["initial_state"]["dominant_genotype"],
+                        },
+                        "derived_effects": {
+                            "relative_transmissibility": 1.0,
+                            "p_clearance": 0.0,
+                            "severity_modifier": 1.0,
+                            "lethality_modifier": 1.0,
+                        },
+                    }
+                    for req in requests
+                ]
+
+        sim = MacroSimulator(config=SimulationConfig(), n_hospitals=2, seed=42)
+        sim.admit(
+            Patient(patient_id="car_h1", state=HealthState.CARRIER, episode_id="ep_h1"),
+            hospital_id=_H1,
+            department=Department.WARD,
+        )
+        sim.admit(
+            Patient(patient_id="car_h2", state=HealthState.CARRIER, episode_id="ep_h2"),
+            hospital_id=_H2,
+            department=Department.WARD,
+        )
+
+        micro = _RecordingMicro()
+        sim.step(micro_simulator=micro, run_id="run_multi_hospital_batch")
+
+        assert micro.calls == 1
+        assert micro.batch_sizes == [2]
+
     def test_macro_applies_micro_response_before_next_clearance(self, hospital: MacroSimulator):
         """Micro-updated p_clearance should affect the next macro-day clearance phase."""
 
@@ -1252,6 +1299,33 @@ class TestPatientInterfaceCompatibility:
 
         hospital.step(micro_simulator=micro, run_id="run_clear")
         assert patient.state == HealthState.SUSCEPTIBLE
+
+    def test_macro_clearance_removes_micro_episode_state(self, hospital: MacroSimulator):
+        """Macro-owned clearance must also drop the persisted micro episode."""
+
+        class _TrackingMicro:
+            def __init__(self):
+                self.cleared_episode_ids: list[str] = []
+
+            def clear_episode(self, episode_id: str) -> None:
+                self.cleared_episode_ids.append(episode_id)
+
+            def process_batch(self, requests: list[dict], parallel: bool = True) -> list[dict]:
+                raise AssertionError("Cleared episodes must not be sent to micro.")
+
+        patient = Patient(
+            patient_id="carrier_clear_cleanup",
+            state=HealthState.CARRIER,
+            episode_id="ep_cleanup",
+            p_clearance=1.0,
+        )
+        hospital.admit(patient, hospital_id=_H1, department=Department.WARD)
+
+        micro = _TrackingMicro()
+        hospital.step(micro_simulator=micro, run_id="run_cleanup")
+
+        assert patient.state == HealthState.SUSCEPTIBLE
+        assert micro.cleared_episode_ids == ["ep_cleanup"]
 
     def test_micro_request_valid_after_macro_days(self, hospital: MacroSimulator):
         """After several macro days a carrier still produces a valid micro request."""
