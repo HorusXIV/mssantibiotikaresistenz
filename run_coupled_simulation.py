@@ -1,20 +1,30 @@
-"""CLI runner for coupled macro + micro simulation.
-
-Usage example:
-    uv run python run_coupled_simulation.py --days 60 --hospitals 3 --seed 42
-"""
+"""Run the coupled macro + micro simulation from ``shared/config.yml``."""
 
 from __future__ import annotations
 
-import argparse
 from dataclasses import dataclass
-from typing import List
+from pathlib import Path
+from typing import Any
+
+import yaml
 
 from exchange.patient import Department, HealthState, Patient
 from macro_simulation.simulation import SimulationConfig as MacroConfig
 from macro_simulation.simulator import MacroSimulator
 from micro_simulation.simulation import SimulationConfig as MicroConfig
 from micro_simulation.simulator import MicroSimulator
+
+DEFAULT_CONFIG_PATH = Path(__file__).resolve().parent / "shared" / "config.yml"
+_FORBIDDEN_TEMPLATE_FIELDS = {
+    "_ctx",
+    "department",
+    "episode_id",
+    "hospital_id",
+    "is_isolated",
+    "patient_id",
+    "regimen",
+    "state",
+}
 
 
 @dataclass
@@ -25,95 +35,193 @@ class DaySummary:
     avg_resistant_fraction: float
 
 
-def _build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Run coupled macro+micro MSS simulation.")
+@dataclass
+class RunSettings:
+    days: int
+    seed: int
+    run_id: str
+    quiet: bool
 
-    parser.add_argument("--days", type=int, default=60, help="Number of macro days to simulate.")
-    parser.add_argument("--hospitals", type=int, default=1, help="Number of hospitals in network.")
-    parser.add_argument(
-        "--susceptible",
-        type=int,
-        default=100,
-        help="Number of initially susceptible patients.",
-    )
-    parser.add_argument(
-        "--seed-carriers",
-        type=int,
-        default=5,
-        help="Number of initially carrier patients.",
-    )
-    parser.add_argument(
-        "--steps-per-day",
-        type=int,
-        default=12,
-        help="Micro steps per macro day (default 12).",
-    )
-    parser.add_argument(
-        "--micro-workers",
-        type=int,
-        default=None,
-        help="Number of parallel micro workers (default: CPU count). Use 1 to disable parallel micro batching.",
-    )
-    parser.add_argument("--seed", type=int, default=42, help="RNG seed for reproducible runs.")
-    parser.add_argument(
-        "--run-id",
-        type=str,
-        default="dev_run",
-        help="Run identifier passed to micro requests.",
-    )
-    parser.add_argument(
-        "--department",
-        choices=["ward", "icu"],
-        default="ward",
-        help="Initial department for all admitted patients.",
-    )
-    parser.add_argument(
-        "--quiet",
-        action="store_true",
-        help="Suppress per-day logs and print only final summary.",
+
+@dataclass
+class PopulationSettings:
+    hospitals: int
+    susceptible_count: int
+    carrier_count: int
+    initial_department: Department
+    susceptible_template: dict[str, Any]
+    carrier_template: dict[str, Any]
+
+
+@dataclass
+class CoupledSimulationSettings:
+    config_path: Path
+    run: RunSettings
+    population: PopulationSettings
+    macro: MacroConfig
+    micro: MicroConfig
+    micro_workers: int | None
+
+
+def _require_mapping(section_name: str, value: Any) -> dict[str, Any]:
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        raise TypeError(f"Config section '{section_name}' must be a mapping.")
+    return dict(value)
+
+
+def _require_positive_int(value: Any, field_name: str) -> int:
+    if not isinstance(value, int) or value <= 0:
+        raise ValueError(f"Config field '{field_name}' must be a positive integer.")
+    return value
+
+
+def _require_non_negative_int(value: Any, field_name: str) -> int:
+    if not isinstance(value, int) or value < 0:
+        raise ValueError(f"Config field '{field_name}' must be a non-negative integer.")
+    return value
+
+
+def _parse_department(value: Any) -> Department:
+    if value == Department.WARD.value:
+        return Department.WARD
+    if value == Department.ICU.value:
+        return Department.ICU
+    raise ValueError("Config field 'population.initial_department' must be 'ward' or 'icu'.")
+
+
+def _normalize_patient_template(section_name: str, template: dict[str, Any]) -> dict[str, Any]:
+    forbidden = sorted(_FORBIDDEN_TEMPLATE_FIELDS.intersection(template))
+    if forbidden:
+        joined = ", ".join(forbidden)
+        raise ValueError(
+            f"Config section '{section_name}' contains runner-owned patient fields: {joined}."
+        )
+
+    normalized = dict(template)
+    if "history_flags" in normalized:
+        flags = normalized["history_flags"]
+        if not isinstance(flags, list):
+            raise TypeError(f"Config field '{section_name}.history_flags' must be a list.")
+        normalized["history_flags"] = set(flags)
+
+    return normalized
+
+
+def load_coupled_settings(config_path: Path = DEFAULT_CONFIG_PATH) -> CoupledSimulationSettings:
+    """Load the entire coupled simulation setup from YAML."""
+    if not config_path.exists():
+        raise FileNotFoundError(f"Simulation config not found: {config_path}")
+
+    raw = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+    if not isinstance(raw, dict):
+        raise TypeError("Top-level config must be a mapping.")
+
+    run_raw = _require_mapping("run", raw.get("run"))
+    population_raw = _require_mapping("population", raw.get("population"))
+    macro_raw = _require_mapping("macro", raw.get("macro"))
+    micro_raw = _require_mapping("micro", raw.get("micro"))
+
+    run = RunSettings(
+        days=_require_positive_int(run_raw.get("days"), "run.days"),
+        seed=_require_positive_int(run_raw.get("seed"), "run.seed"),
+        run_id=str(run_raw.get("run_id", "dev_run")),
+        quiet=bool(run_raw.get("quiet", False)),
     )
 
-    return parser
+    micro_workers = micro_raw.pop("workers", None)
+    if micro_workers is not None:
+        micro_workers = _require_positive_int(micro_workers, "micro.workers")
+
+    population = PopulationSettings(
+        hospitals=_require_positive_int(population_raw.get("hospitals"), "population.hospitals"),
+        susceptible_count=_require_non_negative_int(
+            population_raw.get("susceptible_count"),
+            "population.susceptible_count",
+        ),
+        carrier_count=_require_non_negative_int(
+            population_raw.get("carrier_count"),
+            "population.carrier_count",
+        ),
+        initial_department=_parse_department(population_raw.get("initial_department")),
+        susceptible_template=_normalize_patient_template(
+            "population.susceptible_template",
+            _require_mapping(
+                "population.susceptible_template",
+                population_raw.get("susceptible_template"),
+            ),
+        ),
+        carrier_template=_normalize_patient_template(
+            "population.carrier_template",
+            _require_mapping("population.carrier_template", population_raw.get("carrier_template")),
+        ),
+    )
+
+    macro = MacroConfig(**macro_raw)
+    micro = MicroConfig(**micro_raw)
+
+    return CoupledSimulationSettings(
+        config_path=config_path,
+        run=run,
+        population=population,
+        macro=macro,
+        micro=micro,
+        micro_workers=micro_workers,
+    )
 
 
 def _hospital_id_for(i: int, n_hospitals: int) -> str:
     return f"hospital_{(i % n_hospitals) + 1:03d}"
 
 
+def _build_patient(
+    patient_id: str,
+    state: HealthState,
+    template: dict[str, Any],
+    episode_id: str | None = None,
+) -> Patient:
+    patient = Patient(
+        patient_id=patient_id,
+        state=state,
+        episode_id=episode_id,
+        **template,
+    )
+    return patient
+
+
 def _admit_initial_population(
     macro: MacroSimulator,
-    n_hospitals: int,
-    n_susceptible: int,
-    n_seed_carriers: int,
-    department: Department,
+    population: PopulationSettings,
 ) -> None:
-    for i in range(n_susceptible):
-        patient = Patient(patient_id=f"sus_{i:05d}", state=HealthState.SUSCEPTIBLE)
+    for i in range(population.susceptible_count):
+        patient = _build_patient(
+            patient_id=f"sus_{i:05d}",
+            state=HealthState.SUSCEPTIBLE,
+            template=population.susceptible_template,
+        )
         macro.admit(
             patient,
-            hospital_id=_hospital_id_for(i, n_hospitals),
-            department=department,
+            hospital_id=_hospital_id_for(i, population.hospitals),
+            department=population.initial_department,
         )
 
-    for i in range(n_seed_carriers):
-        patient = Patient(
+    for i in range(population.carrier_count):
+        patient = _build_patient(
             patient_id=f"car_{i:05d}",
             state=HealthState.CARRIER,
             episode_id=f"seed_ep_{i:05d}",
-            resistant_fraction=0.2,
-            dominant_genotype="R1",
-            relative_transmissibility=1.2,
-            p_clearance=0.03,
+            template=population.carrier_template,
         )
         macro.admit(
             patient,
-            hospital_id=_hospital_id_for(i + n_susceptible, n_hospitals),
-            department=department,
+            hospital_id=_hospital_id_for(i + population.susceptible_count, population.hospitals),
+            department=population.initial_department,
         )
 
 
 def _summarize_day(macro: MacroSimulator, n_hospitals: int, day: int) -> DaySummary:
-    patients: List[Patient] = []
+    patients: list[Patient] = []
     for i in range(1, n_hospitals + 1):
         patients.extend(macro.get_patients(f"hospital_{i:03d}"))
 
@@ -130,55 +238,45 @@ def _summarize_day(macro: MacroSimulator, n_hospitals: int, day: int) -> DaySumm
 
 
 def main() -> None:
-    parser = _build_parser()
-    args = parser.parse_args()
+    settings = load_coupled_settings()
 
-    if args.days <= 0:
-        raise ValueError("--days must be > 0")
-    if args.hospitals <= 0:
-        raise ValueError("--hospitals must be > 0")
-    if args.susceptible < 0:
-        raise ValueError("--susceptible must be >= 0")
-    if args.seed_carriers < 0:
-        raise ValueError("--seed-carriers must be >= 0")
-    if args.steps_per_day <= 0:
-        raise ValueError("--steps-per-day must be > 0")
-    if args.micro_workers is not None and args.micro_workers <= 0:
-        raise ValueError("--micro-workers must be > 0")
-
-    department = Department.WARD if args.department == "ward" else Department.ICU
-
-    macro = MacroSimulator(config=MacroConfig(), n_hospitals=args.hospitals, seed=args.seed)
+    macro = MacroSimulator(
+        config=settings.macro,
+        n_hospitals=settings.population.hospitals,
+        seed=settings.run.seed,
+    )
     micro = MicroSimulator(
-        config=MicroConfig(steps_per_day=args.steps_per_day),
-        n_workers=args.micro_workers,
+        config=settings.micro,
+        n_workers=settings.micro_workers,
     )
 
-    _admit_initial_population(
-        macro=macro,
-        n_hospitals=args.hospitals,
-        n_susceptible=args.susceptible,
-        n_seed_carriers=args.seed_carriers,
-        department=department,
-    )
+    _admit_initial_population(macro=macro, population=settings.population)
 
     print(
         "run_start "
-        f"days={args.days} hospitals={args.hospitals} susceptible={args.susceptible} "
-        f"seed_carriers={args.seed_carriers} micro_steps_per_day={args.steps_per_day} "
-        f"micro_workers={micro.n_workers} seed={args.seed}"
+        f"config={settings.config_path} days={settings.run.days} "
+        f"hospitals={settings.population.hospitals} "
+        f"susceptible={settings.population.susceptible_count} "
+        f"seed_carriers={settings.population.carrier_count} "
+        f"micro_steps_per_day={settings.micro.steps_per_day} "
+        f"micro_workers={micro.n_workers} seed={settings.run.seed}"
     )
 
     final_summary = None
-    for day in range(1, args.days + 1):
-        macro.step(micro_simulator=micro, run_id=args.run_id)
-        summary = _summarize_day(macro=macro, n_hospitals=args.hospitals, day=day)
+    for day in range(1, settings.run.days + 1):
+        macro.step(micro_simulator=micro, run_id=settings.run.run_id)
+        summary = _summarize_day(
+            macro=macro,
+            n_hospitals=settings.population.hospitals,
+            day=day,
+        )
         final_summary = summary
 
-        if not args.quiet:
+        if not settings.run.quiet:
             print(
                 f"day={summary.day:03d} susceptible={summary.susceptible:04d} "
-                f"carriers={summary.carriers:04d} avg_resistant_fraction={summary.avg_resistant_fraction:.4f}"
+                f"carriers={summary.carriers:04d} "
+                f"avg_resistant_fraction={summary.avg_resistant_fraction:.4f}"
             )
 
     if final_summary is None:

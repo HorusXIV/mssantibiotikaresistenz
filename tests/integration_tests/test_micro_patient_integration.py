@@ -20,7 +20,12 @@ from exchange.patient import (
     PatientDailyContext,
 )
 from micro_simulation.genome import GeneIndex, create_wild_type_genome
-from micro_simulation.simulation import SimulationConfig, StrainPopulation, simulate_day
+from micro_simulation.simulation import (
+    SimulationConfig,
+    StrainPopulation,
+    get_dominant_strain,
+    simulate_day,
+)
 from micro_simulation.simulator import MicroSimulator
 
 # =============================================================================
@@ -294,6 +299,18 @@ class TestEndToEndIntegration:
 
         with pytest.raises(ValueError, match="episode_id"):
             carrier_patient.apply_micro_response(fake_response)
+
+    def test_initial_population_uses_dominant_genotype_hint(self):
+        """Fresh episodes should seed resistant strains that match the inherited genotype label."""
+        population = StrainPopulation.create_initial(
+            resistant_fraction=0.6,
+            dominant_genotype="R3",
+            rng=np.random.default_rng(42),
+        )
+
+        _, genotype = get_dominant_strain(population)
+
+        assert genotype == "R3"
 
 
 # =============================================================================

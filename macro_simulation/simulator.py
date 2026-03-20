@@ -34,6 +34,7 @@ _ABX_CLASSES = [
     "aminoglycoside",
 ]
 _DOSE_LEVELS = ["low", "std", "high"]
+_GENOTYPE_ORDER = ["S", "R1", "R2", "R3"]
 
 
 class MacroSimulator:
@@ -258,11 +259,13 @@ class MacroSimulator:
         # We normalize by occupancy below so transmission scales with prevalence
         # instead of exploding linearly with absolute carrier count.
         carrier_force = 0.0
+        weighted_carriers: List[tuple[Patient, float]] = []
         for car in carriers:
             contribution = cfg.base_transmission_rate * car.transmission_multiplier_for_macro()
             if car.is_isolated:
                 contribution *= 1.0 - iso_reduction
             carrier_force += contribution
+            weighted_carriers.append((car, contribution))
 
         occupancy = max(1, len(patients))
         base_hazard = cfg.daily_contact_attempts * hygiene_factor * (carrier_force / occupancy)
@@ -275,7 +278,8 @@ class MacroSimulator:
             p_colonize = 1.0 - math.exp(-max(0.0, hazard))
 
             if self._rng.random() < p_colonize:
-                self._colonize(sus)
+                source = self._pick_transmission_source(weighted_carriers, carrier_force)
+                self._colonize(sus, source=source)
 
     def _collect_micro_requests(
         self, patients: List[Patient], run_id: str
@@ -316,8 +320,70 @@ class MacroSimulator:
         for patient, response in zip(request_patients, responses):
             patient.apply_micro_response(response)
 
-    def _colonize(self, patient: Patient) -> None:
+    def _pick_transmission_source(
+        self,
+        weighted_carriers: List[tuple[Patient, float]],
+        total_force: float,
+    ) -> Patient | None:
+        """Sample which carrier seeded a new colonization event."""
+        if total_force <= 0.0:
+            return None
+
+        threshold = self._rng.random() * total_force
+        running = 0.0
+        for carrier, weight in weighted_carriers:
+            if weight <= 0.0:
+                continue
+            running += weight
+            if running >= threshold:
+                return carrier
+
+        return weighted_carriers[-1][0] if weighted_carriers else None
+
+    def _inherit_transmitted_state(self, source: Patient) -> tuple[float, str]:
+        """Copy the source strain with a small chance of mutational drift."""
+        resistance = min(1.0, max(0.0, source.resistant_fraction))
+        genotype = source.dominant_genotype
+
+        if self._rng.random() < self._config.transmission_mutation_probability:
+            delta = self._rng.gauss(0.0, self._config.transmission_resistance_mutation_std)
+            resistance = min(1.0, max(0.0, resistance + delta))
+            if abs(delta) >= self._config.transmission_resistance_mutation_std * 0.5:
+                step = 1 if delta > 0.0 else -1
+                genotype = self._shift_genotype(genotype, step)
+
+        return resistance, genotype
+
+    def _shift_genotype(self, genotype: str, step: int) -> str:
+        """Move one resistance class up or down, clamped to the valid range."""
+        if genotype not in _GENOTYPE_ORDER:
+            return genotype
+
+        index = _GENOTYPE_ORDER.index(genotype)
+        shifted = min(len(_GENOTYPE_ORDER) - 1, max(0, index + step))
+        return _GENOTYPE_ORDER[shifted]
+
+    def _colonize(self, patient: Patient, source: Patient | None = None) -> None:
         """Transition a susceptible patient to carrier (S -> C)."""
         self._episode_counter += 1
         patient.state = HealthState.CARRIER
         patient.episode_id = f"episode_new_{self._episode_counter}"
+        patient.is_isolated = False
+
+        if source is None:
+            patient.resistant_fraction = 0.0
+            patient.dominant_genotype = "S"
+            patient.relative_transmissibility = 1.0
+            patient.severity_modifier = 1.0
+            patient.lethality_modifier = 1.0
+            patient.p_clearance = 0.02
+            return
+
+        resistance, genotype = self._inherit_transmitted_state(source)
+        patient.resistant_fraction = resistance
+        patient.dominant_genotype = genotype
+        patient.relative_transmissibility = source.relative_transmissibility
+        patient.severity_modifier = source.severity_modifier
+        patient.lethality_modifier = source.lethality_modifier
+        # Clearance is host-specific and will be recomputed by micro on the next day.
+        patient.p_clearance = 0.02

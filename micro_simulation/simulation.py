@@ -9,22 +9,23 @@ Runs 12 discrete time steps per day, simulating:
 
 from __future__ import annotations
 
-import numpy as np
 from dataclasses import dataclass
-from typing import Dict, Any, Tuple
+from typing import Any, Dict, Tuple
+
+import numpy as np
 
 from .genome import (
+    ABX_PROFILES,
     NUM_GENES,
     GeneIndex,
-    create_wild_type_genome,
-    create_resistant_genome,
-    compute_fitness,
-    compute_transmissibility,
-    compute_lethality,
-    compute_severity,
     classify_genotype,
+    compute_fitness,
+    compute_lethality,
     compute_resistant_fraction,
-    ABX_PROFILES,
+    compute_severity,
+    compute_transmissibility,
+    create_resistant_genome,
+    create_wild_type_genome,
 )
 
 
@@ -119,6 +120,7 @@ class StrainPopulation:
     def create_initial(
         cls,
         resistant_fraction: float = 0.0,
+        dominant_genotype: str = "S",
         initial_population: float = 1e6,
         n_susceptible_strains: int = 3,
         n_resistant_strains: int = 2,
@@ -145,8 +147,7 @@ class StrainPopulation:
         if resistant_fraction > 0 and n_resistant_strains > 0:
             res_pop = initial_population * resistant_fraction
             for i in range(n_resistant_strains):
-                resistance_level = 0.3 + rng.random() * 0.4
-                genome = create_resistant_genome(resistance_level)
+                genome = _create_seed_genome_for_genotype(dominant_genotype)
                 genome += rng.normal(0, 0.02, NUM_GENES).astype(np.float32)
                 genome = np.clip(genome, 0.0, 1.0)
                 strains.append(genome)
@@ -163,6 +164,36 @@ class StrainPopulation:
             lineage_ages=lineage_ages,
             damage_loads=damage_loads,
         )
+
+
+def _create_seed_genome_for_genotype(dominant_genotype: str) -> np.ndarray:
+    """Create a resistant seed genome that actually lands in the requested class."""
+    genome = create_wild_type_genome()
+
+    if dominant_genotype == "R3":
+        genome[GeneIndex.EFFLUX_PUMPS] = 0.95
+        genome[GeneIndex.TARGET_MODIFICATION] = 0.85
+        genome[GeneIndex.PERMEABILITY_REDUCTION] = 0.75
+        genome[GeneIndex.METABOLIC_OPTIMIZATION] = 0.65
+        genome[GeneIndex.STRESS_RESPONSE] = 0.65
+        genome[GeneIndex.DAMAGE_TOLERANCE] = 0.55
+        genome[GeneIndex.DORMANCY_PROPENSITY] = 0.35
+        genome[GeneIndex.GROWTH_BASE] = 0.62
+        return genome
+
+    if dominant_genotype == "R2":
+        genome[GeneIndex.EFFLUX_PUMPS] = 0.60
+        genome[GeneIndex.TARGET_MODIFICATION] = 0.50
+        genome[GeneIndex.PERMEABILITY_REDUCTION] = 0.40
+        genome[GeneIndex.METABOLIC_OPTIMIZATION] = 0.45
+        genome[GeneIndex.STRESS_RESPONSE] = 0.45
+        genome[GeneIndex.DAMAGE_TOLERANCE] = 0.35
+        genome[GeneIndex.DORMANCY_PROPENSITY] = 0.22
+        genome[GeneIndex.GROWTH_BASE] = 0.68
+        return genome
+
+    resistance_level = 0.35 if dominant_genotype == "R1" else 0.30
+    return create_resistant_genome(resistance_level)
 
 
 def mutate_population(

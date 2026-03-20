@@ -170,23 +170,24 @@ sim.step()
 Use the dedicated project runner to execute a full coupled simulation:
 
 ```bash
-uv run python run_coupled_simulation.py --days 60 --hospitals 3 --susceptible 300 --seed-carriers 20 --steps-per-day 12 --seed 42
+uv run python run_coupled_simulation.py
 ```
 
-Common options:
+All tunable runner, population, macro, and micro parameters are read from:
 
-- `--days`: number of macro days
-- `--hospitals`: number of hospital nodes
-- `--susceptible`: initial susceptible patients
-- `--seed-carriers`: initial carrier patients
-- `--steps-per-day`: micro steps per macro day (default `12`)
-- `--department`: initial placement (`ward` or `icu`)
-- `--quiet`: print only start/end summary
+- [shared/config.yml](/home/lukas/src/Sem4/MSS/shared/config.yml)
 
-Quick smoke run:
+That file includes:
+
+- `run`: simulation duration, seed, run id, quiet mode
+- `population`: hospital count, initial department, susceptible/carrier counts, patient templates
+- `macro`: hospital/network transmission parameters
+- `micro`: within-host evolution parameters and worker count
+
+Quick smoke run after editing the YAML:
 
 ```bash
-uv run python run_coupled_simulation.py --days 10 --susceptible 80 --seed-carriers 5
+uv run python run_coupled_simulation.py
 ```
 
 ## Micro-Simulation Implementation

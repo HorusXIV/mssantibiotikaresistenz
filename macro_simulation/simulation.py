@@ -32,3 +32,9 @@ class SimulationConfig:
 
     # Detection / isolation of carriers
     carrier_isolation_probability: float = 0.30  # daily detection chance for non-isolated carriers
+
+    # Transmission inheritance
+    transmission_mutation_probability: float = (
+        0.08  # chance that transmitted strain shifts slightly
+    )
+    transmission_resistance_mutation_std: float = 0.04  # small perturbation of inherited resistance

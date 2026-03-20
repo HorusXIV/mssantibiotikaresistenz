@@ -119,9 +119,14 @@ def _process_single_request(args: tuple) -> Dict[str, Any]:
         # New episode - create initial population
         initial = request.get("initial_state", {})
         resistant_fraction = initial.get("resistant_fraction", 0.0)
+        dominant_genotype = initial.get("dominant_genotype", "S")
 
         rng = np.random.default_rng(request.get("seed", None))
-        population = StrainPopulation.create_initial(resistant_fraction=resistant_fraction, rng=rng)
+        population = StrainPopulation.create_initial(
+            resistant_fraction=resistant_fraction,
+            dominant_genotype=dominant_genotype,
+            rng=rng,
+        )
 
     # Extract parameters from request
     abx = request.get("abx", {})
@@ -363,9 +368,14 @@ def run_micro_simulation(
     # Create initial population
     initial = patient_request.get("initial_state", {})
     resistant_fraction = initial.get("resistant_fraction", 0.0)
+    dominant_genotype = initial.get("dominant_genotype", "S")
 
     rng = np.random.default_rng(patient_request.get("seed", None))
-    population = StrainPopulation.create_initial(resistant_fraction=resistant_fraction, rng=rng)
+    population = StrainPopulation.create_initial(
+        resistant_fraction=resistant_fraction,
+        dominant_genotype=dominant_genotype,
+        rng=rng,
+    )
 
     # Extract parameters
     abx = patient_request.get("abx", {})

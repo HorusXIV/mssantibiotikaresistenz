@@ -733,6 +733,45 @@ class TestTransmission:
         for p in patients:
             assert p.state == HealthState.CARRIER
 
+    def test_colonization_inherits_source_strain_state(self):
+        """A newly colonized patient should inherit the infecting carrier's strain state."""
+        sim = MacroSimulator(
+            config=SimulationConfig(
+                base_hygiene=0.0,
+                base_transmission_rate=1.0,
+                daily_contact_attempts=1000.0,
+                carrier_isolation_probability=0.0,
+                transmission_mutation_probability=0.0,
+            ),
+            n_hospitals=1,
+            seed=1,
+        )
+        source = Patient(
+            patient_id="car_source",
+            state=HealthState.CARRIER,
+            episode_id="ep_source",
+            resistant_fraction=0.8,
+            dominant_genotype="R3",
+            relative_transmissibility=1.7,
+            severity_modifier=1.4,
+            lethality_modifier=1.2,
+            p_clearance=0.0,
+        )
+        recipient = Patient(patient_id="sus_target", state=HealthState.SUSCEPTIBLE)
+
+        sim.admit(source, hospital_id=_H1, department=Department.WARD)
+        sim.admit(recipient, hospital_id=_H1, department=Department.WARD)
+
+        sim.step()
+
+        assert recipient.state == HealthState.CARRIER
+        assert recipient.resistant_fraction == pytest.approx(0.8)
+        assert recipient.dominant_genotype == "R3"
+        assert recipient.relative_transmissibility == pytest.approx(1.7)
+        assert recipient.severity_modifier == pytest.approx(1.4)
+        assert recipient.lethality_modifier == pytest.approx(1.2)
+        assert recipient.p_clearance == pytest.approx(0.02)
+
 
 # =============================================================================
 # Clearance Tests
