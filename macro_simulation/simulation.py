@@ -24,6 +24,7 @@ class SimulationConfig:
 
     # Transmission
     base_transmission_rate: float = 0.05  # per-carrier-per-susceptible daily beta
+    daily_contact_attempts: float = 80.0  # effective daily patient contacts for hazard model
 
     # Antibiotic policy (daily probability that regimen.on=True)
     icu_abx_probability: float = 0.60

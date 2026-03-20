@@ -12,6 +12,7 @@ Responsibilities:
 
 from __future__ import annotations
 
+import math
 import random
 from typing import Any, Dict, List
 
@@ -234,7 +235,9 @@ class MacroSimulator:
         hygiene_factor = 1.0 - cfg.base_hygiene  # higher hygiene => lower factor
         iso_reduction = cfg.base_isolation_effectiveness
 
-        # Sum up carrier-side force of infection
+        # Sum up carrier-side infectiousness.
+        # We normalize by occupancy below so transmission scales with prevalence
+        # instead of exploding linearly with absolute carrier count.
         carrier_force = 0.0
         for car in carriers:
             contribution = cfg.base_transmission_rate * car.transmission_multiplier_for_macro()
@@ -242,14 +245,15 @@ class MacroSimulator:
                 contribution *= 1.0 - iso_reduction
             carrier_force += contribution
 
-        carrier_force *= hygiene_factor
+        occupancy = max(1, len(patients))
+        base_hazard = cfg.daily_contact_attempts * hygiene_factor * (carrier_force / occupancy)
 
-        # For each susceptible patient, draw colonisation
+        # For each susceptible patient, convert hazard to probability.
         for sus in susceptible:
-            p_colonize = carrier_force * sus.susceptibility_multiplier_for_macro()
+            hazard = base_hazard * sus.susceptibility_multiplier_for_macro()
             if sus.is_isolated:
-                p_colonize *= 1.0 - iso_reduction
-            p_colonize = min(1.0, p_colonize)
+                hazard *= 1.0 - iso_reduction
+            p_colonize = 1.0 - math.exp(-max(0.0, hazard))
 
             if self._rng.random() < p_colonize:
                 self._colonize(sus)
