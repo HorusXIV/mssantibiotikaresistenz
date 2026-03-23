@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -14,7 +15,7 @@ from macro_simulation.simulator import MacroSimulator
 from micro_simulation.simulation import SimulationConfig as MicroConfig
 from micro_simulation.simulator import MicroSimulator
 
-DEFAULT_CONFIG_PATH = Path(__file__).resolve().parent / "shared" / "config.yml"
+DEFAULT_CONFIG_PATH = Path(__file__).resolve().parent / "shared" / "config_realistic.yml"
 _FORBIDDEN_TEMPLATE_FIELDS = {
     "_ctx",
     "department",
@@ -237,8 +238,28 @@ def _summarize_day(macro: MacroSimulator, n_hospitals: int, day: int) -> DaySumm
     )
 
 
+def _parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Run the coupled macro + micro antibiotic resistance simulation.",
+    )
+    parser.add_argument(
+        "--config",
+        type=Path,
+        default=None,
+        metavar="FILE",
+        help=(
+            "Path to the YAML config file. "
+            "Defaults to shared/config_realistic.yml next to this script."
+        ),
+    )
+    return parser.parse_args()
+
+
 def main() -> None:
-    settings = load_coupled_settings()
+    args = _parse_args()
+    config_path = args.config if args.config is not None else DEFAULT_CONFIG_PATH
+
+    settings = load_coupled_settings(config_path)
 
     macro = MacroSimulator(
         config=settings.macro,

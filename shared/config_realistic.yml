@@ -1,0 +1,126 @@
+# config_realistic.yml
+# Calibration targets:
+#   - Endemic equilibrium: ~15-25% carrier prevalence (not 75%!)
+#   - avg_resistant_fraction rises gradually from ~0.05 to ~0.25 over 365 days
+#   - No extinction, no explosive epidemic
+#
+# Root causes of previous failures:
+#   1. daily_contact_attempts=55 → R0≈6, causes ~75% prevalence (too high)
+#      Fix: reduce to 18 → R0≈1.5-2.0 → endemic ~15-25%
+#   2. avg_resistant_fraction collapses to 0 because:
+#      a) micro kills resistance faster than it builds (mutation rate too low)
+#      b) transmission_mutation_probability=0.05 means new colonizations start
+#         almost always with resistant_fraction=0 (wildtype from _colonize)
+#      c) strain_prune_threshold too high wipes resistant subpopulations
+#      Fix: raise base_mutation_rate, raise stress_mutation_boost,
+#           raise transmission_mutation_probability, lower prune threshold
+
+run:
+  days: 365
+  seed: 42
+  run_id: realistic_run
+  quiet: false
+
+population:
+  hospitals: 6
+  susceptible_count: 980
+  carrier_count: 30             # 3% seed prevalence
+  initial_department: ward
+
+  susceptible_template:
+    age_years: 62
+    compliance: 0.75
+    vulnerability: 1.1
+    immune_strength: 0.9
+    immune_status: normal
+    sociability: 1.0
+    adherence: 0.75
+    history_flags: []
+
+  carrier_template:
+    age_years: 65
+    compliance: 0.70
+    vulnerability: 1.3
+    immune_strength: 0.75
+    immune_status: normal
+    sociability: 1.0
+    adherence: 0.70
+    history_flags: ["prior_abx"]
+    resistant_fraction: 0.45
+    dominant_genotype: R2
+    relative_transmissibility: 1.2
+    p_clearance: 0.008           # ~125 day mean carriage (MRSA: 90-200 days)
+    severity_modifier: 1.2
+    lethality_modifier: 1.1
+
+macro:
+  base_hygiene: 0.65
+  base_isolation_effectiveness: 0.65
+  base_diagnostic_speed: 0.55
+
+  # Transmission: tuned for R0 ≈ 1.5
+  # hazard = contacts * (1-hygiene) * beta / occupancy
+  #        = 18 * 0.35 * 0.09 / 168 ≈ 0.0034 per carrier/susceptible/day
+  # R0 = hazard * susceptibles / p_clearance = 0.0034 * 145 / 0.008 ≈ 1.5  (endemic ~20%)
+  base_transmission_rate: 0.09
+  daily_contact_attempts: 18.0
+
+  icu_abx_probability: 0.85
+  ward_abx_probability: 0.40
+  carrier_isolation_probability: 0.65
+
+  # Raised: more transmitted strains carry resistance mutations.
+  # This seeds resistance into new episodes from the macro side.
+  transmission_mutation_probability: 0.25
+  transmission_resistance_mutation_std: 0.08
+
+micro:
+  workers: null
+  steps_per_day: 12
+  max_strains: 40
+  carrying_capacity: 500000000.0
+
+  # Lower: small resistant subpopulations survive longer before stochastic loss
+  min_population: 100.0
+
+  # Lower: resistant minority strains are not wiped by pruning
+  clearance_threshold: 1000.0
+
+  # Higher mutation rate: resistance emerges de novo within episodes under ABX pressure.
+  # S. aureus SOS response: effective rate = base * stress_boost.
+  # Target: meaningful resistance emergence within 14-30 days of ABX exposure.
+  base_mutation_rate: 0.012
+  mutation_std: 0.025
+
+  # 40x SOS boost (literature range 10-100x; 40x gives de novo emergence on realistic timescale)
+  stress_mutation_boost: 40.0
+
+  # Moderate HGT: plasmid-mediated transfer within host is possible but not dominant
+  base_hgt_rate: 0.03
+  hgt_gene_transfer_prob: 0.25
+
+  # Strong selection ensures resistant strains sweep within days under ABX
+  selection_strength: 2.5
+
+  growth_rate_per_step: 0.18
+  death_rate_per_step: 0.06
+
+  # Low prune threshold keeps resistant minority at 0.04% of population alive
+  strain_prune_threshold: 200.0
+
+  base_damage_per_step: 0.004
+  replication_damage_factor: 0.03
+  stress_damage_factor: 0.06
+  repair_rate_per_step: 0.08
+
+  age_mortality_scale: 0.001
+  damage_mortality_scale: 0.025
+  lifecycle_half_life_steps: 200.0
+  max_damage_load: 5.0
+
+  dormancy_growth_penalty: 0.55
+  synergy_repair_dormancy_bonus: 0.25
+  synergy_stress_tolerance_bonus: 0.20
+
+  stochastic_threshold: 10000.0
+  stochastic_noise_scale: 0.08
