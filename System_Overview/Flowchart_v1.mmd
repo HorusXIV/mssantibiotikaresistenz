@@ -1,0 +1,140 @@
+flowchart TD
+
+START([MacroSimulator.step]) --> HOSP_LOOP
+
+subgraph GRID["Mesa Grid Layer"]
+    style GRID fill:#e8e8ff,stroke:#555,stroke-width:2px
+    DEPT_GRID["HospitalDepartmentGrid<br/>MultiGrid cols×rows<br/>ICU rows = top<br/>Ward rows = bottom"]
+    NET_GRID["HospitalNetworkGrid<br/>SingleGrid — hospital positions<br/>for future transfer routing"]
+    AGENT["PatientAgent<br/>wraps Patient<br/>placed on dept grid"]
+    DEPT_GRID --- AGENT
+end
+
+subgraph MACRO["macro_simulation  —  step order per day"]
+    style MACRO fill:#f9f,stroke:#333,stroke-width:2px
+
+    HOSP_LOOP["for each hospital"]
+
+    subgraph PH1["Phase 1 · Clearance  C → S  (per hospital)"]
+        style PH1 fill:#fde,stroke:#c66,stroke-width:1px
+        PH1_HEAD["for each CARRIER"] --> SHD{"should_clear_today?<br/>p_clearance from micro"}
+        SHD -->|Yes| DO_CLR["state = SUSCEPTIBLE<br/>episode reset · modifiers cleared<br/>micro episode cleaned up"]
+        SHD -->|No| STAY_C["stays CARRIER"]
+    end
+
+    subgraph PH2["Phase 2 · Context Update + Detection  (per hospital)"]
+        style PH2 fill:#fde,stroke:#c66,stroke-width:1px
+        PH2_HEAD["for each patient<br/>capture was_isolated"] --> ISO{"carrier not yet isolated?<br/>30% daily prob"}
+        ISO -->|"Yes — first detection<br/>(was_isolated=False → True)"| ISO_Y["is_isolated = True<br/>planned_discharge_day =<br/>max(current, today + carrier_extension_days)"]
+        ISO -->|"Already isolated<br/>or not a carrier"| ISO_N["no date change"]
+        ISO_Y --> ABX
+        ISO_N --> ABX
+        ABX{"start antibiotic treatment?<br/>prob by department"} -->|Yes| ABX_Y["regimen.on = True<br/>class + dose selected"]
+        ABX -->|No| ABX_N["regimen.on = False"]
+        ABX_Y --> CTX["PatientDailyContext assembled<br/>→ patient.update_context"]
+        ABX_N --> CTX
+    end
+
+    subgraph PH3["Phase 3 · Discharge  (per hospital, after clearance)"]
+        style PH3 fill:#fde,stroke:#c66,stroke-width:1px
+        DISCH_HEAD["for each patient<br/>past planned_discharge_day"] --> DISCH_STATE{"state?"}
+        DISCH_STATE -->|CARRIER| EXT["extend:<br/>planned_discharge_day =<br/>today + carrier_extension_days"]
+        DISCH_STATE -->|SUSCEPTIBLE| LOGISTIC["logistic probability:<br/>p = σ(k · (days_over − t_half))<br/>p ≈ 0.05 at day 0<br/>p ≈ 0.50 at day 3<br/>p ≈ 0.88 at day 6"]
+        LOGISTIC -->|discharge| REMOVE["discharge()<br/>remove from dept grid<br/>clear micro episode if carrier"]
+        LOGISTIC -->|stay| KEEP_S["stays — retry tomorrow"]
+    end
+
+    subgraph PH4["Phase 4 · Admissions  (global, Poisson)"]
+        style PH4 fill:#fde,stroke:#c66,stroke-width:1px
+        POIS["n_new ~ Poisson(daily_admission_rate)"] --> CAP{"any hospital<br/>below cap?"}
+        CAP -->|No| SKIP["skip remaining<br/>admissions"]
+        CAP -->|Yes| WHOSPITAL["capacity-weighted<br/>hospital selection<br/>weight = cap − occupancy"]
+        WHOSPITAL --> WDEPT["dept draw:<br/>Ward or ICU<br/>weighted by grid cells"]
+        WDEPT --> LOS["LOS ~ LogNormal(μ, σ)<br/>Ward mean=8d · ICU mean=14d<br/>planned_discharge_day = today + LOS"]
+        LOS --> ADMIT["admit()<br/>place PatientAgent on dept grid<br/>community carrier fraction = 3%"]
+    end
+
+    subgraph PH5["Phase 5 · Micro Batch  (optional, global)"]
+        style PH5 fill:#fde,stroke:#c66,stroke-width:1px
+        MICRO_BATCH["collect one request per active carrier<br/>process_batch(parallel=True)"]
+        MICRO_BATCH --> APPLY["apply_micro_response:<br/>resistant_fraction · dominant_genotype<br/>relative_transmissibility · p_clearance<br/>severity + lethality modifiers"]
+    end
+
+    subgraph PH6["Phase 6 · Transmission  S → C  (per hospital)"]
+        style PH6 fill:#fde,stroke:#c66,stroke-width:1px
+        TRANS_HEAD["for each SUSCEPTIBLE"] --> FORCE["weighted carrier force:<br/>w = exp(−α · chebyshev_distance)<br/>× transmissibility × isolation_reduction"]
+        FORCE --> HAZARD["hazard = contact_attempts<br/>× hygiene_factor × force / n_total<br/>× susceptibility_multiplier"]
+        HAZARD --> CDRAW{"p_colonize =<br/>1 − exp(−hazard)"}
+        CDRAW -->|Yes| NEW_C["state = CARRIER<br/>inherit strain from source<br/>(± mutation drift)"]
+        CDRAW -->|No| KEEP_SUS["stays SUSCEPTIBLE"]
+    end
+
+    subgraph PH7["Phase 7 · Transfer  (stub)"]
+        style PH7 fill:#eee,stroke:#aaa,stroke-width:1px
+        STUB["inter-hospital transfer<br/>via HospitalNetworkGrid<br/>not yet implemented"]
+    end
+
+    HOSP_LOOP --> PH1
+    PH1 --> PH2
+    PH2 --> PH3
+    PH3 --> PH4
+    PH4 --> PH5
+    PH5 --> PH6
+    PH6 --> PH7
+
+end
+
+subgraph EXCHANGE["exchange  —  Patient Interface"]
+    style EXCHANGE fill:#9ff,stroke:#333,stroke-width:2px
+    UPDCTX["update_context<br/>hospital · dept · isolation<br/>regimen · adherence · treatment_phase"]
+    CKCARR{"state == CARRIER<br/>and episode active?"}
+    MKREQ["make_micro_request<br/>ABX config + adherence<br/>host properties<br/>current resistance state"]
+    APPLIC["apply_micro_response<br/>resistant_fraction + dominant_genotype<br/>relative_transmissibility + p_clearance<br/>severity + lethality modifiers"]
+    NOREQ["no micro call<br/>modifiers unchanged"]
+end
+
+subgraph MICRO["micro_simulation"]
+    style MICRO fill:#ff9,stroke:#333,stroke-width:2px
+    EP["EpisodeState<br/>bacterial population<br/>persists between days"]
+    PRREQ["process_request<br/>parallel batch support"]
+
+    subgraph SIMDAY["simulate_day — 12 steps"]
+        style SIMDAY fill:#ff9,stroke:#333,stroke-width:2px
+        SEL["Selection<br/>fitness-based growth + death<br/>ABX pressure + immune clearance<br/>logistic population cap"]
+        MUT["Mutation<br/>random gene changes per strain<br/>rate boosted under ABX<br/>new mutant strains emerge"]
+        HGT["HGT  every 3rd step<br/>horizontal gene transfer<br/>resistance genes blend between strains"]
+        CON["Consolidate<br/>prune small strains · keep top 50"]
+        SEL --> MUT --> HGT --> CON
+    end
+
+    P2R["population_to_response<br/>dominant genotype: S / R1 / R2 / R3<br/>resistant fraction<br/>transmissibility · lethality · p_clearance"]
+end
+
+subgraph OUT["Outputs"]
+    style OUT fill:#efe,stroke:#333,stroke-width:2px
+    CSV["outputs/csv/<br/>daily.csv · per_hospital.csv"]
+    PLOTS["outputs/plots/<br/>01 population overview<br/>02 occupancy stability<br/>03 hospital prevalence<br/>04 dept mix + isolated flag<br/>05 hospital grid heatmap<br/>06 department grid"]
+end
+
+%% Cross-layer connections
+CTX      -->|PatientDailyContext| UPDCTX
+UPDCTX   --> CKCARR
+CKCARR   -->|Yes — CARRIER| MKREQ
+CKCARR   -->|No — SUSCEPTIBLE| NOREQ
+MKREQ    -->|request dict| PRREQ
+EP       --> PRREQ
+PRREQ    --> SIMDAY
+SIMDAY   --> P2R
+P2R      -->|response dict| APPLIC
+APPLIC   --> EP
+NOREQ    --> TRANS_HEAD
+APPLIC   --> TRANS_HEAD
+
+%% Grid connections
+ADMIT    -.->|place agent| DEPT_GRID
+REMOVE   -.->|release agent| DEPT_GRID
+FORCE    -.->|proximity_weight| DEPT_GRID
+
+%% Output connections
+PH7      --> CSV
+CSV      --> PLOTS
