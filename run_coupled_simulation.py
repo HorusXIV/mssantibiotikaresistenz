@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import argparse
+import csv
+import random
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import yaml
 
+import visualize_results
 from exchange.patient import Department, HealthState, Patient
 from macro_simulation.simulation import SimulationConfig as MacroConfig
 from macro_simulation.simulator import MacroSimulator
@@ -16,13 +19,17 @@ from micro_simulation.simulation import SimulationConfig as MicroConfig
 from micro_simulation.simulator import MicroSimulator
 
 DEFAULT_CONFIG_PATH = Path(__file__).resolve().parent / "shared" / "config_realistic.yml"
+DEFAULT_OUTPUT_DIR = Path(__file__).resolve().parent / "outputs"
+DEFAULT_CSV_DIR = DEFAULT_OUTPUT_DIR / "csv"
 _FORBIDDEN_TEMPLATE_FIELDS = {
     "_ctx",
+    "admission_day",
     "department",
     "episode_id",
     "hospital_id",
     "is_isolated",
     "patient_id",
+    "planned_discharge_day",
     "regimen",
     "state",
 }
@@ -62,6 +69,38 @@ class CoupledSimulationSettings:
     macro: MacroConfig
     micro: MicroConfig
     micro_workers: int | None
+
+
+_DAILY_FIELDS = [
+    "day",
+    "run_id",
+    "total_patients",
+    "susceptible",
+    "carriers",
+    "prevalence",
+    "avg_resistant_fraction",
+    "isolated_count",
+    "abx_on_count",
+    "ward_count",
+    "icu_count",
+    "isolation_count",
+]
+
+_DAILY_BY_HOSPITAL_FIELDS = [
+    "day",
+    "run_id",
+    "hospital_id",
+    "total_patients",
+    "susceptible",
+    "carriers",
+    "prevalence",
+    "avg_resistant_fraction",
+    "isolated_count",
+    "abx_on_count",
+    "ward_count",
+    "icu_count",
+    "isolation_count",
+]
 
 
 def _require_mapping(section_name: str, value: Any) -> dict[str, Any]:
@@ -238,6 +277,103 @@ def _summarize_day(macro: MacroSimulator, n_hospitals: int, day: int) -> DaySumm
     )
 
 
+def _make_patient_factory(
+    population: PopulationSettings,
+    macro_config: MacroConfig,
+    seed: int,
+) -> Callable[[str, Department], Patient]:
+    """Return a closure that creates new patients for the admission phase."""
+    counter = [0]
+    rng = random.Random(seed + 99999)
+
+    def factory(_hospital_id: str, _department: Department) -> Patient:
+        counter[0] += 1
+        pid = f"dyn_{counter[0]:07d}"
+        is_carrier = rng.random() < macro_config.community_carrier_fraction
+        if is_carrier:
+            return Patient(
+                patient_id=pid,
+                state=HealthState.CARRIER,
+                episode_id=f"community_ep_{counter[0]:07d}",
+                resistant_fraction=macro_config.replacement_resistant_fraction,
+                dominant_genotype=macro_config.replacement_dominant_genotype,
+                **population.susceptible_template,
+            )
+        return Patient(
+            patient_id=pid,
+            state=HealthState.SUSCEPTIBLE,
+            **population.susceptible_template,
+        )
+
+    return factory
+
+
+def _collect_patient_stats(patients: list[Patient]) -> dict[str, float | int]:
+    total = len(patients)
+    carriers = [p for p in patients if p.state == HealthState.CARRIER]
+    susceptible = total - len(carriers)
+    avg_res = sum(p.resistant_fraction for p in carriers) / len(carriers) if carriers else 0.0
+    isolated_count = sum(1 for p in patients if p.is_isolated)
+    abx_on_count = sum(1 for p in patients if p.regimen.on)
+    ward_count = sum(1 for p in patients if p.department == Department.WARD)
+    icu_count = sum(1 for p in patients if p.department == Department.ICU)
+    isolation_count = sum(1 for p in patients if p.department == Department.ISOLATION)
+    prevalence = len(carriers) / total if total else 0.0
+
+    return {
+        "total_patients": total,
+        "susceptible": susceptible,
+        "carriers": len(carriers),
+        "prevalence": prevalence,
+        "avg_resistant_fraction": avg_res,
+        "isolated_count": isolated_count,
+        "abx_on_count": abx_on_count,
+        "ward_count": ward_count,
+        "icu_count": icu_count,
+        "isolation_count": isolation_count,
+    }
+
+
+def _collect_macro_daily_logs(
+    macro: MacroSimulator,
+    n_hospitals: int,
+    day: int,
+    run_id: str,
+) -> tuple[dict[str, float | int | str], list[dict[str, float | int | str]]]:
+    all_patients: list[Patient] = []
+    by_hospital: list[dict[str, float | int | str]] = []
+
+    for i in range(1, n_hospitals + 1):
+        hid = f"hospital_{i:03d}"
+        patients = macro.get_patients(hid)
+        all_patients.extend(patients)
+        row = {
+            "day": day,
+            "run_id": run_id,
+            "hospital_id": hid,
+        }
+        row.update(_collect_patient_stats(patients))
+        by_hospital.append(row)
+
+    global_row: dict[str, float | int | str] = {
+        "day": day,
+        "run_id": run_id,
+    }
+    global_row.update(_collect_patient_stats(all_patients))
+
+    return global_row, by_hospital
+
+
+def _write_csv(path: Path, rows: list[dict[str, float | int | str]], fieldnames: list[str]) -> None:
+    if not rows:
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
+
+
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Run the coupled macro + micro antibiotic resistance simulation.",
@@ -273,6 +409,12 @@ def main() -> None:
 
     _admit_initial_population(macro=macro, population=settings.population)
 
+    patient_factory = _make_patient_factory(
+        population=settings.population,
+        macro_config=settings.macro,
+        seed=settings.run.seed,
+    )
+
     print(
         "run_start "
         f"config={settings.config_path} days={settings.run.days} "
@@ -284,14 +426,29 @@ def main() -> None:
     )
 
     final_summary = None
+    macro_daily_rows: list[dict[str, float | int | str]] = []
+    macro_daily_by_hospital_rows: list[dict[str, float | int | str]] = []
     for day in range(1, settings.run.days + 1):
-        macro.step(micro_simulator=micro, run_id=settings.run.run_id)
+        macro.step(
+            micro_simulator=micro,
+            run_id=settings.run.run_id,
+            patient_factory=patient_factory,
+        )
         summary = _summarize_day(
             macro=macro,
             n_hospitals=settings.population.hospitals,
             day=day,
         )
         final_summary = summary
+
+        global_row, hospital_rows = _collect_macro_daily_logs(
+            macro=macro,
+            n_hospitals=settings.population.hospitals,
+            day=day,
+            run_id=settings.run.run_id,
+        )
+        macro_daily_rows.append(global_row)
+        macro_daily_by_hospital_rows.extend(hospital_rows)
 
         if not settings.run.quiet:
             print(
@@ -303,12 +460,30 @@ def main() -> None:
     if final_summary is None:
         return
 
+    macro_daily_path = DEFAULT_CSV_DIR / "macro_daily.csv"
+    macro_daily_by_hospital_path = DEFAULT_CSV_DIR / "macro_daily_by_hospital.csv"
+    _write_csv(macro_daily_path, macro_daily_rows, _DAILY_FIELDS)
+    _write_csv(
+        macro_daily_by_hospital_path,
+        macro_daily_by_hospital_rows,
+        _DAILY_BY_HOSPITAL_FIELDS,
+    )
+
     print(
         "run_end "
         f"day={final_summary.day} susceptible={final_summary.susceptible} "
         f"carriers={final_summary.carriers} "
         f"avg_resistant_fraction={final_summary.avg_resistant_fraction:.4f} "
         f"active_micro_episodes={len(micro.get_active_episodes())}"
+    )
+    print(
+        "macro_log_written " f"daily={macro_daily_path} by_hospital={macro_daily_by_hospital_path}"
+    )
+
+    visualize_results.run(
+        csv_dir=DEFAULT_CSV_DIR,
+        plot_dir=DEFAULT_OUTPUT_DIR / "plots",
+        quiet=True,
     )
 
 

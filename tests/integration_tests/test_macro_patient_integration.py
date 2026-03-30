@@ -481,6 +481,7 @@ class TestTransfer:
         self, hospital_network: MacroSimulator, carrier_patient: Patient
     ):
         """Repeated transfers across all 10 hospitals preserve state."""
+        carrier_patient.p_clearance = 0.0
         hospital_network.admit(carrier_patient, hospital_id=_H1, department=Department.WARD)
         for i in range(2, 11):
             hid = f"hospital_{i:03d}"
@@ -1061,6 +1062,8 @@ class TestBatchAndNetwork:
 
     def test_patient_count_conserved(self, hospital_network: MacroSimulator):
         """Without admissions/discharges, total count is conserved."""
+        if hospital_network._config.daily_admission_rate > 0.0:
+            pytest.skip("Patient count is not conserved when daily admissions are enabled.")
         patients = _make_patients(n_susceptible=30, n_carrier=10)
         for i, p in enumerate(patients):
             hospital_network.admit(p, hospital_id=_HOSPITAL_IDS[i % 10], department=Department.WARD)

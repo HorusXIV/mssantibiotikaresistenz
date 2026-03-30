@@ -74,6 +74,29 @@ macro:
   transmission_mutation_probability: 0.25
   transmission_resistance_mutation_std: 0.08
 
+  # LOS + Discharge
+  los_mean_ward: 8.0
+  los_mean_icu: 14.0
+  los_sigma: 0.6
+  carrier_extension_days: 14.0
+  discharge_logistic_k: 1.0
+  discharge_logistic_t_half: 3.0
+
+  # Admissions (total per day across all hospitals; 0 = disabled)
+  # Steady-state: 1010 patients / 8 days LOS ≈ 126/day
+  daily_admission_rate: 126.0
+  community_carrier_fraction: 0.03
+  replacement_resistant_fraction: 0.05
+  replacement_dominant_genotype: "S"
+  max_occupancy_per_hospital: 200
+
+  # Grid (Feature 2 — used once Mesa grids are integrated)
+  dept_grid_cols: 3
+  dept_grid_rows: 2
+  dept_grid_icu_rows: 1
+  network_grid_cols: 3
+  proximity_decay_alpha: 0.5
+
 micro:
   workers: null
   steps_per_day: 12

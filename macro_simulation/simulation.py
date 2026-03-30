@@ -38,3 +38,27 @@ class SimulationConfig:
         0.08  # chance that transmitted strain shifts slightly
     )
     transmission_resistance_mutation_std: float = 0.04  # small perturbation of inherited resistance
+
+    # LOS (Length of Stay) — Log-Normal distribution drawn at admission
+    los_mean_ward: float = 8.0  # mean ward stay in days
+    los_mean_icu: float = 14.0  # mean ICU stay in days
+    los_sigma: float = 0.6  # log-normal sigma (shape parameter)
+
+    # Discharge
+    carrier_extension_days: float = 14.0  # extend stay by this many days when carrier hits target
+    discharge_logistic_k: float = 1.0  # steepness of logistic discharge curve
+    discharge_logistic_t_half: float = 3.0  # days over target where p=50%
+
+    # Admissions (0 = disabled)
+    daily_admission_rate: float = 0.0  # total new admissions per day (Poisson mean)
+    community_carrier_fraction: float = 0.03
+    replacement_resistant_fraction: float = 0.05
+    replacement_dominant_genotype: str = "S"
+    max_occupancy_per_hospital: int = 200  # hard cap per hospital
+
+    # Grid
+    dept_grid_cols: int = 3
+    dept_grid_rows: int = 2
+    dept_grid_icu_rows: int = 1
+    network_grid_cols: int = 3
+    proximity_decay_alpha: float = 0.5

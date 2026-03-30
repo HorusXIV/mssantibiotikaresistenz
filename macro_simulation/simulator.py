@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import math
 import random
-from typing import Any, Dict, List
+from typing import Any, Callable, Dict, List, Optional
 
 from exchange.patient import (
     AntibioticRegimen,
@@ -23,6 +23,8 @@ from exchange.patient import (
     Patient,
     PatientDailyContext,
 )
+from macro_simulation.agents import PatientAgent, _MesaModel
+from macro_simulation.grid import HospitalDepartmentGrid, HospitalNetworkGrid
 from macro_simulation.simulation import SimulationConfig
 
 # Antibiotic classes the macro policy may prescribe
@@ -61,12 +63,28 @@ class MacroSimulator:
 
         # Build hospital registry
         self._hospital_ids = [f"hospital_{i:03d}" for i in range(1, n_hospitals + 1)]
-        # hospital_id -> list of Patient objects currently admitted
-        self._patients: Dict[str, List[Patient]] = {hid: [] for hid in self._hospital_ids}
         # patient_id -> hospital_id (fast lookup)
         self._patient_hospital: Dict[str, str] = {}
-        # patient_id -> department
-        self._patient_department: Dict[str, Department] = {}
+
+        base_seed = seed if seed is not None else None
+        self._mesa_model = _MesaModel()
+        self._dept_grids: Dict[str, HospitalDepartmentGrid] = {
+            hid: HospitalDepartmentGrid(
+                cols=config.dept_grid_cols,
+                rows=config.dept_grid_rows,
+                icu_rows=config.dept_grid_icu_rows,
+                mesa_model=self._mesa_model,
+                rng=random.Random(None if base_seed is None else base_seed + 1000 + i),
+                alpha=config.proximity_decay_alpha,
+            )
+            for i, hid in enumerate(self._hospital_ids)
+        }
+        self._network_grid = HospitalNetworkGrid(
+            self._hospital_ids,
+            cols=config.network_grid_cols,
+            mesa_model=self._mesa_model,
+        )
+        self._patient_agents: Dict[str, PatientAgent] = {}
 
         self._day = 0
         self._episode_counter = 0
@@ -82,25 +100,40 @@ class MacroSimulator:
         department: Department,
     ) -> None:
         """Admit patient to hospital_id in the given department."""
-        if hospital_id not in self._patients:
+        if hospital_id not in self._dept_grids:
             raise ValueError(f"Unknown hospital: {hospital_id}")
 
         patient.hospital_id = hospital_id
         patient.department = department
 
-        self._patients[hospital_id].append(patient)
         self._patient_hospital[patient.patient_id] = hospital_id
-        self._patient_department[patient.patient_id] = department
+        agent = PatientAgent(patient, self._mesa_model)
+        self._patient_agents[patient.patient_id] = agent
+        self._dept_grids[hospital_id].assign_to_department(agent, department)
 
-    def discharge(self, patient: Patient) -> None:
-        """Remove patient from its current hospital."""
+        patient.admission_day = self._day
+        patient.planned_discharge_day = self._day + self._draw_los(department)
+
+    def discharge(self, patient: Patient, micro_simulator: Any = None) -> None:
+        """Remove patient from its current hospital.
+
+        If ``micro_simulator`` is provided and the patient is a carrier, the
+        associated micro episode is cleaned up before removal.
+        """
         hid = self._patient_hospital.get(patient.patient_id)
         if hid is None:
             raise ValueError(f"Patient {patient.patient_id} is not currently admitted.")
 
-        self._patients[hid].remove(patient)
+        if micro_simulator is not None and patient.state == HealthState.CARRIER:
+            if patient.episode_id is not None:
+                clear_fn = getattr(micro_simulator, "clear_episode", None)
+                if clear_fn is not None:
+                    clear_fn(patient.episode_id)
+
+        agent = self._patient_agents.pop(patient.patient_id, None)
+        if agent is not None:
+            self._dept_grids[hid].release(agent)
         del self._patient_hospital[patient.patient_id]
-        del self._patient_department[patient.patient_id]
         patient.hospital_id = None
 
     def transfer(self, patient: Patient, to_hospital_id: str) -> None:
@@ -110,55 +143,82 @@ class MacroSimulator:
             raise ValueError(f"Patient {patient.patient_id} is not currently admitted.")
         if to_hospital_id == src:
             raise ValueError("Cannot transfer to the same hospital.")
-        if to_hospital_id not in self._patients:
+        if to_hospital_id not in self._dept_grids:
             raise ValueError(f"Unknown hospital: {to_hospital_id}")
 
-        self._patients[src].remove(patient)
-        self._patients[to_hospital_id].append(patient)
+        agent = self._patient_agents.get(patient.patient_id)
+        if agent is None:
+            raise ValueError(f"Patient {patient.patient_id} is missing a grid agent.")
+
+        src_grid = self._dept_grids[src]
+        dst_grid = self._dept_grids[to_hospital_id]
+        current_dept = src_grid.dept_type_at(agent.pos)
+        src_grid.release(agent)
+        dst_grid.assign_to_department(agent, current_dept)
+
         self._patient_hospital[patient.patient_id] = to_hospital_id
         patient.hospital_id = to_hospital_id
+        patient.department = current_dept
 
     def get_occupancy(self, hospital_id: str) -> int:
         """Return the number of patients currently in hospital_id."""
-        return len(self._patients.get(hospital_id, []))
+        grid = self._dept_grids.get(hospital_id)
+        if grid is None:
+            return 0
+        return len(grid.get_all_patients())
 
     def get_patients(self, hospital_id: str) -> List[Patient]:
         """Return a snapshot of patients currently in hospital_id."""
-        return list(self._patients.get(hospital_id, []))
+        grid = self._dept_grids.get(hospital_id)
+        if grid is None:
+            return []
+        return list(grid.get_all_patients())
 
     # ------------------------------------------------------------------
     # Daily step
     # ------------------------------------------------------------------
 
-    def step(self, micro_simulator: Any = None, run_id: str = "run_001") -> None:
+    def step(
+        self,
+        micro_simulator: Any = None,
+        run_id: str = "run_001",
+        patient_factory: Optional[Callable[[str, Department], Patient]] = None,
+    ) -> None:
         """Advance the simulation by one day.
 
         Order of operations per day:
         1. Per hospital clearance: each carrier may revert to susceptible (C -> S).
-        2. Per hospital PatientDailyContext update for every patient.
-        3. One optional global micro batch for all active carriers.
-        4. Per hospital transmission: susceptible patients may become carriers (S -> C).
+        2. Per hospital LOS-based discharge (logistic probability after planned date).
+           Clearance runs first so a carrier who clears today and is already past
+           their planned discharge date can leave the same day.
+        3. Poisson admissions to least-occupied hospital (capped).
+        4. Per hospital PatientDailyContext update for every patient.
+           Newly detected carriers (is_isolated set True) immediately have their
+           planned_discharge_day extended by carrier_extension_days.
+        5. One optional global micro batch for all active carriers.
+        6. Per hospital transmission: susceptible patients may become carriers (S -> C).
 
-        Notes
-        -----
-        If ``micro_simulator`` is provided, it must implement a
-        ``process_batch(requests, parallel=True)`` method that accepts the
-        request schema produced by ``Patient.make_micro_request`` and returns
-        responses compatible with ``Patient.apply_micro_response``.
+        Parameters
+        ----------
+        patient_factory
+            Optional callable ``(hospital_id, department) -> Patient`` used by
+            the admission phase. If None or ``daily_admission_rate == 0``,
+            the admission phase is skipped.
         """
         self._day += 1
 
         all_micro_requests: List[Dict[str, Any]] = []
         request_patients: List[Patient] = []
-        active_hospitals: List[List[Patient]] = []
+        active_hospital_ids: List[str] = []
 
         for hid in self._hospital_ids:
-            patients = self._patients[hid]
+            patients = self._dept_grids[hid].get_all_patients()
             if not patients:
                 continue
-            active_hospitals.append(patients)
+            active_hospital_ids.append(hid)
 
-            # 1. Clearance (C -> S)
+            # 1. Clearance (C -> S) — must run before discharge so a carrier
+            #    who clears today is seen as susceptible in the discharge phase.
             for p in patients:
                 if p.state == HealthState.CARRIER:
                     if p.should_clear_today(self._rng):
@@ -168,18 +228,36 @@ class MacroSimulator:
                                 clear_episode(p.episode_id)
                         p.clear_carriage()
 
-            # 2. Context update
+            # 4. Context update
             for p in patients:
+                was_isolated = p.is_isolated
                 ctx = self._build_context(p, hid)
                 p.update_context(ctx)
+                # On first detection (not-isolated → isolated): extend planned
+                # discharge so the patient stays at least carrier_extension_days
+                # from the day of detection. Subsequent days do NOT roll the date
+                # forward — the 14-day clock runs from the detection event itself.
+                if p.state == HealthState.CARRIER and p.is_isolated and not was_isolated:
+                    extended = self._day + int(self._config.carrier_extension_days)
+                    if p.planned_discharge_day is None or extended > p.planned_discharge_day:
+                        p.planned_discharge_day = extended
 
-            # 3. Micro exchange (carrier episodes)
+            # 5. Micro exchange (carrier episodes)
             if micro_simulator is not None:
                 requests, batch_patients = self._collect_micro_requests(
                     patients=patients, run_id=run_id
                 )
                 all_micro_requests.extend(requests)
                 request_patients.extend(batch_patients)
+
+        # 2. Discharge (after clearance — post-clearance state is visible here)
+        for hid in self._hospital_ids:
+            self._discharge_phase(
+                list(self._dept_grids[hid].get_all_patients()), hid, micro_simulator
+            )
+
+        # 3. Admissions
+        self._admission_phase(patient_factory)
 
         if micro_simulator is not None and all_micro_requests:
             self._apply_micro_phase(
@@ -189,12 +267,99 @@ class MacroSimulator:
             )
 
         # 4. Transmission (S -> C)
-        for patients in active_hospitals:
-            self._do_transmission(patients)
+        for hid in active_hospital_ids:
+            self._do_transmission(hid)
+
+        # 5. Transfer stub
+        self._transfer_phase()
 
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
+
+    def _draw_los(self, department: Department) -> int:
+        """Draw a length-of-stay from a log-normal distribution."""
+        cfg = self._config
+        mean = cfg.los_mean_icu if department == Department.ICU else cfg.los_mean_ward
+        sigma = cfg.los_sigma
+        mu = math.log(mean) - 0.5 * sigma**2
+        return max(1, round(self._rng.lognormvariate(mu, sigma)))
+
+    def _discharge_phase(
+        self,
+        patients: List[Patient],
+        hospital_id: str,
+        micro_simulator: Any,
+    ) -> None:
+        """Discharge eligible susceptible patients; extend stays for carriers."""
+        cfg = self._config
+        if cfg.daily_admission_rate <= 0.0:
+            return
+        for p in patients:
+            if p.planned_discharge_day is None:
+                continue
+            if p.state == HealthState.CARRIER and self._day >= p.planned_discharge_day:
+                p.planned_discharge_day = self._day + int(cfg.carrier_extension_days)
+            elif p.state == HealthState.SUSCEPTIBLE and self._day >= p.planned_discharge_day:
+                days_over = self._day - p.planned_discharge_day
+                p_d = 1.0 / (
+                    1.0
+                    + math.exp(
+                        -cfg.discharge_logistic_k * (days_over - cfg.discharge_logistic_t_half)
+                    )
+                )
+                if self._rng.random() < p_d:
+                    self.discharge(p, micro_simulator)
+
+    @staticmethod
+    def _poisson_draw(rng: random.Random, lam: float) -> int:
+        """Knuth's algorithm for Poisson sampling without numpy."""
+        if lam <= 0:
+            return 0
+        big_l = math.exp(-min(lam, 30.0))
+        k, p = 0, 1.0
+        while p > big_l:
+            k += 1
+            p *= rng.random()
+        return k - 1
+
+    def _admission_phase(
+        self,
+        patient_factory: Optional[Callable[[str, Department], Patient]],
+    ) -> None:
+        """Admit Poisson-drawn new patients to the least-occupied hospital under cap."""
+        cfg = self._config
+        if patient_factory is None or cfg.daily_admission_rate <= 0.0:
+            return
+        cap = cfg.max_occupancy_per_hospital
+        n_new = self._poisson_draw(self._rng, cfg.daily_admission_rate)
+        for _ in range(n_new):
+            candidates = [h for h in self._hospital_ids if self.get_occupancy(h) < cap]
+            if not candidates:
+                break
+            # Weight by remaining free capacity — less full = more likely, but stochastic
+            weights = [cap - self.get_occupancy(h) for h in candidates]
+            hid = self._rng.choices(candidates, weights=weights, k=1)[0]
+            dept = self._draw_admission_department(self._dept_grids[hid])
+            new_patient = patient_factory(hid, dept)
+            self.admit(new_patient, hid, dept)
+
+    def _draw_admission_department(self, grid: HospitalDepartmentGrid) -> Department:
+        ward_positions = grid.dept_positions_for(Department.WARD)
+        icu_positions = grid.dept_positions_for(Department.ICU)
+        ward_weight = len(ward_positions)
+        icu_weight = len(icu_positions)
+
+        if ward_weight <= 0 and icu_weight <= 0:
+            return Department.WARD
+        if icu_weight <= 0:
+            return Department.WARD
+        if ward_weight <= 0:
+            return Department.ICU
+
+        if self._rng.random() < (icu_weight / (icu_weight + ward_weight)):
+            return Department.ICU
+        return Department.WARD
 
     def _build_context(self, patient: Patient, hospital_id: str) -> PatientDailyContext:
         """Construct the daily context snapshot for patient.
@@ -203,7 +368,10 @@ class MacroSimulator:
         of branching, so that downstream draws (clearance, transmission) land
         on deterministic positions in the RNG stream.
         """
-        department = self._patient_department[patient.patient_id]
+        agent = self._patient_agents.get(patient.patient_id)
+        if agent is None:
+            raise ValueError(f"Patient {patient.patient_id} is missing a grid agent.")
+        department = self._dept_grids[hospital_id].dept_type_at(agent.pos)
         cfg = self._config
 
         # Draw all random values up-front (fixed count = 4)
@@ -243,43 +411,55 @@ class MacroSimulator:
             regimen=regimen,
         )
 
-    def _do_transmission(self, patients: List[Patient]) -> None:
-        """Stochastic S -> C transmission within one hospital ward."""
-        carriers = [p for p in patients if p.state == HealthState.CARRIER]
-        susceptible = [p for p in patients if p.state == HealthState.SUSCEPTIBLE]
+    def _do_transmission(self, hospital_id: str) -> None:
+        """Stochastic S -> C transmission within one hospital (proximity-weighted)."""
+        grid = self._dept_grids[hospital_id]
+        agents = grid.get_all_agents()
+        carriers = [a for a in agents if a.patient.state == HealthState.CARRIER]
+        susceptible = [a for a in agents if a.patient.state == HealthState.SUSCEPTIBLE]
 
         if not carriers or not susceptible:
             return
 
         cfg = self._config
-        hygiene_factor = 1.0 - cfg.base_hygiene  # higher hygiene => lower factor
+        hygiene_factor = 1.0 - cfg.base_hygiene
         iso_reduction = cfg.base_isolation_effectiveness
+        n_total = max(1, len(agents))
 
-        # Sum up carrier-side infectiousness.
-        # We normalize by occupancy below so transmission scales with prevalence
-        # instead of exploding linearly with absolute carrier count.
-        carrier_force = 0.0
-        weighted_carriers: List[tuple[Patient, float]] = []
-        for car in carriers:
-            contribution = cfg.base_transmission_rate * car.transmission_multiplier_for_macro()
-            if car.is_isolated:
-                contribution *= 1.0 - iso_reduction
-            carrier_force += contribution
-            weighted_carriers.append((car, contribution))
+        for sus_agent in susceptible:
+            sus_pos = sus_agent.pos
+            sus = sus_agent.patient
+            weighted_force = 0.0
+            weighted_carriers: List[tuple[Patient, float]] = []
+            for car_agent in carriers:
+                w = grid.proximity_weight(sus_pos, car_agent.pos)
+                contrib = (
+                    cfg.base_transmission_rate
+                    * car_agent.patient.transmission_multiplier_for_macro()
+                    * w
+                )
+                if car_agent.patient.is_isolated:
+                    contrib *= 1.0 - iso_reduction
+                weighted_force += contrib
+                weighted_carriers.append((car_agent.patient, contrib))
 
-        occupancy = max(1, len(patients))
-        base_hazard = cfg.daily_contact_attempts * hygiene_factor * (carrier_force / occupancy)
-
-        # For each susceptible patient, convert hazard to probability.
-        for sus in susceptible:
-            hazard = base_hazard * sus.susceptibility_multiplier_for_macro()
+            hazard = (
+                cfg.daily_contact_attempts
+                * hygiene_factor
+                * (weighted_force / n_total)
+                * sus.susceptibility_multiplier_for_macro()
+            )
             if sus.is_isolated:
                 hazard *= 1.0 - iso_reduction
-            p_colonize = 1.0 - math.exp(-max(0.0, hazard))
 
+            p_colonize = 1.0 - math.exp(-max(0.0, hazard))
             if self._rng.random() < p_colonize:
-                source = self._pick_transmission_source(weighted_carriers, carrier_force)
+                source = self._pick_transmission_source(weighted_carriers, weighted_force)
                 self._colonize(sus, source=source)
+
+    def _transfer_phase(self) -> None:
+        """Stub for future inter-hospital transfers via the network grid."""
+        return
 
     def _collect_micro_requests(
         self, patients: List[Patient], run_id: str

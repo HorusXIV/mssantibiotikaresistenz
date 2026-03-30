@@ -17,6 +17,7 @@ class HealthState(str, Enum):
 class Department(str, Enum):
     WARD = "ward"
     ICU = "icu"
+    ISOLATION = "isolation"
 
 
 class TreatmentPhase(str, Enum):
@@ -74,6 +75,10 @@ class Patient:
     hospital_id: Optional[str] = None
     department: Department = Department.WARD
     is_isolated: bool = False
+
+    # LOS tracking (set by MacroSimulator.admit())
+    admission_day: Optional[int] = None
+    planned_discharge_day: Optional[int] = None
 
     # Intrinsic "base stats" (keep these stable during an episode)
     age_years: int = 50
