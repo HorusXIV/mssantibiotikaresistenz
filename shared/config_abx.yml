@@ -6,7 +6,7 @@ run:
 
 population:
   hospitals: 6
-  susceptible_count: 1000
+  susceptible_count: 290
   carrier_count: 30
   initial_department: ward
   susceptible_template:
@@ -37,11 +37,11 @@ population:
 macro:
   base_hygiene: 0.42
   base_isolation_effectiveness: 0.45
-  base_diagnostic_speed: 0.3
-  base_transmission_rate: 0.13
-  daily_contact_attempts: 100.0
-  icu_abx_probability: 0.9
-  ward_abx_probability: 0.55
+  base_diagnostic_speed: 0.55
+  base_transmission_rate: 0.1
+  daily_contact_attempts: 25.0
+  icu_abx_probability: 0.85
+  ward_abx_probability: 0.4
   carrier_isolation_probability: 0.15
   transmission_mutation_probability: 0.3
   transmission_resistance_mutation_std: 0.1
