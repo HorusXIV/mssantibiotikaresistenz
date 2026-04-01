@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import argparse
 import csv
+import math
 import random
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
@@ -100,6 +102,78 @@ _DAILY_BY_HOSPITAL_FIELDS = [
     "ward_count",
     "icu_count",
     "isolation_count",
+]
+
+_MICRO_DAILY_FIELDS = [
+    "day",
+    "run_id",
+    "carrier_count",
+    "active_episodes",
+    "abx_on_carrier_count",
+    "isolated_carrier_count",
+    "mean_resistant_fraction",
+    "p10_resistant_fraction",
+    "p50_resistant_fraction",
+    "p90_resistant_fraction",
+    "mean_p_clearance",
+    "mean_relative_transmissibility",
+    "mean_n_strains",
+    "mean_total_population",
+    "genotype_entropy",
+    "genotype_S_fraction",
+    "genotype_R1_fraction",
+    "genotype_R2_fraction",
+    "genotype_R3_fraction",
+    "genotype_other_fraction",
+]
+
+_MICRO_DAILY_BY_HOSPITAL_FIELDS = [
+    "day",
+    "run_id",
+    "hospital_id",
+    "carrier_count",
+    "active_episodes",
+    "abx_on_carrier_count",
+    "isolated_carrier_count",
+    "mean_resistant_fraction",
+    "mean_p_clearance",
+    "mean_relative_transmissibility",
+    "mean_n_strains",
+    "mean_total_population",
+    "genotype_entropy",
+]
+
+_MICRO_PATIENT_DAILY_FIELDS = [
+    "day",
+    "run_id",
+    "hospital_id",
+    "patient_id",
+    "episode_id",
+    "department",
+    "is_isolated",
+    "abx_on",
+    "abx_class",
+    "dose_level",
+    "adherence",
+    "immune_strength",
+    "immune_status",
+    "resistant_fraction",
+    "dominant_genotype",
+    "relative_transmissibility",
+    "p_clearance",
+    "severity_modifier",
+    "lethality_modifier",
+    "episode_day",
+    "n_strains",
+    "total_population",
+]
+
+_MICRO_DAILY_GENOTYPE_FIELDS = [
+    "day",
+    "run_id",
+    "dominant_genotype",
+    "count",
+    "fraction",
 ]
 
 
@@ -364,6 +438,223 @@ def _collect_macro_daily_logs(
     return global_row, by_hospital
 
 
+def _mean_or_zero(values: list[float]) -> float:
+    if not values:
+        return 0.0
+    return float(sum(values) / len(values))
+
+
+def _quantile_or_zero(values: list[float], q: float) -> float:
+    if not values:
+        return 0.0
+    xs = sorted(values)
+    if len(xs) == 1:
+        return float(xs[0])
+    pos = q * (len(xs) - 1)
+    lo = int(math.floor(pos))
+    hi = int(math.ceil(pos))
+    if lo == hi:
+        return float(xs[lo])
+    weight = pos - lo
+    return float(xs[lo] * (1.0 - weight) + xs[hi] * weight)
+
+
+def _aggregate_micro_records(records: list[dict[str, Any]]) -> dict[str, float | int]:
+    carrier_count = len(records)
+    if carrier_count == 0:
+        return {
+            "carrier_count": 0,
+            "active_episodes": 0,
+            "abx_on_carrier_count": 0,
+            "isolated_carrier_count": 0,
+            "mean_resistant_fraction": 0.0,
+            "p10_resistant_fraction": 0.0,
+            "p50_resistant_fraction": 0.0,
+            "p90_resistant_fraction": 0.0,
+            "mean_p_clearance": 0.0,
+            "mean_relative_transmissibility": 0.0,
+            "mean_n_strains": 0.0,
+            "mean_total_population": 0.0,
+            "genotype_entropy": 0.0,
+            "genotype_S_fraction": 0.0,
+            "genotype_R1_fraction": 0.0,
+            "genotype_R2_fraction": 0.0,
+            "genotype_R3_fraction": 0.0,
+            "genotype_other_fraction": 0.0,
+        }
+
+    resistant_values = [float(r["resistant_fraction"]) for r in records]
+    clearance_values = [float(r["p_clearance"]) for r in records]
+    transmissibility_values = [float(r["relative_transmissibility"]) for r in records]
+    n_strain_values = [float(r["n_strains"]) for r in records if bool(r["has_state"])]
+    total_population_values = [
+        float(r["total_population"]) for r in records if bool(r["has_state"])
+    ]
+
+    genotype_counts = Counter(str(r["dominant_genotype"]) for r in records)
+    fractions = {g: c / carrier_count for g, c in genotype_counts.items()}
+    entropy = -sum(frac * math.log2(frac) for frac in fractions.values() if frac > 0.0)
+    tracked = {"S", "R1", "R2", "R3"}
+    other_fraction = sum(frac for genotype, frac in fractions.items() if genotype not in tracked)
+
+    return {
+        "carrier_count": carrier_count,
+        "active_episodes": sum(1 for r in records if bool(r["has_state"])),
+        "abx_on_carrier_count": sum(1 for r in records if bool(r["abx_on"])),
+        "isolated_carrier_count": sum(1 for r in records if bool(r["is_isolated"])),
+        "mean_resistant_fraction": _mean_or_zero(resistant_values),
+        "p10_resistant_fraction": _quantile_or_zero(resistant_values, 0.10),
+        "p50_resistant_fraction": _quantile_or_zero(resistant_values, 0.50),
+        "p90_resistant_fraction": _quantile_or_zero(resistant_values, 0.90),
+        "mean_p_clearance": _mean_or_zero(clearance_values),
+        "mean_relative_transmissibility": _mean_or_zero(transmissibility_values),
+        "mean_n_strains": _mean_or_zero(n_strain_values),
+        "mean_total_population": _mean_or_zero(total_population_values),
+        "genotype_entropy": float(entropy),
+        "genotype_S_fraction": float(fractions.get("S", 0.0)),
+        "genotype_R1_fraction": float(fractions.get("R1", 0.0)),
+        "genotype_R2_fraction": float(fractions.get("R2", 0.0)),
+        "genotype_R3_fraction": float(fractions.get("R3", 0.0)),
+        "genotype_other_fraction": float(other_fraction),
+    }
+
+
+def _collect_micro_daily_logs(
+    macro: MacroSimulator,
+    micro: MicroSimulator,
+    n_hospitals: int,
+    day: int,
+    run_id: str,
+) -> tuple[
+    dict[str, float | int | str],
+    list[dict[str, float | int | str]],
+    list[dict[str, float | int | str]],
+    list[dict[str, float | int | str]],
+]:
+    all_records: list[dict[str, Any]] = []
+    by_hospital_rows: list[dict[str, float | int | str]] = []
+    patient_rows: list[dict[str, float | int | str]] = []
+    genotype_counter: Counter[str] = Counter()
+
+    for i in range(1, n_hospitals + 1):
+        hid = f"hospital_{i:03d}"
+        carriers = [p for p in macro.get_patients(hid) if p.state == HealthState.CARRIER]
+        hospital_records: list[dict[str, Any]] = []
+
+        for patient in carriers:
+            episode_day = 0
+            n_strains = 0
+            total_population = 0.0
+            has_state = False
+
+            episode_id = patient.episode_id
+            if episode_id:
+                episode_state = micro.get_episode_state(episode_id)
+                if episode_state is not None:
+                    has_state = True
+                    episode_day = int(episode_state.day)
+                    n_strains = int(episode_state.population.n_strains)
+                    total_population = float(episode_state.population.total_population)
+
+            record = {
+                "dominant_genotype": patient.dominant_genotype,
+                "resistant_fraction": float(patient.resistant_fraction),
+                "p_clearance": float(patient.p_clearance),
+                "relative_transmissibility": float(patient.relative_transmissibility),
+                "n_strains": n_strains,
+                "total_population": total_population,
+                "has_state": has_state,
+                "abx_on": bool(patient.regimen.on),
+                "is_isolated": bool(patient.is_isolated),
+            }
+            hospital_records.append(record)
+            all_records.append(record)
+            genotype_counter[str(patient.dominant_genotype)] += 1
+
+            patient_rows.append(
+                {
+                    "day": day,
+                    "run_id": run_id,
+                    "hospital_id": hid,
+                    "patient_id": patient.patient_id,
+                    "episode_id": episode_id or "",
+                    "department": patient.department.value,
+                    "is_isolated": bool(patient.is_isolated),
+                    "abx_on": bool(patient.regimen.on),
+                    "abx_class": patient.regimen.abx_class,
+                    "dose_level": patient.regimen.dose_level,
+                    "adherence": float(patient.adherence),
+                    "immune_strength": float(patient.immune_strength),
+                    "immune_status": patient.immune_status,
+                    "resistant_fraction": float(patient.resistant_fraction),
+                    "dominant_genotype": patient.dominant_genotype,
+                    "relative_transmissibility": float(patient.relative_transmissibility),
+                    "p_clearance": float(patient.p_clearance),
+                    "severity_modifier": float(patient.severity_modifier),
+                    "lethality_modifier": float(patient.lethality_modifier),
+                    "episode_day": episode_day,
+                    "n_strains": n_strains,
+                    "total_population": total_population,
+                }
+            )
+
+        hospital_row = {
+            "day": day,
+            "run_id": run_id,
+            "hospital_id": hid,
+        }
+        stats = _aggregate_micro_records(hospital_records)
+        hospital_row.update(
+            {
+                "carrier_count": stats["carrier_count"],
+                "active_episodes": stats["active_episodes"],
+                "abx_on_carrier_count": stats["abx_on_carrier_count"],
+                "isolated_carrier_count": stats["isolated_carrier_count"],
+                "mean_resistant_fraction": stats["mean_resistant_fraction"],
+                "mean_p_clearance": stats["mean_p_clearance"],
+                "mean_relative_transmissibility": stats["mean_relative_transmissibility"],
+                "mean_n_strains": stats["mean_n_strains"],
+                "mean_total_population": stats["mean_total_population"],
+                "genotype_entropy": stats["genotype_entropy"],
+            }
+        )
+        by_hospital_rows.append(hospital_row)
+
+    global_row: dict[str, float | int | str] = {"day": day, "run_id": run_id}
+    global_stats = _aggregate_micro_records(all_records)
+    global_row.update(global_stats)
+    global_row["active_episodes"] = len(micro.get_active_episodes())
+
+    total_carriers = int(global_stats["carrier_count"])
+    genotype_rows: list[dict[str, float | int | str]] = []
+    genotype_order = ["S", "R1", "R2", "R3"]
+    for genotype in genotype_order:
+        count = int(genotype_counter.get(genotype, 0))
+        genotype_rows.append(
+            {
+                "day": day,
+                "run_id": run_id,
+                "dominant_genotype": genotype,
+                "count": count,
+                "fraction": (count / total_carriers) if total_carriers > 0 else 0.0,
+            }
+        )
+    other_count = sum(
+        count for genotype, count in genotype_counter.items() if genotype not in genotype_order
+    )
+    genotype_rows.append(
+        {
+            "day": day,
+            "run_id": run_id,
+            "dominant_genotype": "OTHER",
+            "count": other_count,
+            "fraction": (other_count / total_carriers) if total_carriers > 0 else 0.0,
+        }
+    )
+
+    return global_row, by_hospital_rows, patient_rows, genotype_rows
+
+
 def _write_csv(path: Path, rows: list[dict[str, float | int | str]], fieldnames: list[str]) -> None:
     if not rows:
         return
@@ -428,6 +719,10 @@ def main() -> None:
     final_summary = None
     macro_daily_rows: list[dict[str, float | int | str]] = []
     macro_daily_by_hospital_rows: list[dict[str, float | int | str]] = []
+    micro_daily_rows: list[dict[str, float | int | str]] = []
+    micro_daily_by_hospital_rows: list[dict[str, float | int | str]] = []
+    micro_patient_daily_rows: list[dict[str, float | int | str]] = []
+    micro_daily_genotype_rows: list[dict[str, float | int | str]] = []
     for day in range(1, settings.run.days + 1):
         macro.step(
             micro_simulator=micro,
@@ -449,6 +744,22 @@ def main() -> None:
         )
         macro_daily_rows.append(global_row)
         macro_daily_by_hospital_rows.extend(hospital_rows)
+        (
+            micro_global_row,
+            micro_hospital_rows,
+            micro_pat_rows,
+            micro_genotype_rows,
+        ) = _collect_micro_daily_logs(
+            macro=macro,
+            micro=micro,
+            n_hospitals=settings.population.hospitals,
+            day=day,
+            run_id=settings.run.run_id,
+        )
+        micro_daily_rows.append(micro_global_row)
+        micro_daily_by_hospital_rows.extend(micro_hospital_rows)
+        micro_patient_daily_rows.extend(micro_pat_rows)
+        micro_daily_genotype_rows.extend(micro_genotype_rows)
 
         if not settings.run.quiet:
             print(
@@ -462,12 +773,24 @@ def main() -> None:
 
     macro_daily_path = DEFAULT_CSV_DIR / "macro_daily.csv"
     macro_daily_by_hospital_path = DEFAULT_CSV_DIR / "macro_daily_by_hospital.csv"
+    micro_daily_path = DEFAULT_CSV_DIR / "micro_daily.csv"
+    micro_daily_by_hospital_path = DEFAULT_CSV_DIR / "micro_daily_by_hospital.csv"
+    micro_patient_daily_path = DEFAULT_CSV_DIR / "micro_patient_daily.csv"
+    micro_daily_genotype_path = DEFAULT_CSV_DIR / "micro_daily_genotype.csv"
     _write_csv(macro_daily_path, macro_daily_rows, _DAILY_FIELDS)
     _write_csv(
         macro_daily_by_hospital_path,
         macro_daily_by_hospital_rows,
         _DAILY_BY_HOSPITAL_FIELDS,
     )
+    _write_csv(micro_daily_path, micro_daily_rows, _MICRO_DAILY_FIELDS)
+    _write_csv(
+        micro_daily_by_hospital_path,
+        micro_daily_by_hospital_rows,
+        _MICRO_DAILY_BY_HOSPITAL_FIELDS,
+    )
+    _write_csv(micro_patient_daily_path, micro_patient_daily_rows, _MICRO_PATIENT_DAILY_FIELDS)
+    _write_csv(micro_daily_genotype_path, micro_daily_genotype_rows, _MICRO_DAILY_GENOTYPE_FIELDS)
 
     print(
         "run_end "
@@ -476,8 +799,13 @@ def main() -> None:
         f"avg_resistant_fraction={final_summary.avg_resistant_fraction:.4f} "
         f"active_micro_episodes={len(micro.get_active_episodes())}"
     )
+    print(f"macro_log_written daily={macro_daily_path} by_hospital={macro_daily_by_hospital_path}")
     print(
-        "macro_log_written " f"daily={macro_daily_path} by_hospital={macro_daily_by_hospital_path}"
+        "micro_log_written "
+        f"daily={micro_daily_path} "
+        f"by_hospital={micro_daily_by_hospital_path} "
+        f"patient_daily={micro_patient_daily_path} "
+        f"genotype={micro_daily_genotype_path}"
     )
 
     visualize_results.run(

@@ -49,7 +49,7 @@ population:
     resistant_fraction: 0.45
     dominant_genotype: R2
     relative_transmissibility: 1.2
-    p_clearance: 0.008           # ~125 day mean carriage (MRSA: 90-200 days)
+    p_clearance: 0.008 # ~125 day mean carriage (MRSA: 90-200 days)
     severity_modifier: 1.2
     lethality_modifier: 1.1
 

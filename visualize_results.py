@@ -3,14 +3,20 @@
 Usage:
     python visualize_results.py
     python visualize_results.py --csv-dir outputs/csv --plot-dir outputs/plots
+    python visualize_results.py --interactive
 
-Produces five diagnostic plots that show whether the simulation is behaving
+Produces diagnostic plots that show whether the simulation is behaving
 realistically:
   01_population_overview.png   — population size, prevalence, resistance, clinical load
   02_occupancy_stability.png   — per-hospital occupancy (validates Poisson ↔ discharge)
   03_hospital_prevalence.png   — per-hospital carrier prevalence (spatial distribution)
   04_department_mix.png        — Ward / ICU patient counts + isolated patients over time
   05_hospital_grid_heatmap.png — 3×2 grid coloured by final-day carrier prevalence
+  06_department_grid.png       — per-hospital department-zone density view
+  07_micro_evolution_overview.png  — micro dynamics over time
+  08_micro_genotype_stream.png     — dominant-genotype composition over time
+  09_micro_hospital_heatmap.png    — hospital-level mean resistance over time
+  10_micro_patient_phase_space.png — patient-level resistance vs clearance (final day)
 """
 
 from __future__ import annotations
@@ -22,6 +28,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from matplotlib.widgets import Slider
 
 DEFAULT_CSV_DIR = Path(__file__).resolve().parent / "outputs" / "csv"
 DEFAULT_PLOT_DIR = Path(__file__).resolve().parent / "outputs" / "plots"
@@ -38,14 +45,28 @@ ROLLING_WINDOW = 7  # days for smoothing
 # ---------------------------------------------------------------------------
 
 
-def _load(csv_dir: Path) -> tuple[pd.DataFrame, pd.DataFrame]:
+def _load(
+    csv_dir: Path,
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     daily_path = csv_dir / "macro_daily.csv"
     hosp_path = csv_dir / "macro_daily_by_hospital.csv"
+    micro_daily_path = csv_dir / "micro_daily.csv"
+    micro_hosp_path = csv_dir / "micro_daily_by_hospital.csv"
+    micro_patient_path = csv_dir / "micro_patient_daily.csv"
+    micro_genotype_path = csv_dir / "micro_daily_genotype.csv"
     if not daily_path.exists():
         raise FileNotFoundError(f"CSV not found: {daily_path}\nRun the simulation first.")
     daily = pd.read_csv(daily_path)
     hosp = pd.read_csv(hosp_path) if hosp_path.exists() else pd.DataFrame()
-    return daily, hosp
+    micro_daily = pd.read_csv(micro_daily_path) if micro_daily_path.exists() else pd.DataFrame()
+    micro_hosp = pd.read_csv(micro_hosp_path) if micro_hosp_path.exists() else pd.DataFrame()
+    micro_patient = (
+        pd.read_csv(micro_patient_path) if micro_patient_path.exists() else pd.DataFrame()
+    )
+    micro_genotype = (
+        pd.read_csv(micro_genotype_path) if micro_genotype_path.exists() else pd.DataFrame()
+    )
+    return daily, hosp, micro_daily, micro_hosp, micro_patient, micro_genotype
 
 
 _quiet_mode = False  # set by run() before plotting
@@ -61,6 +82,12 @@ def _save(fig: plt.Figure, path: Path) -> None:
 
 def _rolling(series: pd.Series, window: int = ROLLING_WINDOW) -> pd.Series:
     return series.rolling(window, min_periods=1, center=True).mean()
+
+
+def _series(df: pd.DataFrame, column: str, default: float = 0.0) -> pd.Series:
+    if column in df.columns:
+        return pd.to_numeric(df[column], errors="coerce").fillna(default)
+    return pd.Series(default, index=df.index, dtype=float)
 
 
 # ---------------------------------------------------------------------------
@@ -436,11 +463,308 @@ def plot_department_grid(
 
 
 # ---------------------------------------------------------------------------
+# Plot 7: Micro Evolution Overview
+# ---------------------------------------------------------------------------
+
+
+def plot_micro_evolution_overview(micro_daily: pd.DataFrame, plot_dir: Path) -> None:
+    if micro_daily.empty or "day" not in micro_daily.columns:
+        print("  skipped 07_micro_evolution_overview.png (no micro daily data)")
+        return
+
+    micro_daily = micro_daily.sort_values("day")
+    days = micro_daily["day"]
+
+    fig, axes = plt.subplots(2, 2, figsize=(13, 8))
+    fig.suptitle("Micro Evolution Overview", fontsize=14, fontweight="bold")
+
+    carriers = _series(micro_daily, "carrier_count")
+    active = _series(micro_daily, "active_episodes")
+    ax = axes[0, 0]
+    ax.plot(days, carriers, lw=1.8, color="steelblue", label="Carrier count")
+    ax.plot(days, active, lw=1.8, color="darkorange", label="Active micro episodes")
+    ax.set_title("Carrier Load")
+    ax.set_xlabel("Day")
+    ax.set_ylabel("Count")
+    ax.legend(fontsize=8)
+    ax.grid(alpha=0.3)
+
+    p10 = _series(micro_daily, "p10_resistant_fraction") * 100
+    p50 = _series(micro_daily, "p50_resistant_fraction") * 100
+    p90 = _series(micro_daily, "p90_resistant_fraction") * 100
+    ax = axes[0, 1]
+    ax.fill_between(days, p10, p90, color="firebrick", alpha=0.2, label="P10-P90")
+    ax.plot(days, p50, color="firebrick", lw=2, label="Median")
+    ax.plot(days, _rolling(p50), color="black", lw=1.2, ls="--", label=f"{ROLLING_WINDOW}d mean")
+    ax.set_title("Within-Host Resistance Distribution (%)")
+    ax.set_xlabel("Day")
+    ax.set_ylabel("Resistant fraction (%)")
+    ax.legend(fontsize=8)
+    ax.grid(alpha=0.3)
+
+    mean_n_strains = _series(micro_daily, "mean_n_strains")
+    mean_total_pop = _series(micro_daily, "mean_total_population")
+    ax = axes[1, 0]
+    ln1 = ax.plot(days, mean_n_strains, color="purple", lw=2, label="Mean strains / episode")
+    ax.set_xlabel("Day")
+    ax.set_ylabel("Strains", color="purple")
+    ax.tick_params(axis="y", labelcolor="purple")
+    ax.grid(alpha=0.3)
+    ax2 = ax.twinx()
+    ln2 = ax2.plot(
+        days,
+        np.log10(mean_total_pop + 1.0),
+        color="teal",
+        lw=1.8,
+        label=r"log10(mean total population + 1)",
+    )
+    ax2.set_ylabel(r"log10 population", color="teal")
+    ax2.tick_params(axis="y", labelcolor="teal")
+    ax.set_title("Strain Diversity and Bacterial Load")
+    lines = ln1 + ln2
+    ax.legend(lines, [line.get_label() for line in lines], fontsize=8, loc="upper left")
+
+    p_clear = _series(micro_daily, "mean_p_clearance") * 100
+    transmissibility = _series(micro_daily, "mean_relative_transmissibility")
+    ax = axes[1, 1]
+    ax.plot(days, p_clear, color="green", lw=2, label="Mean p_clearance (%)")
+    ax.plot(
+        days,
+        transmissibility,
+        color="darkred",
+        lw=2,
+        label="Mean relative transmissibility",
+    )
+    ax.set_title("Micro-Derived Clinical Effectors")
+    ax.set_xlabel("Day")
+    ax.set_ylabel("Value")
+    ax.legend(fontsize=8)
+    ax.grid(alpha=0.3)
+
+    fig.tight_layout()
+    _save(fig, plot_dir / "07_micro_evolution_overview.png")
+
+
+# ---------------------------------------------------------------------------
+# Plot 8: Micro Dominant-Genotype Stream
+# ---------------------------------------------------------------------------
+
+
+def plot_micro_genotype_stream(micro_genotype: pd.DataFrame, plot_dir: Path) -> None:
+    if micro_genotype.empty or "day" not in micro_genotype.columns:
+        print("  skipped 08_micro_genotype_stream.png (no micro genotype data)")
+        return
+
+    pivot = (
+        micro_genotype.pivot_table(
+            index="day",
+            columns="dominant_genotype",
+            values="fraction",
+            aggfunc="sum",
+            fill_value=0.0,
+        )
+        .sort_index()
+        .fillna(0.0)
+    )
+    if pivot.empty:
+        print("  skipped 08_micro_genotype_stream.png (empty genotype pivot)")
+        return
+
+    preferred_order = ["S", "R1", "R2", "R3", "OTHER"]
+    columns = [c for c in preferred_order if c in pivot.columns] + [
+        c for c in pivot.columns if c not in preferred_order
+    ]
+    pivot = pivot[columns]
+
+    color_map = {
+        "S": "#4daf4a",
+        "R1": "#ff7f00",
+        "R2": "#e41a1c",
+        "R3": "#984ea3",
+        "OTHER": "#7f7f7f",
+    }
+    colors = [color_map.get(col, "#7f7f7f") for col in pivot.columns]
+
+    fig, ax = plt.subplots(figsize=(11, 5))
+    fig.suptitle("Dominant Genotype Composition Over Time", fontsize=14, fontweight="bold")
+    ax.stackplot(
+        pivot.index, [pivot[c] * 100 for c in pivot.columns], labels=pivot.columns, colors=colors
+    )
+    ax.set_xlabel("Day")
+    ax.set_ylabel("Share of carriers (%)")
+    ax.set_ylim(0, 100)
+    ax.legend(loc="upper left", fontsize=8, ncol=3)
+    ax.grid(alpha=0.25)
+
+    fig.tight_layout()
+    _save(fig, plot_dir / "08_micro_genotype_stream.png")
+
+
+# ---------------------------------------------------------------------------
+# Plot 9: Micro Hospital Resistance Heatmap (day × hospital)
+# ---------------------------------------------------------------------------
+
+
+def plot_micro_hospital_heatmap(micro_hosp: pd.DataFrame, plot_dir: Path) -> None:
+    if micro_hosp.empty or "hospital_id" not in micro_hosp.columns:
+        print("  skipped 09_micro_hospital_heatmap.png (no micro hospital data)")
+        return
+
+    heat = (
+        micro_hosp.assign(
+            mean_resistant_fraction_pct=_series(micro_hosp, "mean_resistant_fraction") * 100
+        )
+        .pivot_table(
+            index="hospital_id",
+            columns="day",
+            values="mean_resistant_fraction_pct",
+            aggfunc="mean",
+        )
+        .sort_index()
+        .fillna(0.0)
+    )
+    if heat.empty:
+        print("  skipped 09_micro_hospital_heatmap.png (empty heatmap data)")
+        return
+
+    fig, ax = plt.subplots(figsize=(12, max(4, 0.5 * len(heat.index) + 2)))
+    fig.suptitle("Hospital Micro Resistance Heatmap", fontsize=14, fontweight="bold")
+    im = ax.imshow(
+        heat.values, aspect="auto", cmap="YlOrRd", vmin=0, vmax=max(25.0, np.max(heat.values))
+    )
+    ax.set_xlabel("Day")
+    ax.set_ylabel("Hospital")
+    ax.set_xticks(range(len(heat.columns)))
+    ax.set_xticklabels([str(int(day)) for day in heat.columns], rotation=90, fontsize=7)
+    ax.set_yticks(range(len(heat.index)))
+    ax.set_yticklabels([h.replace("hospital_", "H") for h in heat.index], fontsize=8)
+    cbar = fig.colorbar(im, ax=ax, fraction=0.03, pad=0.02)
+    cbar.set_label("Mean resistant fraction (%)")
+
+    fig.tight_layout()
+    _save(fig, plot_dir / "09_micro_hospital_heatmap.png")
+
+
+# ---------------------------------------------------------------------------
+# Plot 10: Micro Patient Phase Space (final day)
+# ---------------------------------------------------------------------------
+
+
+def plot_micro_patient_phase_space(micro_patient: pd.DataFrame, plot_dir: Path) -> None:
+    if micro_patient.empty or "day" not in micro_patient.columns:
+        print("  skipped 10_micro_patient_phase_space.png (no micro patient data)")
+        return
+
+    last_day = int(micro_patient["day"].max())
+    final = micro_patient[micro_patient["day"] == last_day].copy()
+    if final.empty:
+        print("  skipped 10_micro_patient_phase_space.png (empty final-day micro data)")
+        return
+
+    x = _series(final, "resistant_fraction") * 100
+    y = _series(final, "p_clearance") * 100
+    size = 18 + 6 * np.clip(_series(final, "n_strains"), 0, 25)
+    genotype = final["dominant_genotype"].astype(str)
+    color_map = {"S": "#4daf4a", "R1": "#ff7f00", "R2": "#e41a1c", "R3": "#984ea3"}
+    colors = [color_map.get(g, "#7f7f7f") for g in genotype]
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+    fig.suptitle(f"Micro Patient Phase Space (day {last_day})", fontsize=14, fontweight="bold")
+    ax.scatter(x, y, s=size, c=colors, alpha=0.65, edgecolor="black", linewidth=0.2)
+    ax.axvline(np.median(x) if len(x) > 0 else 0, ls="--", lw=1, color="gray", alpha=0.5)
+    ax.axhline(np.median(y) if len(y) > 0 else 0, ls="--", lw=1, color="gray", alpha=0.5)
+    ax.set_xlabel("Resistant fraction (%)")
+    ax.set_ylabel("p_clearance (%)")
+    ax.grid(alpha=0.3)
+
+    legend_labels = ["S", "R1", "R2", "R3", "OTHER"]
+    handles = [
+        plt.Line2D(
+            [0],
+            [0],
+            marker="o",
+            color="w",
+            markerfacecolor=color_map.get(label, "#7f7f7f"),
+            markeredgecolor="black",
+            markeredgewidth=0.2,
+            markersize=7,
+            label=label,
+        )
+        for label in legend_labels
+    ]
+    ax.legend(handles=handles, title="Genotype", fontsize=8, title_fontsize=9, loc="upper right")
+
+    fig.tight_layout()
+    _save(fig, plot_dir / "10_micro_patient_phase_space.png")
+
+
+# ---------------------------------------------------------------------------
+# Optional interactive explorer (micro patient points by day)
+# ---------------------------------------------------------------------------
+
+
+def launch_micro_patient_explorer(micro_patient: pd.DataFrame) -> None:
+    if micro_patient.empty or "day" not in micro_patient.columns:
+        print("  skipped interactive micro explorer (no micro patient data)")
+        return
+
+    days = sorted(int(d) for d in micro_patient["day"].dropna().unique())
+    if not days:
+        print("  skipped interactive micro explorer (no valid day values)")
+        return
+
+    fig, ax = plt.subplots(figsize=(11, 6))
+    fig.subplots_adjust(bottom=0.18)
+
+    slider_ax = fig.add_axes([0.12, 0.06, 0.76, 0.04])
+    slider = Slider(
+        ax=slider_ax,
+        label="Day",
+        valmin=min(days),
+        valmax=max(days),
+        valinit=days[-1],
+        valstep=days,
+    )
+
+    color_map = {"S": "#4daf4a", "R1": "#ff7f00", "R2": "#e41a1c", "R3": "#984ea3"}
+    scatter = ax.scatter([], [], s=[], alpha=0.65, edgecolor="black", linewidth=0.2)
+
+    def _update(day_value: float) -> None:
+        day = int(day_value)
+        sub = micro_patient[micro_patient["day"] == day]
+        x = _series(sub, "resistant_fraction") * 100
+        y = _series(sub, "p_clearance") * 100
+        sizes = 18 + 6 * np.clip(_series(sub, "n_strains"), 0, 25)
+        colors = [color_map.get(str(g), "#7f7f7f") for g in sub["dominant_genotype"].astype(str)]
+
+        points = np.column_stack([x.values, y.values]) if len(sub) > 0 else np.empty((0, 2))
+        scatter.set_offsets(points)
+        scatter.set_sizes(sizes.values if len(sub) > 0 else [])
+        scatter.set_color(colors)
+
+        ax.set_xlim(0, max(100.0, float(x.max()) * 1.1 if len(sub) > 0 else 100.0))
+        ax.set_ylim(0, max(100.0, float(y.max()) * 1.2 if len(sub) > 0 else 100.0))
+        ax.set_xlabel("Resistant fraction (%)")
+        ax.set_ylabel("p_clearance (%)")
+        ax.set_title(f"Interactive Micro Patient Explorer — day {day} (n={len(sub)})")
+        ax.grid(alpha=0.3)
+        fig.canvas.draw_idle()
+
+    slider.on_changed(_update)
+    _update(days[-1])
+    plt.show()
+
+
+# ---------------------------------------------------------------------------
 # Sanity-check summary printed to console
 # ---------------------------------------------------------------------------
 
 
-def _print_sanity_checks(daily: pd.DataFrame, hosp: pd.DataFrame) -> None:
+def _print_sanity_checks(
+    daily: pd.DataFrame,
+    hosp: pd.DataFrame,
+    micro_daily: pd.DataFrame,
+) -> None:
     last = daily.iloc[-1]
     final_prev = last["prevalence"] * 100
     final_res = last["avg_resistant_fraction"]
@@ -469,6 +793,11 @@ def _print_sanity_checks(daily: pd.DataFrame, hosp: pd.DataFrame) -> None:
         f"  Occupancy CV:          {occ_cv:.3f}"
         + (" (stable)" if occ_cv < 0.10 else " (volatile — check admission rate)")
     )
+    if not micro_daily.empty:
+        m_last = micro_daily.iloc[-1]
+        print(f"  Final active episodes: {int(m_last.get('active_episodes', 0))}")
+        print(f"  Final mean p_clear:    {float(m_last.get('mean_p_clearance', 0.0)):.3f}")
+        print(f"  Final mean n_strains:  {float(m_last.get('mean_n_strains', 0.0)):.2f}")
     print("────────────────────────────────────────────────────────────\n")
 
 
@@ -481,6 +810,7 @@ def run(
     csv_dir: Path = DEFAULT_CSV_DIR,
     plot_dir: Path = DEFAULT_PLOT_DIR,
     quiet: bool = False,
+    interactive: bool = False,
 ) -> None:
     """Generate all diagnostic plots from simulation CSVs.
 
@@ -493,12 +823,16 @@ def run(
     global _quiet_mode
     _quiet_mode = quiet
 
-    daily, hosp = _load(csv_dir)
+    daily, hosp, micro_daily, micro_hosp, micro_patient, micro_genotype = _load(csv_dir)
 
     if not quiet:
         print(f"Reading CSVs from: {csv_dir}")
         print(f"  macro_daily:             {len(daily)} rows")
         print(f"  macro_daily_by_hospital: {len(hosp)} rows")
+        print(f"  micro_daily:             {len(micro_daily)} rows")
+        print(f"  micro_daily_by_hospital: {len(micro_hosp)} rows")
+        print(f"  micro_patient_daily:     {len(micro_patient)} rows")
+        print(f"  micro_daily_genotype:    {len(micro_genotype)} rows")
         print(f"\nGenerating plots → {plot_dir}")
 
     plot_population_overview(daily, plot_dir)
@@ -507,19 +841,31 @@ def run(
     plot_department_mix(daily, plot_dir)
     plot_hospital_grid_heatmap(hosp, plot_dir)
     plot_department_grid(hosp, plot_dir)
+    plot_micro_evolution_overview(micro_daily, plot_dir)
+    plot_micro_genotype_stream(micro_genotype, plot_dir)
+    plot_micro_hospital_heatmap(micro_hosp, plot_dir)
+    plot_micro_patient_phase_space(micro_patient, plot_dir)
 
     if quiet:
         print(f"plots_written to={plot_dir}")
     else:
-        _print_sanity_checks(daily, hosp)
+        _print_sanity_checks(daily, hosp, micro_daily)
+        if interactive:
+            print("Opening interactive micro explorer...")
+            launch_micro_patient_explorer(micro_patient)
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Visualize simulation results.")
     parser.add_argument("--csv-dir", type=Path, default=DEFAULT_CSV_DIR)
     parser.add_argument("--plot-dir", type=Path, default=DEFAULT_PLOT_DIR)
+    parser.add_argument(
+        "--interactive",
+        action="store_true",
+        help="Open an interactive day-slider explorer for micro patient phase space.",
+    )
     args = parser.parse_args()
-    run(csv_dir=args.csv_dir, plot_dir=args.plot_dir)
+    run(csv_dir=args.csv_dir, plot_dir=args.plot_dir, interactive=args.interactive)
 
 
 if __name__ == "__main__":
