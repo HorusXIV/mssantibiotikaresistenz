@@ -39,12 +39,35 @@ macro:
   base_isolation_effectiveness: 0.45
   base_diagnostic_speed: 0.55
   base_transmission_rate: 0.1
-  daily_contact_attempts: 25.0
+  daily_contact_attempts: 20.0
   icu_abx_probability: 0.85
   ward_abx_probability: 0.4
-  carrier_isolation_probability: 0.15
+  carrier_isolation_probability: 0.25
   transmission_mutation_probability: 0.3
   transmission_resistance_mutation_std: 0.1
+
+  # LOS + Discharge
+  los_mean_ward: 8.0
+  los_mean_icu: 14.0
+  los_sigma: 0.6
+  carrier_extension_days: 14.0
+  discharge_logistic_k: 1.0
+  discharge_logistic_t_half: 3.0
+
+  # Admissions (total per day across all hospitals; 0 = disabled)
+  # Steady-state: 1010 patients / 8 days LOS ≈ 126/day
+  daily_admission_rate: 40.0
+  community_carrier_fraction: 0.03
+  replacement_resistant_fraction: 0.05
+  replacement_dominant_genotype: "S"
+  max_occupancy_per_hospital: 80
+
+  # Grid (Feature 2 — used once Mesa grids are integrated)
+  dept_grid_cols: 3
+  dept_grid_rows: 2
+  dept_grid_icu_rows: 1
+  network_grid_cols: 3
+  proximity_decay_alpha: 0.5
 
 micro:
   workers: null
