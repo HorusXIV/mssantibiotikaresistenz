@@ -1,0 +1,2 @@
+mkdir: cannot create directory ‘/var/lib/slurm/slurmd/job06135/logs’: Permission denied
+Expected pyproject.toml in /var/lib/slurm/slurmd/job06135, but it was not found.

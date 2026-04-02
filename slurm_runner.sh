@@ -5,7 +5,6 @@
 #SBATCH --mem=64G
 #SBATCH --cpus-per-task=64
 #SBATCH --output=logs/%x-%j.out
-#SBATCH --error=logs/%x-%j.err
 
 # Absolute path to the repository on the host
 PROJECT_DIR="${SLURM_SUBMIT_DIR:-$(pwd)}"
