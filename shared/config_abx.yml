@@ -5,9 +5,9 @@ run:
   quiet: false
 
 population:
-  hospitals: 6
-  susceptible_count: 290
-  carrier_count: 30
+  hospitals: 15
+  susceptible_count: 9925
+  carrier_count: 75
   initial_department: ward
   susceptible_template:
     age_years: 50
@@ -47,32 +47,32 @@ macro:
   transmission_resistance_mutation_std: 0.1
 
   # LOS + Discharge
-  los_mean_ward: 8.0
-  los_mean_icu: 14.0
-  los_sigma: 0.6
-  carrier_extension_days: 14.0
-  discharge_logistic_k: 1.0
-  discharge_logistic_t_half: 3.0
+  los_mean_ward: 7.0
+  los_mean_icu: 12.0
+  los_sigma: 0.5
+  carrier_extension_days: 9.0
+  discharge_logistic_k: 1.25
+  discharge_logistic_t_half: 1.5
 
   # Admissions (total per day across all hospitals; 0 = disabled)
-  # Steady-state: 1010 patients / 8 days LOS ≈ 126/day
-  daily_admission_rate: 40.0
-  community_carrier_fraction: 0.03
-  replacement_resistant_fraction: 0.05
+  # Steady-state target for ~10k patients with effective LOS around 11 days: ~900/day
+  daily_admission_rate: 900.0
+  community_carrier_fraction: 0.08
+  replacement_resistant_fraction: 0.12
   replacement_dominant_genotype: "S"
-  max_occupancy_per_hospital: 80
+  max_occupancy_per_hospital: 800
 
   # Grid (Feature 2 — used once Mesa grids are integrated)
   dept_grid_cols: 3
-  dept_grid_rows: 2
+  dept_grid_rows: 4
   dept_grid_icu_rows: 1
-  network_grid_cols: 3
+  network_grid_cols: 4
   proximity_decay_alpha: 0.5
 
 micro:
   workers: 64
   steps_per_day: 12
-  max_strains: 90
+  max_strains: 100
   carrying_capacity: 1000000000.0
   min_population: 100.0
   clearance_threshold: 12.0
