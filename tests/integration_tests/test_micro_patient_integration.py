@@ -200,10 +200,12 @@ class TestMicroResponseStructure:
         updated_state = response["updated_state"]
         assert "resistant_fraction" in updated_state
         assert "dominant_genotype" in updated_state
+        assert "dominant_strain_name" in updated_state
 
         # Check types
         assert isinstance(updated_state["resistant_fraction"], (int, float))
         assert isinstance(updated_state["dominant_genotype"], str)
+        assert isinstance(updated_state["dominant_strain_name"], str)
 
     def test_response_derived_effects_fields(
         self, carrier_patient: Patient, micro_simulator: MicroSimulator
@@ -265,6 +267,10 @@ class TestEndToEndIntegration:
         assert carrier_patient.resistant_fraction == response["updated_state"]["resistant_fraction"]
         assert carrier_patient.dominant_genotype == response["updated_state"]["dominant_genotype"]
         assert (
+            carrier_patient.dominant_strain_name
+            == response["updated_state"]["dominant_strain_name"]
+        )
+        assert (
             carrier_patient.relative_transmissibility
             == response["derived_effects"]["relative_transmissibility"]
         )
@@ -308,9 +314,36 @@ class TestEndToEndIntegration:
             rng=np.random.default_rng(42),
         )
 
-        _, genotype = get_dominant_strain(population)
+        _, genotype, _ = get_dominant_strain(population)
 
         assert genotype == "R3"
+
+    def test_initial_population_assigns_unique_funky_names(self):
+        population = StrainPopulation.create_initial(
+            resistant_fraction=0.4,
+            dominant_genotype="R2",
+            rng=np.random.default_rng(7),
+        )
+
+        assert len(population.strain_names) == population.n_strains
+        assert len(set(population.strain_names)) == population.n_strains
+        assert all("_" in name for name in population.strain_names)
+        assert all(
+            name.split("_", maxsplit=1)[0] != name.split("_", maxsplit=1)[1]
+            for name in population.strain_names
+        )
+
+    def test_episode_state_preserves_strain_names(
+        self, carrier_patient: Patient, micro_simulator: MicroSimulator
+    ):
+        request = carrier_patient.make_micro_request(run_id="run_001", day=1, dt_days=1, seed=42)
+        response = micro_simulator.process_request(request)
+        carrier_patient.apply_micro_response(response)
+
+        state = micro_simulator.get_episode_state("episode_001")
+        assert state is not None
+        assert len(state.population.strain_names) == state.population.n_strains
+        assert carrier_patient.dominant_strain_name in state.population.strain_names
 
 
 # =============================================================================

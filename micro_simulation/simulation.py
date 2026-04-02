@@ -13,6 +13,8 @@ from dataclasses import dataclass
 from typing import Any, Dict, Tuple
 
 import numpy as np
+from funkybob import UniqueRandomNameGenerator
+from funkybob import data as funkybob_data
 
 from .genome import (
     ABX_PROFILES,
@@ -27,6 +29,45 @@ from .genome import (
     create_resistant_genome,
     create_wild_type_genome,
 )
+
+
+def _next_unique_strain_name(
+    existing_names: set[str],
+    rng: np.random.Generator,
+    preferred_name: str | None = None,
+) -> str:
+    if preferred_name and preferred_name not in existing_names:
+        existing_names.add(preferred_name)
+        return preferred_name
+
+    while True:
+        seed = int(rng.integers(0, 2**31 - 1))
+        generator = UniqueRandomNameGenerator(
+            members=2,
+            seed=seed,
+            names=funkybob_data.ADJECTIVES,
+            adjectives=funkybob_data.ADJECTIVES,
+        )
+        name = generator[0]
+        first, second = name.split("_", maxsplit=1)
+        if first != second and name not in existing_names:
+            existing_names.add(name)
+            return name
+
+
+def _extend_strain_names(
+    names: list[str],
+    count: int,
+    rng: np.random.Generator,
+    preferred_names: list[str] | None = None,
+) -> list[str]:
+    updated = list(names)
+    existing = set(updated)
+    preferred_names = preferred_names or []
+    for idx in range(count):
+        preferred = preferred_names[idx] if idx < len(preferred_names) else None
+        updated.append(_next_unique_strain_name(existing, rng, preferred_name=preferred))
+    return updated
 
 
 @dataclass
@@ -86,6 +127,7 @@ class StrainPopulation:
     populations: np.ndarray  # Shape (n_strains,) - population sizes
     lineage_ages: np.ndarray | None = None  # Shape (n_strains,) - cumulative lineage age
     damage_loads: np.ndarray | None = None  # Shape (n_strains,) - accumulated stress / damage
+    strain_names: list[str] | None = None
 
     def __post_init__(self):
         assert self.genomes.ndim == 2
@@ -99,6 +141,11 @@ class StrainPopulation:
         self.damage_loads = np.asarray(self.damage_loads, dtype=np.float64)
         assert len(self.lineage_ages) == len(self.genomes)
         assert len(self.damage_loads) == len(self.genomes)
+        if self.strain_names is None:
+            self.strain_names = [f"strain_{idx:04d}" for idx in range(len(self.populations))]
+        else:
+            self.strain_names = [str(name) for name in self.strain_names]
+        assert len(self.strain_names) == len(self.genomes)
 
     @property
     def n_strains(self) -> int:
@@ -114,6 +161,7 @@ class StrainPopulation:
             populations=self.populations.copy(),
             lineage_ages=self.lineage_ages.copy(),
             damage_loads=self.damage_loads.copy(),
+            strain_names=self.strain_names.copy(),
         )
 
     @classmethod
@@ -125,6 +173,7 @@ class StrainPopulation:
         n_susceptible_strains: int = 3,
         n_resistant_strains: int = 2,
         rng: np.random.Generator = None,
+        dominant_strain_name: str | None = None,
     ) -> StrainPopulation:
         """Create initial population with optional resistance."""
         if rng is None:
@@ -132,6 +181,7 @@ class StrainPopulation:
 
         strains = []
         pops = []
+        names: list[str] = []
 
         # Susceptible strains
         sus_pop = initial_population * (1 - resistant_fraction)
@@ -142,16 +192,24 @@ class StrainPopulation:
             genome = np.clip(genome, 0.0, 1.0)
             strains.append(genome)
             pops.append(sus_pop / n_susceptible_strains)
+        names = _extend_strain_names(
+            names,
+            n_susceptible_strains,
+            rng,
+            preferred_names=[dominant_strain_name] if dominant_genotype == "S" else None,
+        )
 
         # Resistant strains (if any)
         if resistant_fraction > 0 and n_resistant_strains > 0:
             res_pop = initial_population * resistant_fraction
+            preferred_names = [dominant_strain_name] if dominant_genotype != "S" else None
             for i in range(n_resistant_strains):
                 genome = _create_seed_genome_for_genotype(dominant_genotype)
                 genome += rng.normal(0, 0.02, NUM_GENES).astype(np.float32)
                 genome = np.clip(genome, 0.0, 1.0)
                 strains.append(genome)
                 pops.append(res_pop / n_resistant_strains)
+            names = _extend_strain_names(names, n_resistant_strains, rng, preferred_names)
 
         genomes = np.array(strains, dtype=np.float32)
         populations = np.array(pops, dtype=np.float64)
@@ -163,6 +221,7 @@ class StrainPopulation:
             populations=populations,
             lineage_ages=lineage_ages,
             damage_loads=damage_loads,
+            strain_names=names,
         )
 
 
@@ -218,6 +277,7 @@ def mutate_population(
     populations = population.populations.copy()
     lineage_ages = population.lineage_ages.copy()
     damage_loads = population.damage_loads.copy()
+    strain_names = population.strain_names.copy()
 
     # Stress-induced mutation rate increase
     stress_mult = 1.0 + abx_stress * (config.stress_mutation_boost - 1.0)
@@ -266,12 +326,14 @@ def mutate_population(
         populations = np.concatenate([populations, np.array(new_pops)])
         lineage_ages = np.concatenate([lineage_ages, np.array(new_ages, dtype=np.float64)])
         damage_loads = np.concatenate([damage_loads, np.array(new_damage, dtype=np.float64)])
+        strain_names = _extend_strain_names(strain_names, len(new_strains), rng)
 
     return StrainPopulation(
         genomes=genomes,
         populations=populations,
         lineage_ages=lineage_ages,
         damage_loads=damage_loads,
+        strain_names=strain_names,
     )
 
 
@@ -290,6 +352,7 @@ def horizontal_gene_transfer(
     populations = population.populations.copy()
     lineage_ages = population.lineage_ages.copy()
     damage_loads = population.damage_loads.copy()
+    strain_names = population.strain_names.copy()
 
     # HGT probability based on competence
     competence = genomes[:, GeneIndex.HGT_COMPETENCE]
@@ -351,12 +414,14 @@ def horizontal_gene_transfer(
         populations = np.concatenate([populations, np.array(new_pops)])
         lineage_ages = np.concatenate([lineage_ages, np.array(new_ages, dtype=np.float64)])
         damage_loads = np.concatenate([damage_loads, np.array(new_damage, dtype=np.float64)])
+        strain_names = _extend_strain_names(strain_names, len(new_strains), rng)
 
     return StrainPopulation(
         genomes=genomes,
         populations=populations,
         lineage_ages=lineage_ages,
         damage_loads=damage_loads,
+        strain_names=strain_names,
     )
 
 
@@ -506,6 +571,7 @@ def selection_step(
         populations=populations,
         lineage_ages=lineage_ages,
         damage_loads=damage_loads,
+        strain_names=population.strain_names.copy(),
     )
 
 
@@ -522,12 +588,14 @@ def consolidate_strains(population: StrainPopulation, config: SimulationConfig) 
             populations=np.empty(0, dtype=np.float64),
             lineage_ages=np.empty(0, dtype=np.float64),
             damage_loads=np.empty(0, dtype=np.float64),
+            strain_names=[],
         )
 
     genomes = population.genomes[mask]
     populations = population.populations[mask]
     lineage_ages = population.lineage_ages[mask]
     damage_loads = population.damage_loads[mask]
+    strain_names = [name for name, keep in zip(population.strain_names, mask, strict=False) if keep]
 
     # If too many strains, keep the largest ones
     if len(populations) > config.max_strains:
@@ -536,12 +604,14 @@ def consolidate_strains(population: StrainPopulation, config: SimulationConfig) 
         populations = populations[indices]
         lineage_ages = lineage_ages[indices]
         damage_loads = damage_loads[indices]
+        strain_names = [strain_names[idx] for idx in indices]
 
     return StrainPopulation(
         genomes=genomes,
         populations=populations,
         lineage_ages=lineage_ages,
         damage_loads=damage_loads,
+        strain_names=strain_names,
     )
 
 
@@ -659,17 +729,18 @@ def compute_clearance_probability(
     return float(np.clip(p_clear, 0.001, 0.95))
 
 
-def get_dominant_strain(population: StrainPopulation) -> Tuple[np.ndarray, str]:
-    """Get the genome and genotype of the dominant strain."""
+def get_dominant_strain(population: StrainPopulation) -> Tuple[np.ndarray, str, str]:
+    """Get the genome, genotype, and name of the dominant strain."""
     if population.n_strains == 0:
         genome = create_wild_type_genome()
-        return genome, "S"
+        return genome, "S", ""
 
     idx = np.argmax(population.populations)
     genome = population.genomes[idx]
     genotype = classify_genotype(genome)
+    strain_name = population.strain_names[idx]
 
-    return genome, genotype
+    return genome, genotype, strain_name
 
 
 def population_to_response(
@@ -686,7 +757,7 @@ def population_to_response(
     if config is None:
         config = SimulationConfig()
 
-    dominant_genome, dominant_genotype = get_dominant_strain(population)
+    dominant_genome, dominant_genotype, dominant_strain_name = get_dominant_strain(population)
     resistant_fraction = compute_resistant_fraction(population.genomes, population.populations)
 
     # Compute derived effects from dominant strain
@@ -699,6 +770,7 @@ def population_to_response(
         "updated_state": {
             "resistant_fraction": resistant_fraction,
             "dominant_genotype": dominant_genotype,
+            "dominant_strain_name": dominant_strain_name,
         },
         "derived_effects": {
             "relative_transmissibility": transmissibility,
@@ -709,5 +781,6 @@ def population_to_response(
         "population_stats": {
             "total_population": population.total_population,
             "n_strains": population.n_strains,
+            "dominant_strain_name": dominant_strain_name,
         },
     }

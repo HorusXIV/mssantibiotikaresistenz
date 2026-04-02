@@ -553,6 +553,7 @@ class MacroSimulator:
         if source is None:
             patient.resistant_fraction = 0.0
             patient.dominant_genotype = "S"
+            patient.dominant_strain_name = ""
             patient.relative_transmissibility = 1.0
             patient.severity_modifier = 1.0
             patient.lethality_modifier = 1.0
@@ -562,6 +563,7 @@ class MacroSimulator:
         resistance, genotype = self._inherit_transmitted_state(source)
         patient.resistant_fraction = resistance
         patient.dominant_genotype = genotype
+        patient.dominant_strain_name = source.dominant_strain_name
         patient.relative_transmissibility = source.relative_transmissibility
         patient.severity_modifier = source.severity_modifier
         patient.lethality_modifier = source.lethality_modifier

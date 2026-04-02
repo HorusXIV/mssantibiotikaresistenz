@@ -561,6 +561,15 @@ wheels = [
 ]
 
 [[package]]
+name = "funkybob"
+version = "2023.12.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/e8/91/f335bef5f43ed3b7ec2fb5d7403ba5f6dd0c3df69bb36fc72e89705e374b/funkybob-2023.12.0.tar.gz", hash = "sha256:98f313597e81458440788c747f4066e6563750ba3cf710229bae0c4fc21cd3cb", size = 6605, upload-time = "2023-12-04T12:41:06.434Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/16/0e/d1a6061598705fc0c1cfef6ffe72d6249caa46fddc2a6ef38ab4ca764936/funkybob-2023.12.0-py3-none-any.whl", hash = "sha256:f8e0afbb309cfa3681b1bb3fe327f9b19383a2930837ef4997b59c0e772d9483", size = 6810, upload-time = "2023-12-04T12:41:05.153Z" },
+]
+
+[[package]]
 name = "gast"
 version = "0.6.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1177,6 +1186,7 @@ name = "mss"
 version = "0.2.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "funkybob" },
     { name = "ipykernel" },
     { name = "matplotlib" },
     { name = "mesa" },
@@ -1198,6 +1208,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "funkybob", specifier = ">=2023.12.0" },
     { name = "ipykernel", specifier = ">=7.2.0,<8.0.0" },
     { name = "matplotlib", specifier = ">=3.10.8,<4.0.0" },
     { name = "mesa", specifier = ">=3.5.1" },

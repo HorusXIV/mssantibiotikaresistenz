@@ -42,6 +42,7 @@ class EpisodeState:
             "populations": self.population.populations.tolist(),
             "lineage_ages": self.population.lineage_ages.tolist(),
             "damage_loads": self.population.damage_loads.tolist(),
+            "strain_names": self.population.strain_names,
         }
 
     def to_payload(self) -> Dict[str, Any]:
@@ -54,6 +55,7 @@ class EpisodeState:
             "populations": self.population.populations.copy(),
             "lineage_ages": self.population.lineage_ages.copy(),
             "damage_loads": self.population.damage_loads.copy(),
+            "strain_names": self.population.strain_names.copy(),
         }
 
     @classmethod
@@ -65,6 +67,7 @@ class EpisodeState:
         populations = np.array(data["populations"], dtype=np.float64)
         lineage_ages = np.array(data.get("lineage_ages", []), dtype=np.float64)
         damage_loads = np.array(data.get("damage_loads", []), dtype=np.float64)
+        strain_names = [str(name) for name in data.get("strain_names", [])]
         return cls(
             episode_id=data["episode_id"],
             patient_id=data["patient_id"],
@@ -73,6 +76,7 @@ class EpisodeState:
                 populations=populations,
                 lineage_ages=lineage_ages if len(lineage_ages) else None,
                 damage_loads=damage_loads if len(damage_loads) else None,
+                strain_names=strain_names if strain_names else None,
             ),
             day=data.get("day", 0),
         )
@@ -92,6 +96,7 @@ class EpisodeState:
                 populations=np.array(data["populations"], dtype=np.float64, copy=True),
                 lineage_ages=np.array(data["lineage_ages"], dtype=np.float64, copy=True),
                 damage_loads=np.array(data["damage_loads"], dtype=np.float64, copy=True),
+                strain_names=[str(name) for name in data.get("strain_names", [])] or None,
             ),
             day=data.get("day", 0),
         )
@@ -126,6 +131,7 @@ def _process_single_request(args: tuple) -> Dict[str, Any]:
             resistant_fraction=resistant_fraction,
             dominant_genotype=dominant_genotype,
             rng=rng,
+            dominant_strain_name=initial.get("dominant_strain_name"),
         )
 
     # Extract parameters from request
@@ -375,6 +381,7 @@ def run_micro_simulation(
         resistant_fraction=resistant_fraction,
         dominant_genotype=dominant_genotype,
         rng=rng,
+        dominant_strain_name=initial.get("dominant_strain_name"),
     )
 
     # Extract parameters

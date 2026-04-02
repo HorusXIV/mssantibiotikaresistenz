@@ -100,6 +100,7 @@ class Patient:
     # --- Micro outputs stored on patient (updated daily if carrier) ---
     resistant_fraction: float = 0.0  # 0..1
     dominant_genotype: str = "S"  # "S", "R1", "R2", ...
+    dominant_strain_name: str = ""
     relative_transmissibility: float = 1.0  # multiplies macro beta
     p_clearance: float = 0.02  # daily probability C->S
     severity_modifier: float = 1.0  # strain-driven (optional for macro)
@@ -178,6 +179,7 @@ class Patient:
             "initial_state": {
                 "resistant_fraction": self.resistant_fraction,
                 "dominant_genotype": self.dominant_genotype,
+                "dominant_strain_name": self.dominant_strain_name,
             },
             # Reproducibility
             "seed": seed,
@@ -204,6 +206,8 @@ class Patient:
             self.resistant_fraction = float(updated_state["resistant_fraction"])
         if "dominant_genotype" in updated_state:
             self.dominant_genotype = str(updated_state["dominant_genotype"])
+        if "dominant_strain_name" in updated_state:
+            self.dominant_strain_name = str(updated_state["dominant_strain_name"])
 
         # Derived effects for macro
         if "relative_transmissibility" in derived:
@@ -261,6 +265,7 @@ class Patient:
         self.episode_id = None
         self.resistant_fraction = 0.0
         self.dominant_genotype = "S"
+        self.dominant_strain_name = ""
         self.relative_transmissibility = 1.0
         self.p_clearance = 0.02
         self.severity_modifier = 1.0
