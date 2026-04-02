@@ -270,3 +270,4 @@ outputs/csv/*
 !outputs/csv/.gitkeep
 outputs/plots/*
 !outputs/plots/.gitkeep
+containers/**/*.sif

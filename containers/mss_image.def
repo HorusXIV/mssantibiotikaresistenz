@@ -53,9 +53,7 @@ Stage: build
 
     python --version
 
-    curl -LsSf https://astral.sh/uv/install.sh | sh -s -- --version ${UV_VERSION}
-    ln -sf /root/.local/bin/uv /usr/local/bin/uv
-    ln -sf /root/.local/bin/uvx /usr/local/bin/uvx
+    curl -LsSf "https://astral.sh/uv/${UV_VERSION}/install.sh" | env UV_UNMANAGED_INSTALL="/usr/local/bin" sh
 
     uv --version
 
