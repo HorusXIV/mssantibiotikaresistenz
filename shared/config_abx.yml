@@ -70,7 +70,7 @@ macro:
   proximity_decay_alpha: 0.5
 
 micro:
-  workers: null
+  workers: 64
   steps_per_day: 12
   max_strains: 90
   carrying_capacity: 1000000000.0

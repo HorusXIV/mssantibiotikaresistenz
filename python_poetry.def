@@ -1,0 +1,82 @@
+Bootstrap: docker
+From: python:3.13-slim-bookworm
+Stage: build
+
+%labels
+    Maintainer Lukas Breiter, Damian Szedalik
+    Description "CPU-first Singularity image for MSS with uv; GPU-ready via singularity --nv when needed"
+
+%environment
+    export LC_ALL=C.UTF-8
+    export LANG=C.UTF-8
+    export DEBIAN_FRONTEND=noninteractive
+
+    export UV_VERSION=0.8.17
+    export UV_LINK_MODE=copy
+    export UV_CACHE_DIR=/tmp/uv-cache
+    export UV_PROJECT_ENVIRONMENT=.venv
+    export PATH="/usr/local/bin:$PATH"
+
+%post
+    export LC_ALL=C.UTF-8
+    export LANG=C.UTF-8
+    export DEBIAN_FRONTEND=noninteractive
+
+    export UV_VERSION=${UV_VERSION:-0.8.17}
+    export UV_LINK_MODE=${UV_LINK_MODE:-copy}
+    export UV_CACHE_DIR=${UV_CACHE_DIR:-/tmp/uv-cache}
+    export UV_PROJECT_ENVIRONMENT=${UV_PROJECT_ENVIRONMENT:-.venv}
+    export PATH="/usr/local/bin:$PATH"
+
+    apt-get update -y
+    apt-get install -y --no-install-recommends \
+        build-essential \
+        ca-certificates \
+        curl \
+        git \
+        jq \
+        libbz2-dev \
+        libffi-dev \
+        libgdbm-dev \
+        liblzma-dev \
+        libncurses5-dev \
+        libncursesw5-dev \
+        libreadline-dev \
+        libsqlite3-dev \
+        libssl-dev \
+        libxml2-dev \
+        libxmlsec1-dev \
+        tk-dev \
+        wget \
+        zlib1g-dev
+    rm -rf /var/lib/apt/lists/*
+
+    python --version
+
+    curl -LsSf https://astral.sh/uv/install.sh | sh -s -- --version ${UV_VERSION}
+    ln -sf /root/.local/bin/uv /usr/local/bin/uv
+    ln -sf /root/.local/bin/uvx /usr/local/bin/uvx
+
+    uv --version
+
+    mkdir -p /workspace "${UV_CACHE_DIR}"
+
+    NOW=$(date)
+    echo "export NOW=\"${NOW}\"" >> "${SINGULARITY_ENVIRONMENT}"
+
+%runscript
+    exec /bin/bash "$@"
+
+%help
+    CPU-first Python 3.13 image for the MSS project.
+
+    Included:
+    - uv for dependency resolution and execution
+    - common build tools for scientific Python packages
+    - git/curl/jq for batch and CI-style workflows
+
+    Typical usage from the project root mounted at /workspace:
+        singularity exec python_poetry.sif bash -lc "cd /workspace && uv sync && uv run python run_coupled_simulation.py"
+
+    If GPU support is added later, start the container with:
+        singularity exec --nv ...
