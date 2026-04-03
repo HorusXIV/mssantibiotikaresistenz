@@ -16,16 +16,16 @@ import math
 import random
 from typing import Any, Callable, Dict, List, Optional
 
-from exchange.patient import (
+from mss.domain import (
     AntibioticRegimen,
     Department,
     HealthState,
     Patient,
     PatientDailyContext,
 )
-from macro_simulation.agents import PatientAgent, _MesaModel
-from macro_simulation.grid import HospitalDepartmentGrid, HospitalNetworkGrid
-from macro_simulation.simulation import SimulationConfig
+from mss.simulation.macro.agents import PatientAgent, _MesaModel
+from mss.simulation.macro.config import SimulationConfig
+from mss.simulation.macro.grid import HospitalDepartmentGrid, HospitalNetworkGrid
 
 # Antibiotic classes the macro policy may prescribe
 _ABX_CLASSES = [

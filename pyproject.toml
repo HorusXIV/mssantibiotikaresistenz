@@ -26,6 +26,10 @@ dependencies = [
     "funkybob>=2023.12.0",
 ]
 
+[project.scripts]
+mss-run = "mss.cli.run_coupled_simulation:main"
+mss-visualize = "mss.cli.visualize_results:main"
+
 [dependency-groups]
 dev = [
     "pytest>=8.0.0",
@@ -36,7 +40,7 @@ dev = [
 ]
 
 [tool.uv]
-package = false
+package = true
 
 [build-system]
 requires = ["uv_build>=0.10.8,<0.11.0"]

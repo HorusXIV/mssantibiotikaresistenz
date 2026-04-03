@@ -22,5 +22,5 @@ singularity exec \
   bash -lc "\
     cd ${WORKDIR} && \
     uv sync && \
-    uv run python run_coupled_simulation.py --config shared/config_abx.yml \
+    uv run mss-run --config config/simulation_abx.yml \
   "

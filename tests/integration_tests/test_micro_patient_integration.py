@@ -12,21 +12,22 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from exchange.patient import (
+from mss.domain import (
     AntibioticRegimen,
     Department,
     HealthState,
     Patient,
     PatientDailyContext,
 )
-from micro_simulation.genome import GeneIndex, create_wild_type_genome
-from micro_simulation.simulation import (
+from mss.simulation.micro import (
+    GeneIndex,
+    MicroSimulator,
     SimulationConfig,
     StrainPopulation,
+    create_wild_type_genome,
     get_dominant_strain,
     simulate_day,
 )
-from micro_simulation.simulator import MicroSimulator
 
 # =============================================================================
 # Fixtures

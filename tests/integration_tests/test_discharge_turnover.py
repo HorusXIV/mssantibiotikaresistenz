@@ -5,9 +5,8 @@ import random
 
 import pytest
 
-from exchange.patient import Department, HealthState, Patient
-from macro_simulation.simulation import SimulationConfig
-from macro_simulation.simulator import MacroSimulator
+from mss.domain import Department, HealthState, Patient
+from mss.simulation.macro import MacroSimulator, SimulationConfig
 
 _H1 = "hospital_001"
 

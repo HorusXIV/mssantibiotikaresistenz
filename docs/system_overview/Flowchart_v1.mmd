@@ -10,7 +10,7 @@ subgraph GRID["Mesa Grid Layer"]
     DEPT_GRID --- AGENT
 end
 
-subgraph MACRO["macro_simulation  —  step order per day"]
+subgraph MACRO["mss.simulation.macro  —  step order per day"]
     style MACRO fill:#f9f,stroke:#333,stroke-width:2px
 
     HOSP_LOOP["for each hospital"]
@@ -93,7 +93,7 @@ subgraph EXCHANGE["exchange  —  Patient Interface"]
     NOREQ["no micro call<br/>modifiers unchanged"]
 end
 
-subgraph MICRO["micro_simulation"]
+subgraph MICRO["mss.simulation.micro"]
     style MICRO fill:#ff9,stroke:#333,stroke-width:2px
     EP["EpisodeState<br/>bacterial population<br/>persists between days"]
     PRREQ["process_request<br/>parallel batch support"]

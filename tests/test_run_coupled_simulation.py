@@ -4,9 +4,9 @@ from pathlib import Path
 
 import yaml
 
-from exchange.patient import Department, HealthState
-from macro_simulation.simulator import MacroSimulator
-from run_coupled_simulation import _admit_initial_population, load_coupled_settings
+from mss.cli.run_coupled_simulation import _admit_initial_population, load_coupled_settings
+from mss.domain import Department, HealthState
+from mss.simulation.macro import MacroSimulator
 
 
 def _write_config(path: Path) -> None:

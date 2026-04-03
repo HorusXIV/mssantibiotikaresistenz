@@ -1,11 +1,14 @@
 from __future__ import annotations
 
-
-from exchange.patient import Department, HealthState, Patient
-from macro_simulation.agents import PatientAgent, _MesaModel
-from macro_simulation.grid import HospitalDepartmentGrid, HospitalNetworkGrid
-from macro_simulation.simulation import SimulationConfig
-from macro_simulation.simulator import MacroSimulator
+from mss.domain import Department, HealthState, Patient
+from mss.simulation.macro import (
+    HospitalDepartmentGrid,
+    HospitalNetworkGrid,
+    MacroSimulator,
+    PatientAgent,
+    SimulationConfig,
+    _MesaModel,
+)
 
 _H1 = "hospital_001"
 _H2 = "hospital_002"

@@ -14,13 +14,8 @@ from typing import Any, Dict, Iterable, List, Optional
 
 import numpy as np
 
+from .engine import SimulationConfig, StrainPopulation, population_to_response, simulate_day
 from .genome import NUM_GENES
-from .simulation import (
-    SimulationConfig,
-    StrainPopulation,
-    population_to_response,
-    simulate_day,
-)
 
 
 @dataclass

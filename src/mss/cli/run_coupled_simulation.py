@@ -1,4 +1,4 @@
-"""Run the coupled macro + micro simulation from ``shared/config.yml``."""
+"""Run the coupled macro + micro simulation from ``config/simulation_realistic.yml``."""
 
 from __future__ import annotations
 
@@ -13,15 +13,16 @@ from typing import Any, Callable
 
 import yaml
 
-import visualize_results
-from exchange.patient import Department, HealthState, Patient
-from macro_simulation.simulation import SimulationConfig as MacroConfig
-from macro_simulation.simulator import MacroSimulator
-from micro_simulation.simulation import SimulationConfig as MicroConfig
-from micro_simulation.simulator import MicroSimulator
+from mss.cli import visualize_results
+from mss.domain import Department, HealthState, Patient
+from mss.simulation.macro import MacroSimulator
+from mss.simulation.macro import SimulationConfig as MacroConfig
+from mss.simulation.micro import MicroSimulator
+from mss.simulation.micro import SimulationConfig as MicroConfig
 
-DEFAULT_CONFIG_PATH = Path(__file__).resolve().parent / "shared" / "config_realistic.yml"
-DEFAULT_OUTPUT_DIR = Path(__file__).resolve().parent / "outputs"
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+DEFAULT_CONFIG_PATH = PROJECT_ROOT / "config" / "simulation_realistic.yml"
+DEFAULT_OUTPUT_DIR = PROJECT_ROOT / "outputs"
 DEFAULT_CSV_DIR = DEFAULT_OUTPUT_DIR / "csv"
 _FORBIDDEN_TEMPLATE_FIELDS = {
     "_ctx",
@@ -678,7 +679,7 @@ def _parse_args() -> argparse.Namespace:
         metavar="FILE",
         help=(
             "Path to the YAML config file. "
-            "Defaults to shared/config_realistic.yml next to this script."
+            "Defaults to config/simulation_realistic.yml in the project root."
         ),
     )
     return parser.parse_args()

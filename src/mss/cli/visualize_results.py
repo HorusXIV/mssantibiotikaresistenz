@@ -30,8 +30,9 @@ import numpy as np
 import pandas as pd
 from matplotlib.widgets import Slider
 
-DEFAULT_CSV_DIR = Path(__file__).resolve().parent / "outputs" / "csv"
-DEFAULT_PLOT_DIR = Path(__file__).resolve().parent / "outputs" / "plots"
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+DEFAULT_CSV_DIR = PROJECT_ROOT / "outputs" / "csv"
+DEFAULT_PLOT_DIR = PROJECT_ROOT / "outputs" / "plots"
 
 # Expected endemic prevalence band (for reference lines)
 ENDEMIC_LOW = 0.15

@@ -5,7 +5,7 @@ from typing import Iterable
 
 from mesa.space import MultiGrid, SingleGrid
 
-from exchange.patient import Department, Patient
+from mss.domain import Department, Patient
 
 
 class HospitalDepartmentGrid:

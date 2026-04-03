@@ -1,13 +1,14 @@
-import pandas as pd
-import networkx as nx
 from pathlib import Path
+
+import networkx as nx
+import pandas as pd
 
 BASE_DIR = Path(__file__).parent
 out_dir = BASE_DIR
 
 
 def build_system_map(nodes_df, edges_df) -> nx.DiGraph:
-    """Build the AMR system map from the CSV files in System_Overview."""
+    """Build the AMR system map from the CSV files in docs/system_overview."""
     G = nx.DiGraph(name="AMR_System_Map")
 
     for row in nodes_df.to_dict("records"):

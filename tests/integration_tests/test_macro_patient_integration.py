@@ -23,15 +23,14 @@ from typing import Callable
 
 import pytest
 
-from exchange.patient import (
+from mss.domain import (
     AntibioticRegimen,
     Department,
     HealthState,
     Patient,
     PatientDailyContext,
 )
-from macro_simulation.simulation import SimulationConfig
-from macro_simulation.simulator import MacroSimulator
+from mss.simulation.macro import MacroSimulator, SimulationConfig
 
 # -- valid states in the macro carrier model ----------------------------------
 _VALID_STATES = (HealthState.SUSCEPTIBLE, HealthState.CARRIER)

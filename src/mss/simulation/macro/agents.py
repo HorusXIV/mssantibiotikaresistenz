@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import mesa
 
-from exchange.patient import Patient
+from mss.domain import Patient
 
 
 class _MesaModel(mesa.Model):
