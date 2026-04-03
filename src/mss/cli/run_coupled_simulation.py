@@ -697,7 +697,7 @@ def main() -> None:
     config_path = args.config if args.config is not None else DEFAULT_CONFIG_PATH
 
     run_ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    run_dir = DEFAULT_OUTPUT_DIR / "runs" / run_ts
+    run_dir = DEFAULT_OUTPUT_DIR / run_ts
     data_dir = run_dir / "data"
     plot_dir = run_dir / "plots"
     data_dir.mkdir(parents=True, exist_ok=True)
