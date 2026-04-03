@@ -56,6 +56,11 @@ class SimulationConfig:
     replacement_dominant_genotype: str = "S"
     max_occupancy_per_hospital: int = 200  # hard cap per hospital
 
+    # Inter-hospital transfers (0.0 = disabled)
+    # Per-patient daily probability of being transferred; destination is chosen
+    # from all other hospitals, weighted by (free_capacity / distance).
+    daily_transfer_rate: float = 0.0
+
     # Grid
     dept_grid_cols: int = 3
     dept_grid_rows: int = 2

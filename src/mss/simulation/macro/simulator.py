@@ -88,6 +88,7 @@ class MacroSimulator:
 
         self._day = 0
         self._episode_counter = 0
+        self._daily_transfers: List[Dict[str, str]] = []
 
     # ------------------------------------------------------------------
     # Public API
@@ -457,9 +458,40 @@ class MacroSimulator:
                 source = self._pick_transmission_source(weighted_carriers, weighted_force)
                 self._colonize(sus, source=source)
 
+    def get_daily_transfers(self) -> List[Dict[str, str]]:
+        """Return the list of transfers that occurred during the last step."""
+        return list(self._daily_transfers)
+
     def _transfer_phase(self) -> None:
-        """Stub for future inter-hospital transfers via the network grid."""
-        return
+        """Transfer patients between hospitals, weighted by inverse distance and free capacity."""
+        self._daily_transfers = []
+        rate = self._config.daily_transfer_rate
+        if rate <= 0.0:
+            return
+
+        cap = self._config.max_occupancy_per_hospital
+        transferred_ids: set[str] = set()
+
+        for hid in self._hospital_ids:
+            destinations = [h for h in self._hospital_ids if h != hid]
+            if not destinations:
+                continue
+            for patient in list(self._dept_grids[hid].get_all_patients()):
+                if patient.patient_id in transferred_ids:
+                    continue
+                if self._rng.random() >= rate:
+                    continue
+                candidates = [d for d in destinations if self.get_occupancy(d) < cap]
+                if not candidates:
+                    continue
+                weights = [
+                    (cap - self.get_occupancy(d)) / self._network_grid.distance(hid, d)
+                    for d in candidates
+                ]
+                dest = self._rng.choices(candidates, weights=weights, k=1)[0]
+                self.transfer(patient, dest)
+                self._daily_transfers.append({"from_hospital": hid, "to_hospital": dest})
+                transferred_ids.add(patient.patient_id)
 
     def _collect_micro_requests(
         self, patients: List[Patient], run_id: str

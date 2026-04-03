@@ -97,6 +97,9 @@ macro:
   network_grid_cols: 3
   proximity_decay_alpha: 0.5
 
+  # Inter-hospital transfers
+  daily_transfer_rate: 0.003   # ~0.3% der Patienten pro Tag
+
 micro:
   workers: null
   steps_per_day: 12

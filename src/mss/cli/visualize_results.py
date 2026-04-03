@@ -1,8 +1,8 @@
-"""Visualize simulation results from outputs/csv/.
+"""Visualize simulation results from a run's data directory.
 
 Usage:
     python visualize_results.py
-    python visualize_results.py --csv-dir outputs/csv --plot-dir outputs/plots
+    python visualize_results.py --data-dir outputs/runs/<timestamp>/data --plot-dir outputs/runs/<timestamp>/plots
     python visualize_results.py --interactive
 
 Produces diagnostic plots that show whether the simulation is behaving
@@ -31,7 +31,7 @@ import pandas as pd
 from matplotlib.widgets import Slider
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
-DEFAULT_CSV_DIR = PROJECT_ROOT / "outputs" / "csv"
+DEFAULT_DATA_DIR = PROJECT_ROOT / "outputs" / "data"
 DEFAULT_PLOT_DIR = PROJECT_ROOT / "outputs" / "plots"
 
 # Expected endemic prevalence band (for reference lines)
@@ -47,25 +47,25 @@ ROLLING_WINDOW = 7  # days for smoothing
 
 
 def _load(
-    csv_dir: Path,
+    data_dir: Path,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    daily_path = csv_dir / "macro_daily.csv"
-    hosp_path = csv_dir / "macro_daily_by_hospital.csv"
-    micro_daily_path = csv_dir / "micro_daily.csv"
-    micro_hosp_path = csv_dir / "micro_daily_by_hospital.csv"
-    micro_patient_path = csv_dir / "micro_patient_daily.csv"
-    micro_genotype_path = csv_dir / "micro_daily_genotype.csv"
+    daily_path = data_dir / "macro_daily.parquet"
+    hosp_path = data_dir / "macro_daily_by_hospital.parquet"
+    micro_daily_path = data_dir / "micro_daily.parquet"
+    micro_hosp_path = data_dir / "micro_daily_by_hospital.parquet"
+    micro_patient_path = data_dir / "micro_patient_daily.parquet"
+    micro_genotype_path = data_dir / "micro_daily_genotype.parquet"
     if not daily_path.exists():
-        raise FileNotFoundError(f"CSV not found: {daily_path}\nRun the simulation first.")
-    daily = pd.read_csv(daily_path)
-    hosp = pd.read_csv(hosp_path) if hosp_path.exists() else pd.DataFrame()
-    micro_daily = pd.read_csv(micro_daily_path) if micro_daily_path.exists() else pd.DataFrame()
-    micro_hosp = pd.read_csv(micro_hosp_path) if micro_hosp_path.exists() else pd.DataFrame()
+        raise FileNotFoundError(f"Parquet not found: {daily_path}\nRun the simulation first.")
+    daily = pd.read_parquet(daily_path)
+    hosp = pd.read_parquet(hosp_path) if hosp_path.exists() else pd.DataFrame()
+    micro_daily = pd.read_parquet(micro_daily_path) if micro_daily_path.exists() else pd.DataFrame()
+    micro_hosp = pd.read_parquet(micro_hosp_path) if micro_hosp_path.exists() else pd.DataFrame()
     micro_patient = (
-        pd.read_csv(micro_patient_path) if micro_patient_path.exists() else pd.DataFrame()
+        pd.read_parquet(micro_patient_path) if micro_patient_path.exists() else pd.DataFrame()
     )
     micro_genotype = (
-        pd.read_csv(micro_genotype_path) if micro_genotype_path.exists() else pd.DataFrame()
+        pd.read_parquet(micro_genotype_path) if micro_genotype_path.exists() else pd.DataFrame()
     )
     return daily, hosp, micro_daily, micro_hosp, micro_patient, micro_genotype
 
@@ -808,12 +808,12 @@ def _print_sanity_checks(
 
 
 def run(
-    csv_dir: Path = DEFAULT_CSV_DIR,
+    data_dir: Path = DEFAULT_DATA_DIR,
     plot_dir: Path = DEFAULT_PLOT_DIR,
     quiet: bool = False,
     interactive: bool = False,
 ) -> None:
-    """Generate all diagnostic plots from simulation CSVs.
+    """Generate all diagnostic plots from simulation parquet files.
 
     Parameters
     ----------
@@ -824,10 +824,10 @@ def run(
     global _quiet_mode
     _quiet_mode = quiet
 
-    daily, hosp, micro_daily, micro_hosp, micro_patient, micro_genotype = _load(csv_dir)
+    daily, hosp, micro_daily, micro_hosp, micro_patient, micro_genotype = _load(data_dir)
 
     if not quiet:
-        print(f"Reading CSVs from: {csv_dir}")
+        print(f"Reading data from: {data_dir}")
         print(f"  macro_daily:             {len(daily)} rows")
         print(f"  macro_daily_by_hospital: {len(hosp)} rows")
         print(f"  micro_daily:             {len(micro_daily)} rows")
@@ -858,7 +858,7 @@ def run(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Visualize simulation results.")
-    parser.add_argument("--csv-dir", type=Path, default=DEFAULT_CSV_DIR)
+    parser.add_argument("--data-dir", type=Path, default=DEFAULT_DATA_DIR)
     parser.add_argument("--plot-dir", type=Path, default=DEFAULT_PLOT_DIR)
     parser.add_argument(
         "--interactive",
@@ -866,7 +866,7 @@ def main() -> None:
         help="Open an interactive day-slider explorer for micro patient phase space.",
     )
     args = parser.parse_args()
-    run(csv_dir=args.csv_dir, plot_dir=args.plot_dir, interactive=args.interactive)
+    run(data_dir=args.data_dir, plot_dir=args.plot_dir, interactive=args.interactive)
 
 
 if __name__ == "__main__":

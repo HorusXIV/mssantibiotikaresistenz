@@ -3,14 +3,15 @@
 from __future__ import annotations
 
 import argparse
-import csv
 import math
 import random
 from collections import Counter
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable
 
+import pandas as pd
 import yaml
 
 from mss.cli import visualize_results
@@ -23,7 +24,6 @@ from mss.simulation.micro import SimulationConfig as MicroConfig
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_CONFIG_PATH = PROJECT_ROOT / "config" / "simulation_realistic.yml"
 DEFAULT_OUTPUT_DIR = PROJECT_ROOT / "outputs"
-DEFAULT_CSV_DIR = DEFAULT_OUTPUT_DIR / "csv"
 _FORBIDDEN_TEMPLATE_FIELDS = {
     "_ctx",
     "admission_day",
@@ -176,6 +176,13 @@ _MICRO_DAILY_GENOTYPE_FIELDS = [
     "dominant_genotype",
     "count",
     "fraction",
+]
+_TRANSFER_DAILY_FIELDS = [
+    "day",
+    "run_id",
+    "from_hospital",
+    "to_hospital",
+    "transfers",
 ]
 
 
@@ -658,14 +665,14 @@ def _collect_micro_daily_logs(
     return global_row, by_hospital_rows, patient_rows, genotype_rows
 
 
-def _write_csv(path: Path, rows: list[dict[str, float | int | str]], fieldnames: list[str]) -> None:
+def _write_parquet(
+    path: Path, rows: list[dict[str, float | int | str]], fieldnames: list[str]
+) -> None:
     if not rows:
         return
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fieldnames)
-        writer.writeheader()
-        writer.writerows(rows)
+    df = pd.DataFrame(rows, columns=fieldnames)
+    df.to_parquet(path, index=False)
 
 
 def _parse_args() -> argparse.Namespace:
@@ -688,6 +695,12 @@ def _parse_args() -> argparse.Namespace:
 def main() -> None:
     args = _parse_args()
     config_path = args.config if args.config is not None else DEFAULT_CONFIG_PATH
+
+    run_ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    run_dir = DEFAULT_OUTPUT_DIR / "runs" / run_ts
+    data_dir = run_dir / "data"
+    plot_dir = run_dir / "plots"
+    data_dir.mkdir(parents=True, exist_ok=True)
 
     settings = load_coupled_settings(config_path)
 
@@ -726,6 +739,7 @@ def main() -> None:
     micro_daily_by_hospital_rows: list[dict[str, float | int | str]] = []
     micro_patient_daily_rows: list[dict[str, float | int | str]] = []
     micro_daily_genotype_rows: list[dict[str, float | int | str]] = []
+    transfer_daily_rows: list[dict[str, float | int | str]] = []
     for day in range(1, settings.run.days + 1):
         macro.step(
             micro_simulator=micro,
@@ -764,6 +778,20 @@ def main() -> None:
         micro_patient_daily_rows.extend(micro_pat_rows)
         micro_daily_genotype_rows.extend(micro_genotype_rows)
 
+        transfer_counts = Counter(
+            (t["from_hospital"], t["to_hospital"]) for t in macro.get_daily_transfers()
+        )
+        for (src, dst), n in transfer_counts.items():
+            transfer_daily_rows.append(
+                {
+                    "day": day,
+                    "run_id": settings.run.run_id,
+                    "from_hospital": src,
+                    "to_hospital": dst,
+                    "transfers": n,
+                }
+            )
+
         if not settings.run.quiet:
             print(
                 f"day={summary.day:03d} susceptible={summary.susceptible:04d} "
@@ -774,26 +802,30 @@ def main() -> None:
     if final_summary is None:
         return
 
-    macro_daily_path = DEFAULT_CSV_DIR / "macro_daily.csv"
-    macro_daily_by_hospital_path = DEFAULT_CSV_DIR / "macro_daily_by_hospital.csv"
-    micro_daily_path = DEFAULT_CSV_DIR / "micro_daily.csv"
-    micro_daily_by_hospital_path = DEFAULT_CSV_DIR / "micro_daily_by_hospital.csv"
-    micro_patient_daily_path = DEFAULT_CSV_DIR / "micro_patient_daily.csv"
-    micro_daily_genotype_path = DEFAULT_CSV_DIR / "micro_daily_genotype.csv"
-    _write_csv(macro_daily_path, macro_daily_rows, _DAILY_FIELDS)
-    _write_csv(
+    macro_daily_path = data_dir / "macro_daily.parquet"
+    macro_daily_by_hospital_path = data_dir / "macro_daily_by_hospital.parquet"
+    micro_daily_path = data_dir / "micro_daily.parquet"
+    micro_daily_by_hospital_path = data_dir / "micro_daily_by_hospital.parquet"
+    micro_patient_daily_path = data_dir / "micro_patient_daily.parquet"
+    micro_daily_genotype_path = data_dir / "micro_daily_genotype.parquet"
+    _write_parquet(macro_daily_path, macro_daily_rows, _DAILY_FIELDS)
+    _write_parquet(
         macro_daily_by_hospital_path,
         macro_daily_by_hospital_rows,
         _DAILY_BY_HOSPITAL_FIELDS,
     )
-    _write_csv(micro_daily_path, micro_daily_rows, _MICRO_DAILY_FIELDS)
-    _write_csv(
+    _write_parquet(micro_daily_path, micro_daily_rows, _MICRO_DAILY_FIELDS)
+    _write_parquet(
         micro_daily_by_hospital_path,
         micro_daily_by_hospital_rows,
         _MICRO_DAILY_BY_HOSPITAL_FIELDS,
     )
-    _write_csv(micro_patient_daily_path, micro_patient_daily_rows, _MICRO_PATIENT_DAILY_FIELDS)
-    _write_csv(micro_daily_genotype_path, micro_daily_genotype_rows, _MICRO_DAILY_GENOTYPE_FIELDS)
+    _write_parquet(micro_patient_daily_path, micro_patient_daily_rows, _MICRO_PATIENT_DAILY_FIELDS)
+    _write_parquet(
+        micro_daily_genotype_path, micro_daily_genotype_rows, _MICRO_DAILY_GENOTYPE_FIELDS
+    )
+    transfer_daily_path = data_dir / "transfer_daily.parquet"
+    _write_parquet(transfer_daily_path, transfer_daily_rows, _TRANSFER_DAILY_FIELDS)
 
     print(
         "run_end "
@@ -802,6 +834,7 @@ def main() -> None:
         f"avg_resistant_fraction={final_summary.avg_resistant_fraction:.4f} "
         f"active_micro_episodes={len(micro.get_active_episodes())}"
     )
+    print(f"run_dir={run_dir}")
     print(f"macro_log_written daily={macro_daily_path} by_hospital={macro_daily_by_hospital_path}")
     print(
         "micro_log_written "
@@ -812,8 +845,8 @@ def main() -> None:
     )
 
     visualize_results.run(
-        csv_dir=DEFAULT_CSV_DIR,
-        plot_dir=DEFAULT_OUTPUT_DIR / "plots",
+        data_dir=data_dir,
+        plot_dir=plot_dir,
         quiet=True,
     )
 
