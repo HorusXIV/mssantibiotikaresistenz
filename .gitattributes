@@ -1,0 +1,2 @@
+outputs/runs/**/*.parquet filter=lfs diff=lfs merge=lfs -text
+outputs/runs/**/*.png filter=lfs diff=lfs merge=lfs -text
