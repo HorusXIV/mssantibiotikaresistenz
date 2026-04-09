@@ -701,6 +701,124 @@ class TestTransmission:
         )
         assert high_hyg <= low_hyg
 
+    def test_context_hygiene_level_affects_transmission(self):
+        """hygiene_level read from patient._ctx drives the transmission hazard.
+
+        Verifies both that the value flows correctly from config → context, and
+        that higher hygiene produces fewer colonizations (monotonic relationship).
+        """
+        # Part 1: context carries the configured hygiene value
+        cfg_low = SimulationConfig(base_hygiene=0.2)
+        sim_check = MacroSimulator(config=cfg_low, n_hospitals=1, seed=0)
+        sus = Patient(patient_id="sus_chk", state=HealthState.SUSCEPTIBLE)
+        sim_check.admit(sus, hospital_id=_H1, department=Department.WARD)
+        sim_check.step()
+        assert sus._ctx is not None
+        assert sus._ctx.hygiene_level == cfg_low.base_hygiene
+
+        # Part 2: higher hygiene → fewer colonizations (MC)
+        low_hyg = _count_new_carriers_mc(
+            n_runs=self.MC_RUNS,
+            n_days=self.MC_DAYS,
+            n_susceptible=10,
+            make_carrier=lambda _: Patient(
+                patient_id="car", state=HealthState.CARRIER, episode_id="ep", p_clearance=0.0
+            ),
+            config_factory=lambda: SimulationConfig(base_hygiene=0.1),
+        )
+        high_hyg = _count_new_carriers_mc(
+            n_runs=self.MC_RUNS,
+            n_days=self.MC_DAYS,
+            n_susceptible=10,
+            make_carrier=lambda _: Patient(
+                patient_id="car", state=HealthState.CARRIER, episode_id="ep", p_clearance=0.0
+            ),
+            config_factory=lambda: SimulationConfig(base_hygiene=0.99),
+        )
+        assert (
+            high_hyg <= low_hyg
+        ), f"Higher hygiene should reduce colonizations: high={high_hyg}, low={low_hyg}"
+
+    def test_context_isolation_effectiveness_on_carrier_reduces_transmission(self):
+        """Higher isolation_effectiveness in context ⇒ fewer colonizations from isolated carrier.
+
+        Validates that _do_transmission reads the value from carrier._ctx, not globally.
+        """
+        low_iso = _count_new_carriers_mc(
+            n_runs=self.MC_RUNS,
+            n_days=self.MC_DAYS,
+            n_susceptible=10,
+            make_carrier=lambda _: Patient(
+                patient_id="car",
+                state=HealthState.CARRIER,
+                episode_id="ep",
+                p_clearance=0.0,
+                is_isolated=True,
+            ),
+            config_factory=lambda: SimulationConfig(
+                base_isolation_effectiveness=0.05,
+                carrier_isolation_probability=0.0,  # keep carrier isolated throughout
+            ),
+        )
+        high_iso = _count_new_carriers_mc(
+            n_runs=self.MC_RUNS,
+            n_days=self.MC_DAYS,
+            n_susceptible=10,
+            make_carrier=lambda _: Patient(
+                patient_id="car",
+                state=HealthState.CARRIER,
+                episode_id="ep",
+                p_clearance=0.0,
+                is_isolated=True,
+            ),
+            config_factory=lambda: SimulationConfig(
+                base_isolation_effectiveness=0.99,
+                carrier_isolation_probability=0.0,
+            ),
+        )
+        assert high_iso <= low_iso, (
+            f"Higher isolation_effectiveness should reduce colonizations: "
+            f"high={high_iso}, low={low_iso}"
+        )
+
+    def test_transmission_fallback_when_ctx_is_none(self):
+        """_do_transmission must not crash when patient._ctx is None.
+
+        Patients admitted on the same day as transmission runs have _ctx=None
+        (context update happens before admissions in the step order, but
+        transmission runs after admissions). The fallback to cfg values must
+        prevent any AttributeError and produce a valid simulation state.
+        """
+        cfg = SimulationConfig(
+            base_hygiene=0.5,
+            base_isolation_effectiveness=0.7,
+            daily_admission_rate=0.0,
+        )
+        sim = MacroSimulator(config=cfg, n_hospitals=1, seed=42)
+
+        carrier = Patient(
+            patient_id="car_no_ctx",
+            state=HealthState.CARRIER,
+            episode_id="ep_no_ctx",
+            p_clearance=0.0,
+        )
+        sus = Patient(patient_id="sus_no_ctx", state=HealthState.SUSCEPTIBLE)
+
+        sim.admit(carrier, hospital_id=_H1, department=Department.WARD)
+        sim.admit(sus, hospital_id=_H1, department=Department.WARD)
+
+        # Both patients have _ctx=None at this point — no step has run yet.
+        assert carrier._ctx is None
+        assert sus._ctx is None
+
+        # Calling _do_transmission directly must not raise.
+        sim._do_transmission(_H1)
+
+        # After a full step, contexts are set and the simulation is still healthy.
+        sim.step()
+        assert sus._ctx is not None
+        assert carrier._ctx is not None
+
     def test_no_carriers_no_colonizations(self, hospital: MacroSimulator):
         """Without any carriers no susceptible patient can become colonised."""
         patients = [
@@ -963,6 +1081,123 @@ class TestIsolationAndDetection:
         ctx = susceptible_patient._ctx
         assert isinstance(ctx.diagnostic_speed, (int, float))
         assert ctx.diagnostic_speed >= 0.0
+
+    def test_default_diagnostic_speed_is_neutral(self):
+        """base_diagnostic_speed=1.0 (default) acts as a neutral multiplier.
+
+        When carrier_isolation_probability=1.0 and diagnostic_speed=1.0, every
+        non-isolated carrier must be detected and isolated after exactly one step.
+        """
+        n_runs = 50
+        for run in range(n_runs):
+            cfg = SimulationConfig(
+                carrier_isolation_probability=1.0,
+                base_diagnostic_speed=1.0,
+            )
+            sim = MacroSimulator(config=cfg, n_hospitals=1, seed=run)
+            carrier = Patient(
+                patient_id="car",
+                state=HealthState.CARRIER,
+                episode_id="ep",
+                p_clearance=0.0,
+                is_isolated=False,
+            )
+            sim.admit(carrier, hospital_id=_H1, department=Department.WARD)
+            sim.step()
+            assert carrier.is_isolated, (
+                f"Run {run}: carrier should be isolated when isolation_prob=1.0 "
+                f"and diagnostic_speed=1.0"
+            )
+
+    def test_lower_diagnostic_speed_reduces_isolation_rate(self):
+        """Lower base_diagnostic_speed ⇒ fewer carriers detected per day (MC)."""
+        n_runs = 100
+        n_days = 3
+        n_carriers = 5
+
+        def _count_isolated(speed: float) -> int:
+            total = 0
+            for run in range(n_runs):
+                cfg = SimulationConfig(
+                    carrier_isolation_probability=0.8,
+                    base_diagnostic_speed=speed,
+                )
+                sim = MacroSimulator(config=cfg, n_hospitals=1, seed=run)
+                carriers = [
+                    Patient(
+                        patient_id=f"car_{i}",
+                        state=HealthState.CARRIER,
+                        episode_id=f"ep_{i}",
+                        p_clearance=0.0,
+                        is_isolated=False,
+                    )
+                    for i in range(n_carriers)
+                ]
+                for c in carriers:
+                    sim.admit(c, hospital_id=_H1, department=Department.WARD)
+                for _ in range(n_days):
+                    sim.step()
+                total += sum(1 for c in carriers if c.is_isolated)
+            return total
+
+        slow = _count_isolated(speed=0.1)
+        fast = _count_isolated(speed=1.0)
+        assert (
+            slow < fast
+        ), f"Lower diagnostic_speed should isolate fewer carriers: slow={slow}, fast={fast}"
+
+    def test_diagnostic_speed_cap_at_one(self):
+        """diagnostic_speed > 1.0 is capped so effective probability never exceeds 1.0.
+
+        With carrier_isolation_probability=0.8 and diagnostic_speed=2.0 the product
+        would be 1.6, but min(1.0, 1.6)=1.0 — every non-isolated carrier is detected
+        in one step, identical to diagnostic_speed=1.25 (0.8*1.25=1.0).
+        """
+        n_runs = 50
+        for run in range(n_runs):
+            cfg = SimulationConfig(
+                carrier_isolation_probability=0.8,
+                base_diagnostic_speed=2.0,
+            )
+            sim = MacroSimulator(config=cfg, n_hospitals=1, seed=run)
+            carrier = Patient(
+                patient_id="car",
+                state=HealthState.CARRIER,
+                episode_id="ep",
+                p_clearance=0.0,
+                is_isolated=False,
+            )
+            sim.admit(carrier, hospital_id=_H1, department=Department.WARD)
+            sim.step()
+            assert carrier.is_isolated, (
+                f"Run {run}: effective prob should be capped at 1.0, so carrier "
+                f"must always be isolated after one step"
+            )
+
+    def test_zero_diagnostic_speed_prevents_isolation(self):
+        """diagnostic_speed=0.0 ⇒ effective detection probability=0.0 ⇒ no carrier
+        is ever isolated, regardless of carrier_isolation_probability."""
+        n_runs = 50
+        n_days = 5
+        for run in range(n_runs):
+            cfg = SimulationConfig(
+                carrier_isolation_probability=1.0,
+                base_diagnostic_speed=0.0,
+            )
+            sim = MacroSimulator(config=cfg, n_hospitals=1, seed=run)
+            carrier = Patient(
+                patient_id="car",
+                state=HealthState.CARRIER,
+                episode_id="ep",
+                p_clearance=0.0,
+                is_isolated=False,
+            )
+            sim.admit(carrier, hospital_id=_H1, department=Department.WARD)
+            for _ in range(n_days):
+                sim.step()
+            assert (
+                not carrier.is_isolated
+            ), f"Run {run}: with diagnostic_speed=0.0 no carrier should ever be isolated"
 
 
 # =============================================================================
