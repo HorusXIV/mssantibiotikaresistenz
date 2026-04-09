@@ -1,19 +1,4 @@
 # config_realistic.yml
-# Calibration targets:
-#   - Endemic equilibrium: ~15-25% carrier prevalence (not 75%!)
-#   - avg_resistant_fraction rises gradually from ~0.05 to ~0.25 over 365 days
-#   - No extinction, no explosive epidemic
-#
-# Root causes of previous failures:
-#   1. daily_contact_attempts=55 → R0≈6, causes ~75% prevalence (too high)
-#      Fix: reduce to 18 → R0≈1.5-2.0 → endemic ~15-25%
-#   2. avg_resistant_fraction collapses to 0 because:
-#      a) micro kills resistance faster than it builds (mutation rate too low)
-#      b) transmission_mutation_probability=0.05 means new colonizations start
-#         almost always with resistant_fraction=0 (wildtype from _colonize)
-#      c) strain_prune_threshold too high wipes resistant subpopulations
-#      Fix: raise base_mutation_rate, raise stress_mutation_boost,
-#           raise transmission_mutation_probability, lower prune threshold
 
 run:
   days: 365
@@ -56,7 +41,7 @@ population:
 macro:
   base_hygiene: 0.65
   base_isolation_effectiveness: 0.65
-  base_diagnostic_speed: 0.55
+  base_diagnostic_speed: 1.0   # multiplier on carrier_isolation_probability (1.0 = unchanged)
 
   # Transmission: tuned for R0 ≈ 1.5
   # hazard = contacts * (1-hygiene) * beta / occupancy

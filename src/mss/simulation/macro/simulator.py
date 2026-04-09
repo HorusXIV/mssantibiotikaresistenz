@@ -382,9 +382,14 @@ class MacroSimulator:
         dose_draw = self._rng.random()
 
         # --- Isolation decision ---
+        # diagnostic_speed scales the effective daily detection probability:
+        # 1.0 (default) = unchanged, 0.5 = half speed, 2.0 = double (capped at 1.0)
+        effective_detection_prob = min(
+            1.0, cfg.carrier_isolation_probability * cfg.base_diagnostic_speed
+        )
         is_isolated = patient.is_isolated
         if not is_isolated and patient.state == HealthState.CARRIER:
-            if iso_draw < cfg.carrier_isolation_probability:
+            if iso_draw < effective_detection_prob:
                 is_isolated = True
 
         # --- Antibiotic regimen ---
@@ -423,13 +428,18 @@ class MacroSimulator:
             return
 
         cfg = self._config
-        hygiene_factor = 1.0 - cfg.base_hygiene
-        iso_reduction = cfg.base_isolation_effectiveness
         n_total = max(1, len(agents))
 
         for sus_agent in susceptible:
             sus_pos = sus_agent.pos
             sus = sus_agent.patient
+
+            # Read hygiene from the susceptible patient's daily context (set by _build_context).
+            # Falls back to the global config value if context is not yet initialised.
+            sus_ctx = sus._ctx
+            hygiene = sus_ctx.hygiene_level if sus_ctx is not None else cfg.base_hygiene
+            hygiene_factor = 1.0 - hygiene
+
             weighted_force = 0.0
             weighted_carriers: List[tuple[Patient, float]] = []
             for car_agent in carriers:
@@ -440,7 +450,14 @@ class MacroSimulator:
                     * w
                 )
                 if car_agent.patient.is_isolated:
-                    contrib *= 1.0 - iso_reduction
+                    # Use the carrier's own isolation effectiveness from their daily context.
+                    car_ctx = car_agent.patient._ctx
+                    iso_eff = (
+                        car_ctx.isolation_effectiveness
+                        if car_ctx is not None
+                        else cfg.base_isolation_effectiveness
+                    )
+                    contrib *= 1.0 - iso_eff
                 weighted_force += contrib
                 weighted_carriers.append((car_agent.patient, contrib))
 
@@ -451,7 +468,12 @@ class MacroSimulator:
                 * sus.susceptibility_multiplier_for_macro()
             )
             if sus.is_isolated:
-                hazard *= 1.0 - iso_reduction
+                sus_iso_eff = (
+                    sus_ctx.isolation_effectiveness
+                    if sus_ctx is not None
+                    else cfg.base_isolation_effectiveness
+                )
+                hazard *= 1.0 - sus_iso_eff
 
             p_colonize = 1.0 - math.exp(-max(0.0, hazard))
             if self._rng.random() < p_colonize:

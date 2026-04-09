@@ -20,7 +20,9 @@ class SimulationConfig:
     # Hospital environment
     base_hygiene: float = 0.7  # 0..1; higher ⇒ less transmission
     base_isolation_effectiveness: float = 0.8  # 0..1; how well isolation works
-    base_diagnostic_speed: float = 0.5  # ≥0; higher ⇒ faster detection
+    base_diagnostic_speed: float = (
+        1.0  # >0; multiplier on carrier_isolation_probability (1.0 = unchanged, 0.5 = half speed, 2.0 = double speed)
+    )
 
     # Transmission
     base_transmission_rate: float = 0.05  # per-carrier-per-susceptible daily beta
