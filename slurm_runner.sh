@@ -2,8 +2,8 @@
 #SBATCH -p cpu-daily
 #SBATCH -t 24:00:00
 #SBATCH --job-name=MSS_Simulation
-#SBATCH --mem=64G
-#SBATCH --cpus-per-task=64
+#SBATCH --mem=128G
+#SBATCH --cpus-per-task=300
 #SBATCH --output=logs/%x-%j.out
 
 # Absolute path to the repository on the host

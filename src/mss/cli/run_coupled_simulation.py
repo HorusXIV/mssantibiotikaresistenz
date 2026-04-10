@@ -13,6 +13,8 @@ from typing import Any, Callable
 
 import numpy as np
 import pandas as pd
+import pyarrow as pa
+import pyarrow.parquet as pq
 import yaml
 
 from mss.cli import visualize_results
@@ -888,6 +890,31 @@ def _write_parquet(
     df.to_parquet(path, index=False)
 
 
+class _ParquetBatchWriter:
+    """Append parquet row groups incrementally to keep memory bounded."""
+
+    def __init__(self, path: Path, fieldnames: list[str]) -> None:
+        self.path = path
+        self.fieldnames = fieldnames
+        self._writer: pq.ParquetWriter | None = None
+
+    def append_rows(self, rows: list[dict[str, float | int | str]]) -> None:
+        if not rows:
+            return
+
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        df = pd.DataFrame(rows, columns=self.fieldnames)
+        table = pa.Table.from_pandas(df, preserve_index=False)
+        if self._writer is None:
+            self._writer = pq.ParquetWriter(self.path, table.schema)
+        self._writer.write_table(table)
+
+    def close(self) -> None:
+        if self._writer is not None:
+            self._writer.close()
+            self._writer = None
+
+
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Run the coupled macro + micro antibiotic resistance simulation.",
@@ -952,16 +979,48 @@ def main() -> None:
     )
 
     final_summary = None
-    macro_daily_rows: list[dict[str, float | int | str]] = []
-    macro_daily_by_hospital_rows: list[dict[str, float | int | str]] = []
-    micro_daily_rows: list[dict[str, float | int | str]] = []
-    micro_daily_by_hospital_rows: list[dict[str, float | int | str]] = []
-    micro_patient_daily_rows: list[dict[str, float | int | str]] = []
-    micro_daily_genotype_rows: list[dict[str, float | int | str]] = []
-    micro_hospital_population_rows: list[dict[str, float | int | str]] = []
-    micro_strain_daily_rows: list[dict[str, float | int | str]] = []
-    micro_episode_gene_daily_rows: list[dict[str, float | int | str]] = []
-    transfer_daily_rows: list[dict[str, float | int | str]] = []
+    macro_daily_path = data_dir / "macro_daily.parquet"
+    macro_daily_by_hospital_path = data_dir / "macro_daily_by_hospital.parquet"
+    micro_daily_path = data_dir / "micro_daily.parquet"
+    micro_daily_by_hospital_path = data_dir / "micro_daily_by_hospital.parquet"
+    micro_patient_daily_path = data_dir / "micro_patient_daily.parquet"
+    micro_daily_genotype_path = data_dir / "micro_daily_genotype.parquet"
+    micro_hospital_population_path = data_dir / "micro_hospital_population.parquet"
+    micro_strain_daily_path = data_dir / "micro_strain_daily.parquet"
+    micro_episode_gene_daily_path = data_dir / "micro_episode_gene_daily.parquet"
+    transfer_daily_path = data_dir / "transfer_daily.parquet"
+
+    macro_daily_writer = _ParquetBatchWriter(macro_daily_path, _DAILY_FIELDS)
+    macro_daily_by_hospital_writer = _ParquetBatchWriter(
+        macro_daily_by_hospital_path,
+        _DAILY_BY_HOSPITAL_FIELDS,
+    )
+    micro_daily_writer = _ParquetBatchWriter(micro_daily_path, _MICRO_DAILY_FIELDS)
+    micro_daily_by_hospital_writer = _ParquetBatchWriter(
+        micro_daily_by_hospital_path,
+        _MICRO_DAILY_BY_HOSPITAL_FIELDS,
+    )
+    micro_patient_daily_writer = _ParquetBatchWriter(
+        micro_patient_daily_path,
+        _MICRO_PATIENT_DAILY_FIELDS,
+    )
+    micro_daily_genotype_writer = _ParquetBatchWriter(
+        micro_daily_genotype_path,
+        _MICRO_DAILY_GENOTYPE_FIELDS,
+    )
+    micro_hospital_population_writer = _ParquetBatchWriter(
+        micro_hospital_population_path,
+        _MICRO_HOSPITAL_POPULATION_FIELDS,
+    )
+    micro_strain_daily_writer = _ParquetBatchWriter(
+        micro_strain_daily_path,
+        _MICRO_STRAIN_DAILY_FIELDS,
+    )
+    micro_episode_gene_daily_writer = _ParquetBatchWriter(
+        micro_episode_gene_daily_path,
+        _MICRO_EPISODE_GENE_DAILY_FIELDS,
+    )
+    transfer_daily_writer = _ParquetBatchWriter(transfer_daily_path, _TRANSFER_DAILY_FIELDS)
 
     (
         initial_hospital_population_rows,
@@ -975,9 +1034,9 @@ def main() -> None:
         run_id=settings.run.run_id,
         snapshot_stage="initial",
     )
-    micro_hospital_population_rows.extend(initial_hospital_population_rows)
-    micro_strain_daily_rows.extend(initial_strain_rows)
-    micro_episode_gene_daily_rows.extend(initial_gene_rows)
+    micro_hospital_population_writer.append_rows(initial_hospital_population_rows)
+    micro_strain_daily_writer.append_rows(initial_strain_rows)
+    micro_episode_gene_daily_writer.append_rows(initial_gene_rows)
 
     for day in range(1, settings.run.days + 1):
         macro.step(
@@ -998,8 +1057,8 @@ def main() -> None:
             day=day,
             run_id=settings.run.run_id,
         )
-        macro_daily_rows.append(global_row)
-        macro_daily_by_hospital_rows.extend(hospital_rows)
+        macro_daily_writer.append_rows([global_row])
+        macro_daily_by_hospital_writer.append_rows(hospital_rows)
         (
             micro_global_row,
             micro_hospital_rows,
@@ -1012,10 +1071,10 @@ def main() -> None:
             day=day,
             run_id=settings.run.run_id,
         )
-        micro_daily_rows.append(micro_global_row)
-        micro_daily_by_hospital_rows.extend(micro_hospital_rows)
-        micro_patient_daily_rows.extend(micro_pat_rows)
-        micro_daily_genotype_rows.extend(micro_genotype_rows)
+        micro_daily_writer.append_rows([micro_global_row])
+        micro_daily_by_hospital_writer.append_rows(micro_hospital_rows)
+        micro_patient_daily_writer.append_rows(micro_pat_rows)
+        micro_daily_genotype_writer.append_rows(micro_genotype_rows)
         (
             hospital_population_rows,
             strain_rows,
@@ -1028,15 +1087,16 @@ def main() -> None:
             run_id=settings.run.run_id,
             snapshot_stage="end_of_day",
         )
-        micro_hospital_population_rows.extend(hospital_population_rows)
-        micro_strain_daily_rows.extend(strain_rows)
-        micro_episode_gene_daily_rows.extend(gene_rows)
+        micro_hospital_population_writer.append_rows(hospital_population_rows)
+        micro_strain_daily_writer.append_rows(strain_rows)
+        micro_episode_gene_daily_writer.append_rows(gene_rows)
 
         transfer_counts = Counter(
             (t["from_hospital"], t["to_hospital"]) for t in macro.get_daily_transfers()
         )
+        transfer_rows = []
         for (src, dst), n in transfer_counts.items():
-            transfer_daily_rows.append(
+            transfer_rows.append(
                 {
                     "day": day,
                     "run_id": settings.run.run_id,
@@ -1045,6 +1105,7 @@ def main() -> None:
                     "transfers": n,
                 }
             )
+        transfer_daily_writer.append_rows(transfer_rows)
 
         if not settings.run.quiet:
             print(
@@ -1054,46 +1115,28 @@ def main() -> None:
             )
 
     if final_summary is None:
+        macro_daily_writer.close()
+        macro_daily_by_hospital_writer.close()
+        micro_daily_writer.close()
+        micro_daily_by_hospital_writer.close()
+        micro_patient_daily_writer.close()
+        micro_daily_genotype_writer.close()
+        micro_hospital_population_writer.close()
+        micro_strain_daily_writer.close()
+        micro_episode_gene_daily_writer.close()
+        transfer_daily_writer.close()
         return
 
-    macro_daily_path = data_dir / "macro_daily.parquet"
-    macro_daily_by_hospital_path = data_dir / "macro_daily_by_hospital.parquet"
-    micro_daily_path = data_dir / "micro_daily.parquet"
-    micro_daily_by_hospital_path = data_dir / "micro_daily_by_hospital.parquet"
-    micro_patient_daily_path = data_dir / "micro_patient_daily.parquet"
-    micro_daily_genotype_path = data_dir / "micro_daily_genotype.parquet"
-    micro_hospital_population_path = data_dir / "micro_hospital_population.parquet"
-    micro_strain_daily_path = data_dir / "micro_strain_daily.parquet"
-    micro_episode_gene_daily_path = data_dir / "micro_episode_gene_daily.parquet"
-    _write_parquet(macro_daily_path, macro_daily_rows, _DAILY_FIELDS)
-    _write_parquet(
-        macro_daily_by_hospital_path,
-        macro_daily_by_hospital_rows,
-        _DAILY_BY_HOSPITAL_FIELDS,
-    )
-    _write_parquet(micro_daily_path, micro_daily_rows, _MICRO_DAILY_FIELDS)
-    _write_parquet(
-        micro_daily_by_hospital_path,
-        micro_daily_by_hospital_rows,
-        _MICRO_DAILY_BY_HOSPITAL_FIELDS,
-    )
-    _write_parquet(micro_patient_daily_path, micro_patient_daily_rows, _MICRO_PATIENT_DAILY_FIELDS)
-    _write_parquet(
-        micro_daily_genotype_path, micro_daily_genotype_rows, _MICRO_DAILY_GENOTYPE_FIELDS
-    )
-    _write_parquet(
-        micro_hospital_population_path,
-        micro_hospital_population_rows,
-        _MICRO_HOSPITAL_POPULATION_FIELDS,
-    )
-    _write_parquet(micro_strain_daily_path, micro_strain_daily_rows, _MICRO_STRAIN_DAILY_FIELDS)
-    _write_parquet(
-        micro_episode_gene_daily_path,
-        micro_episode_gene_daily_rows,
-        _MICRO_EPISODE_GENE_DAILY_FIELDS,
-    )
-    transfer_daily_path = data_dir / "transfer_daily.parquet"
-    _write_parquet(transfer_daily_path, transfer_daily_rows, _TRANSFER_DAILY_FIELDS)
+    macro_daily_writer.close()
+    macro_daily_by_hospital_writer.close()
+    micro_daily_writer.close()
+    micro_daily_by_hospital_writer.close()
+    micro_patient_daily_writer.close()
+    micro_daily_genotype_writer.close()
+    micro_hospital_population_writer.close()
+    micro_strain_daily_writer.close()
+    micro_episode_gene_daily_writer.close()
+    transfer_daily_writer.close()
 
     print(
         "run_end "
