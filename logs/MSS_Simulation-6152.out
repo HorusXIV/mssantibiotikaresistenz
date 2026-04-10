@@ -1,0 +1,5 @@
+INFO:    Environment variable SINGULARITY_DISABLE_CACHE is set, but APPTAINER_DISABLE_CACHE is preferred
+Resolved 133 packages in 60ms
+Audited 126 packages in 492ms
+run_start config=config/simulation_abx.yml days=1460 hospitals=15 susceptible=9925 seed_carriers=75 micro_steps_per_day=12 micro_workers=350 seed=42
+slurmstepd: error: *** JOB 6152 ON calc-c-003 CANCELLED AT 2026-04-07T09:47:55 ***
