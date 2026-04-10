@@ -1,0 +1,7 @@
+INFO:    Environment variable SINGULARITY_DISABLE_CACHE is set, but APPTAINER_DISABLE_CACHE is preferred
+Resolved 133 packages in 34ms
+Audited 126 packages in 318ms
+run_start config=config/simulation_abx.yml days=1000 hospitals=15 susceptible=9925 seed_carriers=75 micro_steps_per_day=12 micro_workers=300 seed=42
+INFO:    Terminating squashfuse_ll after timeout
+INFO:    Timeouts can be caused by a running background process
+slurmstepd: error: Detected 1 oom_kill event in StepId=6153.batch. Some of the step tasks have been OOM Killed.

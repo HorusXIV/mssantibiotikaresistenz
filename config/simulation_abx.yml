@@ -1,13 +1,13 @@
 run:
-    days: 1460
+    days: 300
     seed: 42
     run_id: dev_run
     quiet: false
 
 population:
-    hospitals: 15
-    susceptible_count: 9925
-    carrier_count: 75
+    hospitals: 6
+    susceptible_count: 300
+    carrier_count: 40
     initial_department: ward
     susceptible_template:
         age_years: 50
@@ -60,7 +60,7 @@ macro:
     community_carrier_fraction: 0.08
     replacement_resistant_fraction: 0.12
     replacement_dominant_genotype: "S"
-    max_occupancy_per_hospital: 800
+    max_occupancy_per_hospital: 50
 
     # Grid (Feature 2 — used once Mesa grids are integrated)
     dept_grid_cols: 3
