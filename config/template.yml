@@ -1,0 +1,394 @@
+# Template configuration for the coupled macro + micro simulation.
+#
+# This file is intentionally verbose.
+# It is meant as a copyable reference that documents every currently supported
+# YAML variable loaded by `mss.cli.run_coupled_simulation.load_coupled_settings`.
+#
+# Recommended workflow:
+# 1. Copy this file to `config/my_scenario.yml`
+# 2. Adjust values section by section
+# 3. Run `uv run mss-run --config config/my_scenario.yml`
+#
+# ---------------------------------------------------------------------------
+# Section order
+# ---------------------------------------------------------------------------
+# `run`        : global run settings
+# `population` : initial hospital population and patient templates
+# `macro`      : hospital/network-level transmission and movement
+# `micro`      : within-host bacterial evolution
+#
+# ---------------------------------------------------------------------------
+# Notes on patient templates
+# ---------------------------------------------------------------------------
+# The `susceptible_template` and `carrier_template` mappings are passed into
+# the `Patient` dataclass.
+#
+# Allowed template fields:
+# - age_years
+# - compliance
+# - vulnerability
+# - immune_strength
+# - immune_status
+# - sociability
+# - treatment_phase
+# - adherence
+# - history_flags
+# - resistant_fraction
+# - dominant_genotype
+# - dominant_strain_name
+# - relative_transmissibility
+# - p_clearance
+# - severity_modifier
+# - lethality_modifier
+#
+# Forbidden template fields because the runner or macro layer owns them:
+# - _ctx
+# - admission_day
+# - department
+# - episode_id
+# - hospital_id
+# - is_isolated
+# - patient_id
+# - planned_discharge_day
+# - regimen
+# - state
+
+run:
+  # Number of macro days to simulate.
+  days: 365
+
+  # Global RNG seed for reproducibility.
+  # This seed drives macro randomness and also seeds derived RNG streams.
+  seed: 42
+
+  # Arbitrary run label stored in output files.
+  run_id: template_run
+
+  # If true, suppresses per-day console output.
+  quiet: false
+
+population:
+  # Number of hospitals in the network.
+  hospitals: 6
+
+  # Number of initially susceptible patients admitted at day 0.
+  susceptible_count: 980
+
+  # Number of initially colonized/carrier patients admitted at day 0.
+  carrier_count: 30
+
+  # Initial department for all patients admitted by the runner.
+  # Allowed: `ward`, `icu`
+  initial_department: ward
+
+  susceptible_template:
+    # Patient age in years.
+    # Currently included in micro requests but not directly used by the micro engine.
+    age_years: 62
+
+    # 0..1; main behavioural compliance trait.
+    # Used in `Patient.update_context()` to derive daily adherence.
+    compliance: 0.75
+
+    # Host-level susceptibility / severity multiplier.
+    # Used by the macro layer, not directly by the current micro engine.
+    vulnerability: 1.1
+
+    # Host immune strength multiplier.
+    # Used directly by the micro layer and by macro susceptibility logic.
+    immune_strength: 0.9
+
+    # Host immune state.
+    # Common values: `normal`, `suppressed`
+    immune_status: normal
+
+    # Contact-rate multiplier used by macro transmission.
+    sociability: 1.0
+
+    # Initial adherence value.
+    # Usually overwritten each day from `compliance` in `Patient.update_context()`.
+    adherence: 0.75
+
+    # String list converted to a Python set.
+    # Example flags: `prior_abx`, `recent_surgery`, `immunosuppression`
+    history_flags: []
+
+  carrier_template:
+    # The same general patient-template fields are allowed here too.
+    age_years: 65
+    compliance: 0.70
+    vulnerability: 1.3
+    immune_strength: 0.75
+    immune_status: normal
+    sociability: 1.0
+    adherence: 0.70
+    history_flags: ["prior_abx"]
+
+    # Initial fraction of the patient's within-host population that is resistant.
+    # Used when the episode is first initialized by the micro simulator.
+    resistant_fraction: 0.45
+
+    # Initial dominant resistance class for seeded carrier episodes.
+    # Allowed values in current logic: `S`, `R1`, `R2`, `R3`
+    dominant_genotype: R2
+
+    # Optional preferred name for the initial dominant strain.
+    # Leave empty for automatic naming.
+    dominant_strain_name: ""
+
+    # Initial macro transmission multiplier for seeded carriers.
+    # After the first micro day, this is overwritten by micro output.
+    relative_transmissibility: 1.2
+
+    # Initial daily clearance probability for seeded carriers.
+    # After the first micro day, this is overwritten by micro output.
+    p_clearance: 0.008
+
+    # Initial strain-driven severity multiplier.
+    # Optional in macro; may be overwritten by micro output.
+    severity_modifier: 1.2
+
+    # Initial strain-driven lethality multiplier.
+    # Optional in macro; may be overwritten by micro output.
+    lethality_modifier: 1.1
+
+macro:
+  # -------------------------------------------------------------------------
+  # Hospital environment
+  # -------------------------------------------------------------------------
+
+  # 0..1; higher hygiene lowers transmission pressure.
+  base_hygiene: 0.65
+
+  # 0..1; reduction factor applied when isolation is active.
+  base_isolation_effectiveness: 0.65
+
+  # >0; multiplier on `carrier_isolation_probability`.
+  # 1.0 = unchanged, 0.5 = slower detection, 2.0 = faster detection.
+  base_diagnostic_speed: 1.0
+
+  # -------------------------------------------------------------------------
+  # Transmission
+  # -------------------------------------------------------------------------
+
+  # Daily per-carrier transmission base rate before modifiers.
+  base_transmission_rate: 0.09
+
+  # Effective number of daily contact attempts in the hazard model.
+  daily_contact_attempts: 18.0
+
+  # Daily probability of receiving antibiotics in ICU / ward.
+  # These choices affect the micro layer through the generated regimen.
+  icu_abx_probability: 0.85
+  ward_abx_probability: 0.40
+
+  # Daily chance that a non-isolated carrier is detected and isolated.
+  carrier_isolation_probability: 0.65
+
+  # -------------------------------------------------------------------------
+  # Transmission inheritance
+  # -------------------------------------------------------------------------
+
+  # Probability that a newly transmitted strain mutates slightly during handover.
+  transmission_mutation_probability: 0.25
+
+  # Standard deviation of the resistance perturbation during transmission inheritance.
+  transmission_resistance_mutation_std: 0.08
+
+  # -------------------------------------------------------------------------
+  # Length of stay and discharge
+  # -------------------------------------------------------------------------
+
+  # Mean ward stay in days.
+  los_mean_ward: 8.0
+
+  # Mean ICU stay in days.
+  los_mean_icu: 14.0
+
+  # Log-normal sigma for LOS sampling.
+  los_sigma: 0.6
+
+  # If a patient is a carrier, extend planned discharge by this many days.
+  carrier_extension_days: 14.0
+
+  # Steepness of the logistic discharge curve after the planned day.
+  discharge_logistic_k: 1.0
+
+  # Days after the planned discharge date where discharge probability reaches 50%.
+  discharge_logistic_t_half: 3.0
+
+  # -------------------------------------------------------------------------
+  # Admissions
+  # -------------------------------------------------------------------------
+
+  # Total mean admissions per day across all hospitals.
+  # `0.0` disables dynamic admissions.
+  daily_admission_rate: 126.0
+
+  # Fraction of incoming community admissions that arrive already as carriers.
+  community_carrier_fraction: 0.03
+
+  # Resistance fraction assigned to newly admitted community carriers.
+  replacement_resistant_fraction: 0.05
+
+  # Dominant genotype assigned to newly admitted community carriers.
+  replacement_dominant_genotype: "S"
+
+  # Hard occupancy cap per hospital.
+  max_occupancy_per_hospital: 200
+
+  # -------------------------------------------------------------------------
+  # Inter-hospital transfers
+  # -------------------------------------------------------------------------
+
+  # Per-patient daily transfer probability.
+  # `0.0` disables transfers.
+  daily_transfer_rate: 0.003
+
+  # -------------------------------------------------------------------------
+  # Spatial grid
+  # -------------------------------------------------------------------------
+
+  # Department grid width inside each hospital.
+  dept_grid_cols: 3
+
+  # Department grid height inside each hospital.
+  dept_grid_rows: 2
+
+  # Number of grid rows reserved for ICU.
+  dept_grid_icu_rows: 1
+
+  # Width of the higher-level hospital network grid.
+  network_grid_cols: 3
+
+  # Distance-decay parameter for proximity weighting.
+  proximity_decay_alpha: 0.5
+
+micro:
+  # -------------------------------------------------------------------------
+  # Execution
+  # -------------------------------------------------------------------------
+
+  # Number of worker processes/threads.
+  # Use `null` to fall back to CPU count.
+  workers: null
+
+  # Shared founder library size for initializing new micro episodes.
+  # `0` disables the founder pool and falls back to direct random seeding.
+  founder_pool_size: 32
+
+  # Deterministic seed for founder generation.
+  # Founder slots use seeds `founder_pool_seed .. founder_pool_seed + size - 1`.
+  founder_pool_seed: 1
+
+  # Gaussian noise added when building founder genomes around the archetype genotype.
+  founder_pool_gene_noise_std: 0.02
+
+  # Threshold used in raw gene logs to decide whether a gene is considered "present"
+  # in a strain for presence-count summaries.
+  gene_presence_threshold: 0.2
+
+  # -------------------------------------------------------------------------
+  # Core time / population limits
+  # -------------------------------------------------------------------------
+
+  # Number of micro steps simulated per macro day.
+  steps_per_day: 12
+
+  # Maximum number of strains retained in one episode after consolidation.
+  max_strains: 40
+
+  # Upper carrying capacity of the within-host population.
+  carrying_capacity: 500000000.0
+
+  # Population size below which clearance becomes more likely.
+  min_population: 100.0
+
+  # Population size below which clearance is almost certain.
+  clearance_threshold: 1000.0
+
+  # -------------------------------------------------------------------------
+  # Mutation
+  # -------------------------------------------------------------------------
+
+  # Baseline mutation rate per gene per step.
+  base_mutation_rate: 0.012
+
+  # Standard deviation of one mutational perturbation.
+  mutation_std: 0.025
+
+  # Multiplicative mutation boost under antibiotic stress.
+  stress_mutation_boost: 40.0
+
+  # -------------------------------------------------------------------------
+  # Horizontal gene transfer
+  # -------------------------------------------------------------------------
+
+  # Baseline HGT probability per eligible strain and step.
+  base_hgt_rate: 0.03
+
+  # Probability that each transferable gene is copied during one HGT event.
+  hgt_gene_transfer_prob: 0.25
+
+  # -------------------------------------------------------------------------
+  # Selection and basic growth
+  # -------------------------------------------------------------------------
+
+  # Exponent on relative fitness. Higher values sharpen competitive selection.
+  selection_strength: 2.5
+
+  # Baseline per-step growth rate before survival and lifecycle corrections.
+  growth_rate_per_step: 0.18
+
+  # Baseline per-step death rate.
+  death_rate_per_step: 0.06
+
+  # Strains below this absolute population are removed during consolidation.
+  strain_prune_threshold: 200.0
+
+  # -------------------------------------------------------------------------
+  # Damage / lifecycle / dormancy block
+  # -------------------------------------------------------------------------
+
+  # Background damage accumulated each step.
+  base_damage_per_step: 0.004
+
+  # Extra damage from replication pressure.
+  replication_damage_factor: 0.03
+
+  # Extra damage from environmental stress.
+  stress_damage_factor: 0.06
+
+  # Per-step repair capacity scaling.
+  repair_rate_per_step: 0.08
+
+  # How strongly lineage age increases mortality.
+  age_mortality_scale: 0.001
+
+  # How strongly damage load increases mortality.
+  damage_mortality_scale: 0.025
+
+  # Step scale at which age-related turnover becomes important.
+  lifecycle_half_life_steps: 200.0
+
+  # Saturation cap for accumulated damage.
+  max_damage_load: 5.0
+
+  # Growth penalty paid when dormancy is active.
+  dormancy_growth_penalty: 0.55
+
+  # Synergy bonus for the repair x dormancy combination.
+  synergy_repair_dormancy_bonus: 0.25
+
+  # Synergy bonus for the stress-response x tolerance combination.
+  synergy_stress_tolerance_bonus: 0.20
+
+  # -------------------------------------------------------------------------
+  # Demographic stochasticity
+  # -------------------------------------------------------------------------
+
+  # Below this threshold, exact Poisson sampling is used.
+  stochastic_threshold: 10000.0
+
+  # Noise scaling for large populations above the stochastic threshold.
+  stochastic_noise_scale: 0.08

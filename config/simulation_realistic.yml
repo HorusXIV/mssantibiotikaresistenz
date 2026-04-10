@@ -87,6 +87,10 @@ macro:
 
 micro:
   workers: null
+  founder_pool_size: 32
+  founder_pool_seed: 1
+  founder_pool_gene_noise_std: 0.02
+  gene_presence_threshold: 0.2
   steps_per_day: 12
   max_strains: 40
   carrying_capacity: 500000000.0

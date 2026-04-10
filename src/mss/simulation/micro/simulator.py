@@ -14,7 +14,13 @@ from typing import Any, Dict, Iterable, List, Optional
 
 import numpy as np
 
-from .engine import SimulationConfig, StrainPopulation, population_to_response, simulate_day
+from .engine import (
+    SimulationConfig,
+    StrainPopulation,
+    build_founder_pool,
+    population_to_response,
+    simulate_day,
+)
 from .genome import NUM_GENES
 
 
@@ -38,6 +44,12 @@ class EpisodeState:
             "lineage_ages": self.population.lineage_ages.tolist(),
             "damage_loads": self.population.damage_loads.tolist(),
             "strain_names": self.population.strain_names,
+            "strain_ids": self.population.strain_ids,
+            "parent_ids": self.population.parent_ids,
+            "donor_ids": self.population.donor_ids,
+            "founder_ids": self.population.founder_ids,
+            "next_strain_serial": self.population.next_strain_serial,
+            "strain_namespace": self.population.strain_namespace,
         }
 
     def to_payload(self) -> Dict[str, Any]:
@@ -51,6 +63,12 @@ class EpisodeState:
             "lineage_ages": self.population.lineage_ages.copy(),
             "damage_loads": self.population.damage_loads.copy(),
             "strain_names": self.population.strain_names.copy(),
+            "strain_ids": self.population.strain_ids.copy(),
+            "parent_ids": self.population.parent_ids.copy(),
+            "donor_ids": self.population.donor_ids.copy(),
+            "founder_ids": self.population.founder_ids.copy(),
+            "next_strain_serial": self.population.next_strain_serial,
+            "strain_namespace": self.population.strain_namespace,
         }
 
     @classmethod
@@ -63,6 +81,10 @@ class EpisodeState:
         lineage_ages = np.array(data.get("lineage_ages", []), dtype=np.float64)
         damage_loads = np.array(data.get("damage_loads", []), dtype=np.float64)
         strain_names = [str(name) for name in data.get("strain_names", [])]
+        strain_ids = [str(value) for value in data.get("strain_ids", [])]
+        parent_ids = [str(value) for value in data.get("parent_ids", [])]
+        donor_ids = [str(value) for value in data.get("donor_ids", [])]
+        founder_ids = [str(value) for value in data.get("founder_ids", [])]
         return cls(
             episode_id=data["episode_id"],
             patient_id=data["patient_id"],
@@ -72,6 +94,12 @@ class EpisodeState:
                 lineage_ages=lineage_ages if len(lineage_ages) else None,
                 damage_loads=damage_loads if len(damage_loads) else None,
                 strain_names=strain_names if strain_names else None,
+                strain_ids=strain_ids if strain_ids else None,
+                parent_ids=parent_ids if parent_ids else None,
+                donor_ids=donor_ids if donor_ids else None,
+                founder_ids=founder_ids if founder_ids else None,
+                next_strain_serial=int(data.get("next_strain_serial", 0)),
+                strain_namespace=str(data.get("strain_namespace", data["episode_id"])),
             ),
             day=data.get("day", 0),
         )
@@ -92,9 +120,36 @@ class EpisodeState:
                 lineage_ages=np.array(data["lineage_ages"], dtype=np.float64, copy=True),
                 damage_loads=np.array(data["damage_loads"], dtype=np.float64, copy=True),
                 strain_names=[str(name) for name in data.get("strain_names", [])] or None,
+                strain_ids=[str(value) for value in data.get("strain_ids", [])] or None,
+                parent_ids=[str(value) for value in data.get("parent_ids", [])] or None,
+                donor_ids=[str(value) for value in data.get("donor_ids", [])] or None,
+                founder_ids=[str(value) for value in data.get("founder_ids", [])] or None,
+                next_strain_serial=int(data.get("next_strain_serial", 0)),
+                strain_namespace=str(data.get("strain_namespace", data["episode_id"])),
             ),
             day=data.get("day", 0),
         )
+
+
+def _create_initial_population(
+    *,
+    episode_id: str,
+    dominant_genotype: str,
+    dominant_strain_name: str | None,
+    resistant_fraction: float,
+    config: SimulationConfig,
+    seed: int | None,
+) -> StrainPopulation:
+    rng = np.random.default_rng(seed)
+    founder_pool = build_founder_pool(config)
+    return StrainPopulation.create_initial(
+        resistant_fraction=resistant_fraction,
+        dominant_genotype=dominant_genotype,
+        rng=rng,
+        dominant_strain_name=dominant_strain_name,
+        founder_pool=founder_pool,
+        strain_namespace=episode_id or "episode",
+    )
 
 
 def _process_single_request(args: tuple) -> Dict[str, Any]:
@@ -120,13 +175,13 @@ def _process_single_request(args: tuple) -> Dict[str, Any]:
         initial = request.get("initial_state", {})
         resistant_fraction = initial.get("resistant_fraction", 0.0)
         dominant_genotype = initial.get("dominant_genotype", "S")
-
-        rng = np.random.default_rng(request.get("seed", None))
-        population = StrainPopulation.create_initial(
-            resistant_fraction=resistant_fraction,
+        population = _create_initial_population(
+            episode_id=str(request.get("episode_id", "")),
             dominant_genotype=dominant_genotype,
-            rng=rng,
             dominant_strain_name=initial.get("dominant_strain_name"),
+            resistant_fraction=resistant_fraction,
+            config=config,
+            seed=request.get("seed", None),
         )
 
     # Extract parameters from request
@@ -227,6 +282,10 @@ class MicroSimulator:
             "synergy_stress_tolerance_bonus": self.config.synergy_stress_tolerance_bonus,
             "stochastic_threshold": self.config.stochastic_threshold,
             "stochastic_noise_scale": self.config.stochastic_noise_scale,
+            "founder_pool_size": self.config.founder_pool_size,
+            "founder_pool_seed": self.config.founder_pool_seed,
+            "founder_pool_gene_noise_std": self.config.founder_pool_gene_noise_std,
+            "gene_presence_threshold": self.config.gene_presence_threshold,
         }
 
     def _get_executor(self) -> Executor:
@@ -327,6 +386,39 @@ class MicroSimulator:
         """Remove episode state (e.g., when patient clears infection)."""
         self._episode_states.pop(episode_id, None)
 
+    def initialize_episode(
+        self,
+        *,
+        episode_id: str,
+        patient_id: str,
+        resistant_fraction: float = 0.0,
+        dominant_genotype: str = "S",
+        dominant_strain_name: str | None = None,
+        day: int = 0,
+        seed: int | None = None,
+    ) -> EpisodeState:
+        """Create and persist the initial micro population for an episode without simulating a day."""
+        existing = self._episode_states.get(episode_id)
+        if existing is not None:
+            return existing
+
+        population = _create_initial_population(
+            episode_id=episode_id,
+            dominant_genotype=dominant_genotype,
+            dominant_strain_name=dominant_strain_name,
+            resistant_fraction=resistant_fraction,
+            config=self.config,
+            seed=seed,
+        )
+        state = EpisodeState(
+            episode_id=episode_id,
+            patient_id=patient_id,
+            population=population,
+            day=day,
+        )
+        self._episode_states[episode_id] = state
+        return state
+
     def get_episode_state(self, episode_id: str) -> Optional[EpisodeState]:
         """Get current state for an episode."""
         return self._episode_states.get(episode_id)
@@ -371,12 +463,13 @@ def run_micro_simulation(
     resistant_fraction = initial.get("resistant_fraction", 0.0)
     dominant_genotype = initial.get("dominant_genotype", "S")
 
-    rng = np.random.default_rng(patient_request.get("seed", None))
-    population = StrainPopulation.create_initial(
-        resistant_fraction=resistant_fraction,
+    population = _create_initial_population(
+        episode_id=str(patient_request.get("episode_id", "")),
         dominant_genotype=dominant_genotype,
-        rng=rng,
         dominant_strain_name=initial.get("dominant_strain_name"),
+        resistant_fraction=resistant_fraction,
+        config=config,
+        seed=patient_request.get("seed", None),
     )
 
     # Extract parameters

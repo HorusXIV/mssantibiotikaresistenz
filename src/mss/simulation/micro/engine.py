@@ -70,6 +70,18 @@ def _extend_strain_names(
     return updated
 
 
+def _format_strain_id(namespace: str, serial: int) -> str:
+    return f"{namespace}:strain_{serial:06d}"
+
+
+def _take_next_strain_id(namespace: str, next_serial: int) -> tuple[str, int]:
+    return _format_strain_id(namespace, next_serial), next_serial + 1
+
+
+def _seed_founder_id(namespace: str, slot_index: int) -> str:
+    return f"{namespace}:founder_{slot_index:04d}"
+
+
 @dataclass
 class SimulationConfig:
     """Configuration for micro-simulation."""
@@ -114,6 +126,126 @@ class SimulationConfig:
     stochastic_threshold: float = 1e5  # Exact Poisson dynamics below this size
     stochastic_noise_scale: float = 1.0  # Scales demographic noise above threshold
 
+    # Founder-pool / logging helpers
+    founder_pool_size: int = 0  # 0 disables the shared founder library
+    founder_pool_seed: int = 1  # First deterministic seed for founder generation
+    founder_pool_gene_noise_std: float = 0.02  # Founder diversification around archetypes
+    gene_presence_threshold: float = 0.2  # Threshold for gene "presence" in logs
+
+
+@dataclass(frozen=True)
+class FounderStrain:
+    """One globally reusable founder strain for episode initialization."""
+
+    founder_id: str
+    founder_name: str
+    genotype: str
+    genome: np.ndarray
+
+
+def _generate_founder_genome(
+    genotype: str,
+    rng: np.random.Generator,
+    noise_std: float,
+) -> np.ndarray:
+    base = (
+        create_wild_type_genome() if genotype == "S" else _create_seed_genome_for_genotype(genotype)
+    )
+    if noise_std <= 0.0:
+        return base.astype(np.float32, copy=True)
+
+    for _ in range(16):
+        candidate = base.copy()
+        candidate += rng.normal(0.0, noise_std, NUM_GENES).astype(np.float32)
+        candidate = np.clip(candidate, 0.0, 1.0)
+        if classify_genotype(candidate) == genotype:
+            return candidate
+
+    return base.astype(np.float32, copy=True)
+
+
+def build_founder_pool(config: SimulationConfig) -> list[FounderStrain]:
+    """Create a deterministic founder library from the active micro config."""
+    size = max(0, int(config.founder_pool_size))
+    if size == 0:
+        return []
+
+    forced_genotypes = ["S", "R1", "R2", "R3"]
+    random_genotypes = np.array(["S", "R1", "R2", "R3"], dtype=object)
+    random_weights = np.array([0.55, 0.20, 0.18, 0.07], dtype=np.float64)
+
+    founders: list[FounderStrain] = []
+    existing_names: set[str] = set()
+    for offset in range(size):
+        seed = int(config.founder_pool_seed) + offset
+        rng = np.random.default_rng(seed)
+        if offset < len(forced_genotypes):
+            target_genotype = forced_genotypes[offset]
+        else:
+            target_genotype = str(rng.choice(random_genotypes, p=random_weights))
+
+        genome = _generate_founder_genome(
+            target_genotype,
+            rng,
+            noise_std=float(config.founder_pool_gene_noise_std),
+        )
+        founders.append(
+            FounderStrain(
+                founder_id=f"founder_{offset + 1:04d}",
+                founder_name=_next_unique_strain_name(existing_names, rng),
+                genotype=classify_genotype(genome),
+                genome=genome.astype(np.float32, copy=True),
+            )
+        )
+
+    return founders
+
+
+def _select_founders_for_genotype(
+    founders: list[FounderStrain],
+    genotype: str,
+    count: int,
+    rng: np.random.Generator,
+    preferred_name: str | None = None,
+) -> list[FounderStrain]:
+    if count <= 0:
+        return []
+
+    eligible = [founder for founder in founders if founder.genotype == genotype]
+    if not eligible:
+        return []
+
+    selected: list[FounderStrain] = []
+    if preferred_name:
+        preferred = next(
+            (founder for founder in eligible if founder.founder_name == preferred_name),
+            None,
+        )
+        if preferred is not None:
+            selected.append(preferred)
+            eligible = [
+                founder for founder in eligible if founder.founder_id != preferred.founder_id
+            ]
+
+    remaining = count - len(selected)
+    if remaining <= 0:
+        return selected
+
+    if len(eligible) >= remaining:
+        indices = np.asarray(rng.choice(len(eligible), size=remaining, replace=False)).reshape(-1)
+        selected.extend(eligible[int(idx)] for idx in indices.tolist())
+        return selected
+
+    selected.extend(eligible)
+    remaining = count - len(selected)
+    if remaining <= 0:
+        return selected
+
+    refill_pool = [founder for founder in founders if founder.genotype == genotype]
+    indices = np.asarray(rng.choice(len(refill_pool), size=remaining, replace=True)).reshape(-1)
+    selected.extend(refill_pool[int(idx)] for idx in indices.tolist())
+    return selected
+
 
 @dataclass
 class StrainPopulation:
@@ -128,11 +260,18 @@ class StrainPopulation:
     lineage_ages: np.ndarray | None = None  # Shape (n_strains,) - cumulative lineage age
     damage_loads: np.ndarray | None = None  # Shape (n_strains,) - accumulated stress / damage
     strain_names: list[str] | None = None
+    strain_ids: list[str] | None = None
+    parent_ids: list[str] | None = None
+    donor_ids: list[str] | None = None
+    founder_ids: list[str] | None = None
+    next_strain_serial: int = 0
+    strain_namespace: str = "population"
 
     def __post_init__(self):
         assert self.genomes.ndim == 2
         assert self.genomes.shape[1] == NUM_GENES
         assert len(self.populations) == len(self.genomes)
+        self.strain_namespace = str(self.strain_namespace or "population")
         if self.lineage_ages is None:
             self.lineage_ages = np.zeros(len(self.populations), dtype=np.float64)
         if self.damage_loads is None:
@@ -146,6 +285,30 @@ class StrainPopulation:
         else:
             self.strain_names = [str(name) for name in self.strain_names]
         assert len(self.strain_names) == len(self.genomes)
+        if self.strain_ids is None:
+            self.strain_ids = [
+                _format_strain_id(self.strain_namespace, idx)
+                for idx in range(len(self.populations))
+            ]
+        else:
+            self.strain_ids = [str(value) for value in self.strain_ids]
+        if self.parent_ids is None:
+            self.parent_ids = ["" for _ in range(len(self.populations))]
+        else:
+            self.parent_ids = [str(value) for value in self.parent_ids]
+        if self.donor_ids is None:
+            self.donor_ids = ["" for _ in range(len(self.populations))]
+        else:
+            self.donor_ids = [str(value) for value in self.donor_ids]
+        if self.founder_ids is None:
+            self.founder_ids = self.strain_ids.copy()
+        else:
+            self.founder_ids = [str(value) for value in self.founder_ids]
+        assert len(self.strain_ids) == len(self.genomes)
+        assert len(self.parent_ids) == len(self.genomes)
+        assert len(self.donor_ids) == len(self.genomes)
+        assert len(self.founder_ids) == len(self.genomes)
+        self.next_strain_serial = max(int(self.next_strain_serial), len(self.strain_ids))
 
     @property
     def n_strains(self) -> int:
@@ -162,6 +325,12 @@ class StrainPopulation:
             lineage_ages=self.lineage_ages.copy(),
             damage_loads=self.damage_loads.copy(),
             strain_names=self.strain_names.copy(),
+            strain_ids=self.strain_ids.copy(),
+            parent_ids=self.parent_ids.copy(),
+            donor_ids=self.donor_ids.copy(),
+            founder_ids=self.founder_ids.copy(),
+            next_strain_serial=self.next_strain_serial,
+            strain_namespace=self.strain_namespace,
         )
 
     @classmethod
@@ -174,6 +343,8 @@ class StrainPopulation:
         n_resistant_strains: int = 2,
         rng: np.random.Generator = None,
         dominant_strain_name: str | None = None,
+        founder_pool: list[FounderStrain] | None = None,
+        strain_namespace: str = "population",
     ) -> StrainPopulation:
         """Create initial population with optional resistance."""
         if rng is None:
@@ -182,34 +353,84 @@ class StrainPopulation:
         strains = []
         pops = []
         names: list[str] = []
+        strain_ids: list[str] = []
+        parent_ids: list[str] = []
+        donor_ids: list[str] = []
+        founder_ids: list[str] = []
+        existing_names: set[str] = set()
+        next_serial = 0
+        founder_pool = founder_pool or []
+
+        susceptible_founders = _select_founders_for_genotype(
+            founder_pool,
+            "S",
+            n_susceptible_strains,
+            rng,
+            preferred_name=dominant_strain_name if dominant_genotype == "S" else None,
+        )
 
         # Susceptible strains
         sus_pop = initial_population * (1 - resistant_fraction)
         for i in range(n_susceptible_strains):
-            genome = create_wild_type_genome()
-            # Add small variation
-            genome += rng.normal(0, 0.02, NUM_GENES).astype(np.float32)
-            genome = np.clip(genome, 0.0, 1.0)
+            founder = susceptible_founders[i] if i < len(susceptible_founders) else None
+            if founder is not None:
+                genome = founder.genome.copy()
+                preferred_name = founder.founder_name
+                founder_id = founder.founder_id
+            else:
+                genome = create_wild_type_genome()
+                genome += rng.normal(0, 0.02, NUM_GENES).astype(np.float32)
+                genome = np.clip(genome, 0.0, 1.0)
+                preferred_name = (
+                    dominant_strain_name if dominant_genotype == "S" and i == 0 else None
+                )
+                founder_id = _seed_founder_id(strain_namespace, len(founder_ids))
             strains.append(genome)
             pops.append(sus_pop / n_susceptible_strains)
-        names = _extend_strain_names(
-            names,
-            n_susceptible_strains,
-            rng,
-            preferred_names=[dominant_strain_name] if dominant_genotype == "S" else None,
-        )
+            names.append(
+                _next_unique_strain_name(existing_names, rng, preferred_name=preferred_name)
+            )
+            strain_id, next_serial = _take_next_strain_id(strain_namespace, next_serial)
+            strain_ids.append(strain_id)
+            parent_ids.append("")
+            donor_ids.append("")
+            founder_ids.append(founder_id)
 
         # Resistant strains (if any)
         if resistant_fraction > 0 and n_resistant_strains > 0:
             res_pop = initial_population * resistant_fraction
-            preferred_names = [dominant_strain_name] if dominant_genotype != "S" else None
+            resistant_target = dominant_genotype if dominant_genotype != "S" else "R1"
+            resistant_founders = _select_founders_for_genotype(
+                founder_pool,
+                resistant_target,
+                n_resistant_strains,
+                rng,
+                preferred_name=dominant_strain_name if dominant_genotype != "S" else None,
+            )
             for i in range(n_resistant_strains):
-                genome = _create_seed_genome_for_genotype(dominant_genotype)
-                genome += rng.normal(0, 0.02, NUM_GENES).astype(np.float32)
-                genome = np.clip(genome, 0.0, 1.0)
+                founder = resistant_founders[i] if i < len(resistant_founders) else None
+                if founder is not None:
+                    genome = founder.genome.copy()
+                    preferred_name = founder.founder_name
+                    founder_id = founder.founder_id
+                else:
+                    genome = _create_seed_genome_for_genotype(dominant_genotype)
+                    genome += rng.normal(0, 0.02, NUM_GENES).astype(np.float32)
+                    genome = np.clip(genome, 0.0, 1.0)
+                    preferred_name = (
+                        dominant_strain_name if i == 0 and dominant_genotype != "S" else None
+                    )
+                    founder_id = _seed_founder_id(strain_namespace, len(founder_ids))
                 strains.append(genome)
                 pops.append(res_pop / n_resistant_strains)
-            names = _extend_strain_names(names, n_resistant_strains, rng, preferred_names)
+                names.append(
+                    _next_unique_strain_name(existing_names, rng, preferred_name=preferred_name)
+                )
+                strain_id, next_serial = _take_next_strain_id(strain_namespace, next_serial)
+                strain_ids.append(strain_id)
+                parent_ids.append("")
+                donor_ids.append("")
+                founder_ids.append(founder_id)
 
         genomes = np.array(strains, dtype=np.float32)
         populations = np.array(pops, dtype=np.float64)
@@ -222,6 +443,12 @@ class StrainPopulation:
             lineage_ages=lineage_ages,
             damage_loads=damage_loads,
             strain_names=names,
+            strain_ids=strain_ids,
+            parent_ids=parent_ids,
+            donor_ids=donor_ids,
+            founder_ids=founder_ids,
+            next_strain_serial=next_serial,
+            strain_namespace=strain_namespace,
         )
 
 
@@ -278,6 +505,11 @@ def mutate_population(
     lineage_ages = population.lineage_ages.copy()
     damage_loads = population.damage_loads.copy()
     strain_names = population.strain_names.copy()
+    strain_ids = population.strain_ids.copy()
+    parent_ids = population.parent_ids.copy()
+    donor_ids = population.donor_ids.copy()
+    founder_ids = population.founder_ids.copy()
+    next_serial = population.next_strain_serial
 
     # Stress-induced mutation rate increase
     stress_mult = 1.0 + abx_stress * (config.stress_mutation_boost - 1.0)
@@ -291,6 +523,10 @@ def mutate_population(
     new_pops = []
     new_ages = []
     new_damage = []
+    new_ids: list[str] = []
+    new_parent_ids: list[str] = []
+    new_donor_ids: list[str] = []
+    new_founder_ids: list[str] = []
 
     for i in range(len(genomes)):
         if populations[i] < 1:
@@ -319,6 +555,11 @@ def mutate_population(
             new_pops.append(transfer_pop)
             new_ages.append(max(0.0, lineage_ages[i] * 0.5))
             new_damage.append(max(0.0, damage_loads[i] * 0.7))
+            strain_id, next_serial = _take_next_strain_id(population.strain_namespace, next_serial)
+            new_ids.append(strain_id)
+            new_parent_ids.append(strain_ids[i])
+            new_donor_ids.append("")
+            new_founder_ids.append(founder_ids[i])
 
     # Add new strains
     if new_strains:
@@ -327,6 +568,10 @@ def mutate_population(
         lineage_ages = np.concatenate([lineage_ages, np.array(new_ages, dtype=np.float64)])
         damage_loads = np.concatenate([damage_loads, np.array(new_damage, dtype=np.float64)])
         strain_names = _extend_strain_names(strain_names, len(new_strains), rng)
+        strain_ids.extend(new_ids)
+        parent_ids.extend(new_parent_ids)
+        donor_ids.extend(new_donor_ids)
+        founder_ids.extend(new_founder_ids)
 
     return StrainPopulation(
         genomes=genomes,
@@ -334,6 +579,12 @@ def mutate_population(
         lineage_ages=lineage_ages,
         damage_loads=damage_loads,
         strain_names=strain_names,
+        strain_ids=strain_ids,
+        parent_ids=parent_ids,
+        donor_ids=donor_ids,
+        founder_ids=founder_ids,
+        next_strain_serial=next_serial,
+        strain_namespace=population.strain_namespace,
     )
 
 
@@ -353,6 +604,11 @@ def horizontal_gene_transfer(
     lineage_ages = population.lineage_ages.copy()
     damage_loads = population.damage_loads.copy()
     strain_names = population.strain_names.copy()
+    strain_ids = population.strain_ids.copy()
+    parent_ids = population.parent_ids.copy()
+    donor_ids = population.donor_ids.copy()
+    founder_ids = population.founder_ids.copy()
+    next_serial = population.next_strain_serial
 
     # HGT probability based on competence
     competence = genomes[:, GeneIndex.HGT_COMPETENCE]
@@ -372,6 +628,10 @@ def horizontal_gene_transfer(
     new_pops = []
     new_ages = []
     new_damage = []
+    new_ids: list[str] = []
+    new_parent_ids: list[str] = []
+    new_donor_ids: list[str] = []
+    new_founder_ids: list[str] = []
 
     for i in range(population.n_strains):
         if populations[i] < 1000:
@@ -408,6 +668,11 @@ def horizontal_gene_transfer(
             new_pops.append(transfer_pop)
             new_ages.append(max(0.0, min(lineage_ages[i], lineage_ages[donor_idx]) * 0.7))
             new_damage.append(max(0.0, 0.5 * (damage_loads[i] + damage_loads[donor_idx]) * 0.8))
+            strain_id, next_serial = _take_next_strain_id(population.strain_namespace, next_serial)
+            new_ids.append(strain_id)
+            new_parent_ids.append(strain_ids[i])
+            new_donor_ids.append(strain_ids[donor_idx])
+            new_founder_ids.append(founder_ids[i])
 
     if new_strains:
         genomes = np.vstack([genomes, np.array(new_strains, dtype=np.float32)])
@@ -415,6 +680,10 @@ def horizontal_gene_transfer(
         lineage_ages = np.concatenate([lineage_ages, np.array(new_ages, dtype=np.float64)])
         damage_loads = np.concatenate([damage_loads, np.array(new_damage, dtype=np.float64)])
         strain_names = _extend_strain_names(strain_names, len(new_strains), rng)
+        strain_ids.extend(new_ids)
+        parent_ids.extend(new_parent_ids)
+        donor_ids.extend(new_donor_ids)
+        founder_ids.extend(new_founder_ids)
 
     return StrainPopulation(
         genomes=genomes,
@@ -422,6 +691,12 @@ def horizontal_gene_transfer(
         lineage_ages=lineage_ages,
         damage_loads=damage_loads,
         strain_names=strain_names,
+        strain_ids=strain_ids,
+        parent_ids=parent_ids,
+        donor_ids=donor_ids,
+        founder_ids=founder_ids,
+        next_strain_serial=next_serial,
+        strain_namespace=population.strain_namespace,
     )
 
 
@@ -572,6 +847,12 @@ def selection_step(
         lineage_ages=lineage_ages,
         damage_loads=damage_loads,
         strain_names=population.strain_names.copy(),
+        strain_ids=population.strain_ids.copy(),
+        parent_ids=population.parent_ids.copy(),
+        donor_ids=population.donor_ids.copy(),
+        founder_ids=population.founder_ids.copy(),
+        next_strain_serial=population.next_strain_serial,
+        strain_namespace=population.strain_namespace,
     )
 
 
@@ -589,6 +870,12 @@ def consolidate_strains(population: StrainPopulation, config: SimulationConfig) 
             lineage_ages=np.empty(0, dtype=np.float64),
             damage_loads=np.empty(0, dtype=np.float64),
             strain_names=[],
+            strain_ids=[],
+            parent_ids=[],
+            donor_ids=[],
+            founder_ids=[],
+            next_strain_serial=population.next_strain_serial,
+            strain_namespace=population.strain_namespace,
         )
 
     genomes = population.genomes[mask]
@@ -596,6 +883,10 @@ def consolidate_strains(population: StrainPopulation, config: SimulationConfig) 
     lineage_ages = population.lineage_ages[mask]
     damage_loads = population.damage_loads[mask]
     strain_names = [name for name, keep in zip(population.strain_names, mask, strict=False) if keep]
+    strain_ids = [value for value, keep in zip(population.strain_ids, mask, strict=False) if keep]
+    parent_ids = [value for value, keep in zip(population.parent_ids, mask, strict=False) if keep]
+    donor_ids = [value for value, keep in zip(population.donor_ids, mask, strict=False) if keep]
+    founder_ids = [value for value, keep in zip(population.founder_ids, mask, strict=False) if keep]
 
     # If too many strains, keep the largest ones
     if len(populations) > config.max_strains:
@@ -605,6 +896,10 @@ def consolidate_strains(population: StrainPopulation, config: SimulationConfig) 
         lineage_ages = lineage_ages[indices]
         damage_loads = damage_loads[indices]
         strain_names = [strain_names[idx] for idx in indices]
+        strain_ids = [strain_ids[idx] for idx in indices]
+        parent_ids = [parent_ids[idx] for idx in indices]
+        donor_ids = [donor_ids[idx] for idx in indices]
+        founder_ids = [founder_ids[idx] for idx in indices]
 
     return StrainPopulation(
         genomes=genomes,
@@ -612,6 +907,12 @@ def consolidate_strains(population: StrainPopulation, config: SimulationConfig) 
         lineage_ages=lineage_ages,
         damage_loads=damage_loads,
         strain_names=strain_names,
+        strain_ids=strain_ids,
+        parent_ids=parent_ids,
+        donor_ids=donor_ids,
+        founder_ids=founder_ids,
+        next_strain_serial=population.next_strain_serial,
+        strain_namespace=population.strain_namespace,
     )
 
 

@@ -1,8 +1,10 @@
 """Micro-level within-host simulation."""
 
 from .engine import (
+    FounderStrain,
     SimulationConfig,
     StrainPopulation,
+    build_founder_pool,
     compute_clearance_probability,
     get_dominant_strain,
     horizontal_gene_transfer,
@@ -37,12 +39,14 @@ __all__ = [
     "DOSE_MULTIPLIERS",
     "ABXProfile",
     "EpisodeState",
+    "FounderStrain",
     "GeneIndex",
     "MicroSimulator",
     "NUM_GENES",
     "ResistanceCosts",
     "SimulationConfig",
     "StrainPopulation",
+    "build_founder_pool",
     "classify_genotype",
     "compute_abx_survival",
     "compute_clearance_probability",

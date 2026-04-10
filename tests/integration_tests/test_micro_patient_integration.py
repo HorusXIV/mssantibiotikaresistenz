@@ -24,6 +24,7 @@ from mss.simulation.micro import (
     MicroSimulator,
     SimulationConfig,
     StrainPopulation,
+    build_founder_pool,
     create_wild_type_genome,
     get_dominant_strain,
     simulate_day,
@@ -334,6 +335,45 @@ class TestEndToEndIntegration:
             for name in population.strain_names
         )
 
+    def test_founder_pool_is_deterministic(self):
+        config = SimulationConfig(
+            founder_pool_size=8,
+            founder_pool_seed=11,
+            founder_pool_gene_noise_std=0.015,
+        )
+
+        pool_a = build_founder_pool(config)
+        pool_b = build_founder_pool(config)
+
+        assert [founder.founder_id for founder in pool_a] == [
+            founder.founder_id for founder in pool_b
+        ]
+        assert [founder.founder_name for founder in pool_a] == [
+            founder.founder_name for founder in pool_b
+        ]
+        assert [founder.genotype for founder in pool_a] == [founder.genotype for founder in pool_b]
+        for founder_a, founder_b in zip(pool_a, pool_b, strict=False):
+            assert np.allclose(founder_a.genome, founder_b.genome)
+
+    def test_initial_population_can_draw_from_founder_pool(self):
+        config = SimulationConfig(founder_pool_size=12, founder_pool_seed=1)
+        population = StrainPopulation.create_initial(
+            resistant_fraction=0.4,
+            dominant_genotype="R2",
+            rng=np.random.default_rng(7),
+            founder_pool=build_founder_pool(config),
+            strain_namespace="episode_test",
+        )
+
+        assert len(population.strain_ids) == population.n_strains
+        assert len(set(population.strain_ids)) == population.n_strains
+        assert len(population.parent_ids) == population.n_strains
+        assert len(population.founder_ids) == population.n_strains
+        assert any(founder_id.startswith("founder_") for founder_id in population.founder_ids)
+        assert all(
+            strain_id.startswith("episode_test:strain_") for strain_id in population.strain_ids
+        )
+
     def test_episode_state_preserves_strain_names(
         self, carrier_patient: Patient, micro_simulator: MicroSimulator
     ):
@@ -345,6 +385,11 @@ class TestEndToEndIntegration:
         assert state is not None
         assert len(state.population.strain_names) == state.population.n_strains
         assert carrier_patient.dominant_strain_name in state.population.strain_names
+        assert len(state.population.strain_ids) == state.population.n_strains
+        assert len(state.population.parent_ids) == state.population.n_strains
+        assert len(state.population.donor_ids) == state.population.n_strains
+        assert len(state.population.founder_ids) == state.population.n_strains
+        assert len(set(state.population.strain_ids)) == state.population.n_strains
 
 
 # =============================================================================
@@ -831,6 +876,24 @@ class TestLifecycleDynamics:
         assert len(state.population.damage_loads) == state.population.n_strains
         assert np.all(state.population.lineage_ages >= 0.0)
         assert np.all(state.population.damage_loads >= 0.0)
+
+    def test_mutations_record_parent_strain_ids(self, carrier_patient: Patient):
+        sim = MicroSimulator(
+            config=SimulationConfig(
+                founder_pool_size=10,
+                base_mutation_rate=1.0,
+                mutation_std=0.01,
+                base_hgt_rate=0.0,
+                max_strains=80,
+            )
+        )
+
+        request = carrier_patient.make_micro_request(run_id="run_001", day=1, dt_days=1, seed=42)
+        sim.process_request(request)
+
+        state = sim.get_episode_state("episode_001")
+        assert state is not None
+        assert any(parent_id for parent_id in state.population.parent_ids)
 
     def test_repair_and_persistence_reduce_turnover_costs(self):
         fragile = create_wild_type_genome()

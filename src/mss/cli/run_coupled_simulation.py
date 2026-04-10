@@ -11,6 +11,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable
 
+import numpy as np
 import pandas as pd
 import yaml
 
@@ -18,7 +19,7 @@ from mss.cli import visualize_results
 from mss.domain import Department, HealthState, Patient
 from mss.simulation.macro import MacroSimulator
 from mss.simulation.macro import SimulationConfig as MacroConfig
-from mss.simulation.micro import MicroSimulator
+from mss.simulation.micro import GeneIndex, MicroSimulator, classify_genotype
 from mss.simulation.micro import SimulationConfig as MicroConfig
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -176,6 +177,58 @@ _MICRO_DAILY_GENOTYPE_FIELDS = [
     "dominant_genotype",
     "count",
     "fraction",
+]
+
+_MICRO_HOSPITAL_POPULATION_FIELDS = [
+    "day",
+    "snapshot_stage",
+    "run_id",
+    "hospital_id",
+    "carrier_count",
+    "tracked_episode_count",
+    "total_population",
+    "total_strains",
+]
+
+_MICRO_STRAIN_DAILY_FIELDS = [
+    "day",
+    "snapshot_stage",
+    "run_id",
+    "hospital_id",
+    "patient_id",
+    "episode_id",
+    "episode_day",
+    "strain_id",
+    "parent_id",
+    "donor_id",
+    "founder_id",
+    "strain_name",
+    "strain_genotype",
+    "is_dominant",
+    "population",
+    "population_fraction_in_episode",
+    "lineage_age",
+    "damage_load",
+]
+
+_MICRO_EPISODE_GENE_DAILY_FIELDS = [
+    "day",
+    "snapshot_stage",
+    "run_id",
+    "hospital_id",
+    "patient_id",
+    "episode_id",
+    "episode_day",
+    "gene_index",
+    "gene_name",
+    "weighted_mean",
+    "weighted_variance",
+    "present_strain_count",
+    "total_strain_count",
+    "present_strain_fraction",
+    "present_population_fraction",
+    "dominant_strain_value",
+    "presence_threshold",
 ]
 _TRANSFER_DAILY_FIELDS = [
     "day",
@@ -389,6 +442,42 @@ def _make_patient_factory(
         )
 
     return factory
+
+
+def _iter_all_patients(macro: MacroSimulator, n_hospitals: int) -> list[tuple[str, Patient]]:
+    rows: list[tuple[str, Patient]] = []
+    for i in range(1, n_hospitals + 1):
+        hid = f"hospital_{i:03d}"
+        rows.extend((hid, patient) for patient in macro.get_patients(hid))
+    return rows
+
+
+def _seed_initial_micro_states(
+    macro: MacroSimulator,
+    micro: MicroSimulator,
+    n_hospitals: int,
+    seed: int,
+) -> None:
+    """Materialize day-0 micro states for already-admitted carrier episodes."""
+    rng = random.Random(seed + 424242)
+    carriers = sorted(
+        (
+            (hid, patient)
+            for hid, patient in _iter_all_patients(macro, n_hospitals)
+            if patient.state == HealthState.CARRIER and patient.episode_id
+        ),
+        key=lambda item: (item[0], item[1].patient_id),
+    )
+    for _hid, patient in carriers:
+        micro.initialize_episode(
+            episode_id=str(patient.episode_id),
+            patient_id=patient.patient_id,
+            resistant_fraction=float(patient.resistant_fraction),
+            dominant_genotype=str(patient.dominant_genotype),
+            dominant_strain_name=patient.dominant_strain_name or None,
+            day=0,
+            seed=rng.randint(0, 2**31 - 1),
+        )
 
 
 def _collect_patient_stats(patients: list[Patient]) -> dict[str, float | int]:
@@ -665,6 +754,130 @@ def _collect_micro_daily_logs(
     return global_row, by_hospital_rows, patient_rows, genotype_rows
 
 
+def _collect_micro_raw_logs(
+    macro: MacroSimulator,
+    micro: MicroSimulator,
+    n_hospitals: int,
+    day: int,
+    run_id: str,
+    snapshot_stage: str,
+) -> tuple[
+    list[dict[str, float | int | str]],
+    list[dict[str, float | int | str]],
+    list[dict[str, float | int | str]],
+]:
+    hospital_population_rows: list[dict[str, float | int | str]] = []
+    strain_rows: list[dict[str, float | int | str]] = []
+    gene_rows: list[dict[str, float | int | str]] = []
+    presence_threshold = float(micro.config.gene_presence_threshold)
+
+    for i in range(1, n_hospitals + 1):
+        hid = f"hospital_{i:03d}"
+        carriers = [
+            patient for patient in macro.get_patients(hid) if patient.state == HealthState.CARRIER
+        ]
+        tracked_episode_count = 0
+        total_population = 0.0
+        total_strains = 0
+
+        for patient in carriers:
+            if not patient.episode_id:
+                continue
+            episode_state = micro.get_episode_state(patient.episode_id)
+            if episode_state is None:
+                continue
+
+            tracked_episode_count += 1
+            population = episode_state.population
+            total_population += float(population.total_population)
+            total_strains += int(population.n_strains)
+
+            if population.n_strains == 0 or population.total_population <= 0.0:
+                continue
+
+            dominant_idx = int(np.argmax(population.populations))
+            pop_total = float(population.total_population)
+            for idx in range(population.n_strains):
+                strain_population = float(population.populations[idx])
+                if strain_population <= 0.0:
+                    continue
+                strain_rows.append(
+                    {
+                        "day": day,
+                        "snapshot_stage": snapshot_stage,
+                        "run_id": run_id,
+                        "hospital_id": hid,
+                        "patient_id": patient.patient_id,
+                        "episode_id": patient.episode_id,
+                        "episode_day": int(episode_state.day),
+                        "strain_id": population.strain_ids[idx],
+                        "parent_id": population.parent_ids[idx],
+                        "donor_id": population.donor_ids[idx],
+                        "founder_id": population.founder_ids[idx],
+                        "strain_name": population.strain_names[idx],
+                        "strain_genotype": classify_genotype(population.genomes[idx]),
+                        "is_dominant": idx == dominant_idx,
+                        "population": strain_population,
+                        "population_fraction_in_episode": strain_population / pop_total,
+                        "lineage_age": float(population.lineage_ages[idx]),
+                        "damage_load": float(population.damage_loads[idx]),
+                    }
+                )
+
+            weights = population.populations.astype(np.float64, copy=False)
+            genomes = population.genomes.astype(np.float64, copy=False)
+            dominant_genome = population.genomes[dominant_idx]
+            for gene_idx in range(len(GeneIndex)):
+                gene_values = genomes[:, gene_idx]
+                weighted_mean = float(np.average(gene_values, weights=weights))
+                weighted_variance = float(
+                    np.average(np.square(gene_values - weighted_mean), weights=weights)
+                )
+                present_mask = gene_values >= presence_threshold
+                present_strain_count = int(np.sum(present_mask))
+                present_population_fraction = float(np.sum(weights[present_mask]) / pop_total)
+                gene_rows.append(
+                    {
+                        "day": day,
+                        "snapshot_stage": snapshot_stage,
+                        "run_id": run_id,
+                        "hospital_id": hid,
+                        "patient_id": patient.patient_id,
+                        "episode_id": patient.episode_id,
+                        "episode_day": int(episode_state.day),
+                        "gene_index": gene_idx,
+                        "gene_name": GeneIndex(gene_idx).name.lower(),
+                        "weighted_mean": weighted_mean,
+                        "weighted_variance": weighted_variance,
+                        "present_strain_count": present_strain_count,
+                        "total_strain_count": int(population.n_strains),
+                        "present_strain_fraction": (
+                            present_strain_count / float(population.n_strains)
+                            if population.n_strains > 0
+                            else 0.0
+                        ),
+                        "present_population_fraction": present_population_fraction,
+                        "dominant_strain_value": float(dominant_genome[gene_idx]),
+                        "presence_threshold": presence_threshold,
+                    }
+                )
+
+        hospital_population_rows.append(
+            {
+                "day": day,
+                "snapshot_stage": snapshot_stage,
+                "run_id": run_id,
+                "hospital_id": hid,
+                "carrier_count": len(carriers),
+                "tracked_episode_count": tracked_episode_count,
+                "total_population": total_population,
+                "total_strains": total_strains,
+            }
+        )
+
+    return hospital_population_rows, strain_rows, gene_rows
+
+
 def _write_parquet(
     path: Path, rows: list[dict[str, float | int | str]], fieldnames: list[str]
 ) -> None:
@@ -715,6 +928,12 @@ def main() -> None:
     )
 
     _admit_initial_population(macro=macro, population=settings.population)
+    _seed_initial_micro_states(
+        macro=macro,
+        micro=micro,
+        n_hospitals=settings.population.hospitals,
+        seed=settings.run.seed,
+    )
 
     patient_factory = _make_patient_factory(
         population=settings.population,
@@ -739,7 +958,27 @@ def main() -> None:
     micro_daily_by_hospital_rows: list[dict[str, float | int | str]] = []
     micro_patient_daily_rows: list[dict[str, float | int | str]] = []
     micro_daily_genotype_rows: list[dict[str, float | int | str]] = []
+    micro_hospital_population_rows: list[dict[str, float | int | str]] = []
+    micro_strain_daily_rows: list[dict[str, float | int | str]] = []
+    micro_episode_gene_daily_rows: list[dict[str, float | int | str]] = []
     transfer_daily_rows: list[dict[str, float | int | str]] = []
+
+    (
+        initial_hospital_population_rows,
+        initial_strain_rows,
+        initial_gene_rows,
+    ) = _collect_micro_raw_logs(
+        macro=macro,
+        micro=micro,
+        n_hospitals=settings.population.hospitals,
+        day=0,
+        run_id=settings.run.run_id,
+        snapshot_stage="initial",
+    )
+    micro_hospital_population_rows.extend(initial_hospital_population_rows)
+    micro_strain_daily_rows.extend(initial_strain_rows)
+    micro_episode_gene_daily_rows.extend(initial_gene_rows)
+
     for day in range(1, settings.run.days + 1):
         macro.step(
             micro_simulator=micro,
@@ -777,6 +1016,21 @@ def main() -> None:
         micro_daily_by_hospital_rows.extend(micro_hospital_rows)
         micro_patient_daily_rows.extend(micro_pat_rows)
         micro_daily_genotype_rows.extend(micro_genotype_rows)
+        (
+            hospital_population_rows,
+            strain_rows,
+            gene_rows,
+        ) = _collect_micro_raw_logs(
+            macro=macro,
+            micro=micro,
+            n_hospitals=settings.population.hospitals,
+            day=day,
+            run_id=settings.run.run_id,
+            snapshot_stage="end_of_day",
+        )
+        micro_hospital_population_rows.extend(hospital_population_rows)
+        micro_strain_daily_rows.extend(strain_rows)
+        micro_episode_gene_daily_rows.extend(gene_rows)
 
         transfer_counts = Counter(
             (t["from_hospital"], t["to_hospital"]) for t in macro.get_daily_transfers()
@@ -808,6 +1062,9 @@ def main() -> None:
     micro_daily_by_hospital_path = data_dir / "micro_daily_by_hospital.parquet"
     micro_patient_daily_path = data_dir / "micro_patient_daily.parquet"
     micro_daily_genotype_path = data_dir / "micro_daily_genotype.parquet"
+    micro_hospital_population_path = data_dir / "micro_hospital_population.parquet"
+    micro_strain_daily_path = data_dir / "micro_strain_daily.parquet"
+    micro_episode_gene_daily_path = data_dir / "micro_episode_gene_daily.parquet"
     _write_parquet(macro_daily_path, macro_daily_rows, _DAILY_FIELDS)
     _write_parquet(
         macro_daily_by_hospital_path,
@@ -823,6 +1080,17 @@ def main() -> None:
     _write_parquet(micro_patient_daily_path, micro_patient_daily_rows, _MICRO_PATIENT_DAILY_FIELDS)
     _write_parquet(
         micro_daily_genotype_path, micro_daily_genotype_rows, _MICRO_DAILY_GENOTYPE_FIELDS
+    )
+    _write_parquet(
+        micro_hospital_population_path,
+        micro_hospital_population_rows,
+        _MICRO_HOSPITAL_POPULATION_FIELDS,
+    )
+    _write_parquet(micro_strain_daily_path, micro_strain_daily_rows, _MICRO_STRAIN_DAILY_FIELDS)
+    _write_parquet(
+        micro_episode_gene_daily_path,
+        micro_episode_gene_daily_rows,
+        _MICRO_EPISODE_GENE_DAILY_FIELDS,
     )
     transfer_daily_path = data_dir / "transfer_daily.parquet"
     _write_parquet(transfer_daily_path, transfer_daily_rows, _TRANSFER_DAILY_FIELDS)
@@ -841,7 +1109,10 @@ def main() -> None:
         f"daily={micro_daily_path} "
         f"by_hospital={micro_daily_by_hospital_path} "
         f"patient_daily={micro_patient_daily_path} "
-        f"genotype={micro_daily_genotype_path}"
+        f"genotype={micro_daily_genotype_path} "
+        f"hospital_population={micro_hospital_population_path} "
+        f"strain_daily={micro_strain_daily_path} "
+        f"episode_gene_daily={micro_episode_gene_daily_path}"
     )
 
     visualize_results.run(

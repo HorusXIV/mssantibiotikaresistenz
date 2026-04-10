@@ -4,9 +4,15 @@ from pathlib import Path
 
 import yaml
 
-from mss.cli.run_coupled_simulation import _admit_initial_population, load_coupled_settings
+from mss.cli.run_coupled_simulation import (
+    _admit_initial_population,
+    _collect_micro_raw_logs,
+    _seed_initial_micro_states,
+    load_coupled_settings,
+)
 from mss.domain import Department, HealthState
 from mss.simulation.macro import MacroSimulator
+from mss.simulation.micro import MicroSimulator
 
 
 def _write_config(path: Path) -> None:
@@ -50,6 +56,10 @@ def _write_config(path: Path) -> None:
         },
         "micro": {
             "workers": 1,
+            "founder_pool_size": 12,
+            "founder_pool_seed": 3,
+            "founder_pool_gene_noise_std": 0.01,
+            "gene_presence_threshold": 0.25,
             "steps_per_day": 10,
             "max_strains": 25,
             "carrying_capacity": 1e8,
@@ -96,6 +106,8 @@ def test_load_coupled_settings_reads_yaml(tmp_path: Path):
     assert settings.population.susceptible_template["history_flags"] == {"prior_abx"}
     assert settings.population.carrier_template["dominant_genotype"] == "R2"
     assert settings.micro.steps_per_day == 10
+    assert settings.micro.founder_pool_size == 12
+    assert settings.micro.gene_presence_threshold == 0.25
     assert settings.micro_workers == 1
 
 
@@ -121,3 +133,39 @@ def test_admit_initial_population_uses_configured_templates(tmp_path: Path):
     assert all(p.age_years == 70 for p in carriers)
     assert all(p.dominant_genotype == "R2" for p in carriers)
     assert all(p.resistant_fraction == 0.6 for p in carriers)
+
+
+def test_seed_initial_micro_states_and_collect_raw_logs(tmp_path: Path):
+    config_path = tmp_path / "config.yml"
+    _write_config(config_path)
+    settings = load_coupled_settings(config_path)
+    macro = MacroSimulator(config=settings.macro, n_hospitals=settings.population.hospitals, seed=7)
+    micro = MicroSimulator(config=settings.micro, n_workers=1)
+
+    _admit_initial_population(macro, settings.population)
+    _seed_initial_micro_states(
+        macro=macro,
+        micro=micro,
+        n_hospitals=settings.population.hospitals,
+        seed=settings.run.seed,
+    )
+
+    hospital_rows, strain_rows, gene_rows = _collect_micro_raw_logs(
+        macro=macro,
+        micro=micro,
+        n_hospitals=settings.population.hospitals,
+        day=0,
+        run_id=settings.run.run_id,
+        snapshot_stage="initial",
+    )
+
+    assert len(hospital_rows) == settings.population.hospitals
+    assert (
+        sum(int(row["carrier_count"]) for row in hospital_rows) == settings.population.carrier_count
+    )
+    assert any(float(row["total_population"]) > 0.0 for row in hospital_rows)
+    assert strain_rows, "Expected raw per-strain rows for seeded carrier episodes."
+    assert gene_rows, "Expected per-episode gene rows for seeded carrier episodes."
+    assert all(str(row["strain_id"]).startswith("seed_ep_") for row in strain_rows)
+    assert any(str(row["founder_id"]).startswith("founder_") for row in strain_rows)
+    assert {row["gene_name"] for row in gene_rows}
