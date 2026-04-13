@@ -1,0 +1,56 @@
+run:
+  days: 14
+  seed: 42
+  run_id: single_ward_calibration
+  quiet: false
+
+population:
+  hospitals: 1
+  # Geschätzt: ca. 2% sind carrier
+  susceptible_count: 98
+  carrier_count: 2
+
+macro:
+  # Kalibriert
+  base_transmission_rate: 0.09
+  # Geschätzt
+  daily_contact_attempts: 12.0
+  # Geschätzt ohne Quelle
+  base_hygiene: 0.75
+
+  # Effektive Uebertragungsrate: beta_eff = beta_0 * c * (1 - H)
+  # Bei obigen Werten: beta_eff = 0.09 * 12 * 0.25 = 0.27 Tag^-1
+
+  # ================================================================
+  # DEAKTIVIERT -- fuer saubere SI-Beobachtung ohne Stoerfaktoren
+  # ================================================================
+  carrier_isolation_probability: 0.0       # Keine Isolation
+  base_isolation_effectiveness: 0.0       # Isolation hat keinen Effekt
+  base_diagnostic_speed: 1.0
+  icu_abx_probability: 0.0               # Keine Antibiotika
+  ward_abx_probability: 0.0
+  transmission_mutation_probability: 0.0  # Keine Resistenzmutationen
+  transmission_resistance_mutation_std: 0.0
+  base_carrier_mortality_rate: 0.0        # Keine Sterblichkeit
+  daily_admission_rate: 0.0              # Geschlossenes System -- kein Ein-/Ausgang
+  community_carrier_fraction: 0.0
+  daily_transfer_rate: 0.0
+  severity_icu_threshold: 99.0           # Keine ICU-Eskalation
+
+  # Niemand verlaesst die Ward in 100 Tagen (LOS = 10 Jahre)
+  los_mean_ward: 3650.0
+  los_mean_icu: 3650.0
+  los_sigma: 0.01
+  carrier_extension_days: 0.0
+  discharge_logistic_k: 0.01
+  discharge_logistic_t_half: 9999.0
+
+  # Kleines Gitter: 1 Spalte, 2 Reihen (Ward + ICU), alle Patienten in Ward
+  dept_grid_cols: 1
+  dept_grid_rows: 2
+  dept_grid_icu_rows: 1      # 1 ICU-Reihe vorhanden, aber niemand eskaliert
+  network_grid_cols: 1
+  proximity_decay_alpha: 0.0  # Alle Personen gleiches Gewicht (1 Zelle)
+  max_occupancy_per_hospital: 20
+  replacement_dominant_genotype: "S"
+  replacement_resistant_fraction: 0.0
