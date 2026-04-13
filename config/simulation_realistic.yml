@@ -8,82 +8,94 @@ run:
 
 population:
   hospitals: 6
+
+  # Geschätzt: ~2% der Patienten Carrier
   susceptible_count: 980
-  carrier_count: 30             # 3% seed prevalence
+  carrier_count: 20
+
   initial_department: ward
 
   susceptible_template:
-    age_years: 62
-    compliance: 0.75
+    compliance: 0.75        # -> adherence wird täglich daraus abgeleitet
     vulnerability: 1.1
     immune_strength: 0.9
     immune_status: normal
     sociability: 1.0
-    adherence: 0.75
-    history_flags: []
 
   carrier_template:
-    age_years: 65
-    compliance: 0.70
+    compliance: 0.70        # -> adherence wird täglich daraus abgeleitet
     vulnerability: 1.3
     immune_strength: 0.75
     immune_status: normal
     sociability: 1.0
-    adherence: 0.70
-    history_flags: ["prior_abx"]
     resistant_fraction: 0.45
     dominant_genotype: R2
     relative_transmissibility: 1.2
-    p_clearance: 0.008 # ~125 day mean carriage (MRSA: 90-200 days)
+    p_clearance: 0.0039 #DONE
     severity_modifier: 1.2
     lethality_modifier: 1.1
 
 macro:
-  base_hygiene: 0.65
-  base_isolation_effectiveness: 0.65
-  base_diagnostic_speed: 1.0   # multiplier on carrier_isolation_probability (1.0 = unchanged)
-
-  # Transmission: tuned for R0 ≈ 1.5
-  # hazard = contacts * (1-hygiene) * beta / occupancy
-  #        = 18 * 0.35 * 0.09 / 168 ≈ 0.0034 per carrier/susceptible/day
-  # R0 = hazard * susceptibles / p_clearance = 0.0034 * 145 / 0.008 ≈ 1.5  (endemic ~20%)
-  base_transmission_rate: 0.09
-  daily_contact_attempts: 18.0
-
-  icu_abx_probability: 0.85
-  ward_abx_probability: 0.40
-  carrier_isolation_probability: 0.65
-
-  # Raised: more transmitted strains carry resistance mutations.
-  # This seeds resistance into new episodes from the macro side.
-  transmission_mutation_probability: 0.25
-  transmission_resistance_mutation_std: 0.08
-
-  # LOS + Discharge
-  los_mean_ward: 8.0
-  los_mean_icu: 14.0
-  los_sigma: 0.6
-  carrier_extension_days: 14.0
-  discharge_logistic_k: 1.0
-  discharge_logistic_t_half: 3.0
-
-  # Admissions (total per day across all hospitals; 0 = disabled)
-  # Steady-state: 1010 patients / 8 days LOS ≈ 126/day
-  daily_admission_rate: 126.0
-  community_carrier_fraction: 0.03
-  replacement_resistant_fraction: 0.05
-  replacement_dominant_genotype: "S"
-  max_occupancy_per_hospital: 200
-
-  # Grid (Feature 2 — used once Mesa grids are integrated)
+  # Grid
   dept_grid_cols: 3
   dept_grid_rows: 2
   dept_grid_icu_rows: 1
   network_grid_cols: 3
+
+
+  # Geschätzt
+  daily_contact_attempts: 12.0
+  # Geschätzt ohne Recherche
+  base_hygiene: 0.75
+  # Kalibriert
+  base_transmission_rate: 0.09
+
+
+  # SCHÄTZBAR
+
+  # LOS
+  los_mean_ward: 5.0 # DONE
+  los_mean_icu: 2.8 # DONE
+  los_sigma: 0.6 # Vorerst nicht
+
+  icu_abx_probability: 0.62 # DONE
+  ward_abx_probability: 0.326 # DONE
+
+  daily_admission_rate: 126.0
+
+  community_carrier_fraction: 0.017 #DONE
+
+  carrier_extension_days: 12.0 # DONE
+
+  max_occupancy_per_hospital: 200
+
+  daily_transfer_rate: 0.004 # DONE
+
+  # base_carrier_mortality_rate: 0.002
+
+  replacement_resistant_fraction: 0.2 #
+  replacement_dominant_genotype: "S"
+
+
+  # KALIBRIERBAR
+
+  carrier_isolation_probability: 0.65
+
+  base_isolation_effectiveness: 0.65
+
   proximity_decay_alpha: 0.5
 
-  # Inter-hospital transfers
-  daily_transfer_rate: 0.003   # ~0.3% der Patienten pro Tag
+  # Discharge
+  discharge_logistic_k: 1.0
+  discharge_logistic_t_half: 3.0
+
+  transmission_mutation_probability: 0.25
+  transmission_resistance_mutation_std: 0.08
+
+  # Vorerst nicht kalibrieren
+  base_diagnostic_speed: 1.0
+
+
 
 micro:
   workers: null

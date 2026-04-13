@@ -236,11 +236,6 @@ class Patient:
         # Vulnerability / Immunkraft
         immune_effect = 1.0 / max(0.1, self.immune_strength)
         multiplier = self.vulnerability * immune_effect
-
-        # Hat der Patient diesen Keim schon mal überlebt?
-        if "prior_infection_recovered" in self.history_flags:
-            multiplier *= 0.5  # 50% geringeres Risiko einer Neuansteckung
-
         return max(0.0, multiplier)
 
     def daily_death_risk_multiplier(self) -> float:
