@@ -27,6 +27,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 import yaml
 
@@ -225,13 +226,13 @@ def _plot(
     seed: int,
     plot_path: Path,
 ) -> None:
+    lambda_target_lo, lambda_target_hi = 0.0046, 0.0054
+
     carriers = df["carriers"]
     new_cases = df["new_cases"]
     cumulative_pct = df["cumulative_attacked_pct"]
     days = df["day"]
-
     lambda_0_theoretical = beta_eff * n_car_0 / n_total
-
     fig, axes = plt.subplots(2, 2, figsize=(13, 8))
 
     subtitle = (
@@ -244,50 +245,60 @@ def _plot(
         fontweight="bold",
     )
 
-    # --- [0,0] SI-Dynamik ---
+    # --- [0,0] Kalibrierung: λ(0) als Funktion von β₀ ---
     ax = axes[0, 0]
+    beta_range = np.linspace(max(0.01, beta_0 * 0.3), beta_0 * 2.0, 300)
+    lambda_range = beta_range * contact_attempts * (1.0 - hygiene) * n_car_0 / n_total
+    ax.plot(beta_range, lambda_range, color="steelblue", lw=2, label="λ(0) = β₀ · c · (1−H) · I₀/N")
+    ax.axhspan(
+        lambda_target_lo,
+        lambda_target_hi,
+        alpha=0.2,
+        color="green",
+        label=f"Zielbereich [{lambda_target_lo}–{lambda_target_hi}] Tag⁻¹",
+    )
+    ax.axvline(beta_0, color="darkorange", lw=1.5, ls="--", alpha=0.6)
+    ax.scatter(
+        [beta_0],
+        [lambda_0_theoretical],
+        color="darkorange",
+        s=150,
+        zorder=5,
+        label=f"β₀ = {beta_0:.3f} → λ(0) = {lambda_0_theoretical:.4f} Tag⁻¹",
+    )
+    ax.set_xlabel("Transmissionsrate β₀")
+    ax.set_ylabel("Initiale Infektionskraft λ(0) [Tag⁻¹]")
+    ax.set_title("Kalibrierung: λ(0) als Funktion von β₀")
+    ax.legend(fontsize=9)
+    ax.grid(alpha=0.3)
+
+    # --- [0,1] SI-Dynamik ---
+    ax = axes[0, 1]
     ax.plot(days, df["susceptible"], color="steelblue", lw=2, label="Susceptible S(t)")
     ax.plot(days, carriers, color="firebrick", lw=2, label="Carrier I(t)")
     ax.axhline(n_total, color="gray", lw=1, ls="--", alpha=0.5, label=f"Total N={n_total}")
-    ax.set_title("Transmission Dynamics")
+    ax.set_title("SI-Dynamik")
     ax.set_xlabel("Tag [Tage]")
     ax.set_ylabel("Patienten")
     ax.legend(fontsize=9)
     ax.grid(alpha=0.3)
     ax.set_ylim(0, n_total * 1.15)
 
-    # --- [0,1] Taeglich Inzidenz ---
-    ax = axes[0, 1]
-    ax.bar(days, new_cases, color="firebrick", alpha=0.7, label="Neue Faelle/Tag")
+    # --- [1,0] Tägliche Inzidenz ---
+    ax = axes[1, 0]
+    ax.bar(days, new_cases, color="firebrick", alpha=0.7, label="Neue Fälle/Tag")
     ax.set_title("Tägliche Inzidenz")
     ax.set_xlabel("Tag [Tage]")
-    ax.set_ylabel("Neue Fälle [Tag⁻¹]")
+    ax.set_ylabel("Neue Fälle")
     ax.legend(fontsize=9)
     ax.grid(alpha=0.3, axis="y")
     if n_total > 0:
         ax2 = ax.twinx()
-        ax2.set_ylabel(f"pro 100 Patienten-Tage (N={n_total})", fontsize=8, color="gray")
-        ax2.set_ylim(0, max(ax.get_ylim()[1] / n_total * 100, 0.01))
+        ax2.set_ylabel("Rate [pro 1000 Patienten-Tage]", fontsize=8, color="gray")
+        ax2.set_ylim(0, max(ax.get_ylim()[1] / n_total * 1000, 0.1))
         ax2.tick_params(colors="gray")
 
-    # --- [1,0] Infektionskraft lambda(t) ---
-    ax = axes[1, 0]
-    ax.plot(days, df["lambda_t"], color="darkorange", lw=2, label="λ(t) simuliert")
-    ax.axhline(
-        lambda_0_theoretical,
-        color="darkorange",
-        lw=1,
-        ls="--",
-        alpha=0.6,
-        label=f"λ(0) theoretisch = {lambda_0_theoretical:.4f} Tag⁻¹",
-    )
-    ax.set_title("Force of Infection λ(t)")
-    ax.set_xlabel("Tag [Tage]")
-    ax.set_ylabel("Infektionshazard [Tag⁻¹]")
-    ax.legend(fontsize=9)
-    ax.grid(alpha=0.3)
-
-    # --- [1,1] Kumulative Angriffsrate ---
+    # --- [1,1] Kumulative Angriffsrate (geschlossenes System) ---
     ax = axes[1, 1]
     ax.plot(days, cumulative_pct, color="purple", lw=2)
     ax.fill_between(days, cumulative_pct, alpha=0.15, color="purple")
@@ -303,7 +314,7 @@ def _plot(
                 fontsize=8,
                 color="gray",
             )
-    ax.set_title("Cumulative Attack Rate")
+    ax.set_title("Kumulative Angriffsrate (geschlossenes System)")
     ax.set_xlabel("Tag [Tage]")
     ax.set_ylabel("Kumulativ infiziert [%]")
     ax.set_ylim(0, 110)
@@ -313,7 +324,6 @@ def _plot(
     plot_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(plot_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
-    print(f"  Plot gespeichert → {plot_path}")
 
 
 # ---------------------------------------------------------------------------
@@ -354,7 +364,7 @@ def main() -> None:
     lambda_0 = beta_eff * n_car_0 / n_total
 
     output_dir = args.output_dir or (
-        PROJECT_ROOT / "outputs" / datetime.now().strftime("%Y%m%d_%H%M%S")
+        PROJECT_ROOT / "outputs" / (datetime.now().strftime("%Y%m%d_%H%M%S") + "_Single_Ward")
     )
     data_dir = output_dir / "data"
     plot_dir = output_dir / "plots"
@@ -363,8 +373,13 @@ def main() -> None:
     print("Einzelgitter-Kalibrierung")
     print(f"  Config:  {args.config}")
     print(f"  β₀={beta_0:.3f}  c={contact_attempts:.1f} Kontakte/Tag  H={hygiene:.2f}")
+    lambda_target_lo, lambda_target_hi = 0.0046, 0.0054
+    in_range = lambda_target_lo <= lambda_0 <= lambda_target_hi
+    status = "OK  -- innerhalb Zielbereich" if in_range else "WARNUNG -- ausserhalb Zielbereich"
     print(f"  → β_eff = {beta_eff:.4f} Tag⁻¹")
-    print(f"  → λ(0)  = {lambda_0:.4f} Tag⁻¹")
+    print(
+        f"  → λ(0)  = {lambda_0:.4f} Tag⁻¹  |  Ziel: {lambda_target_lo}–{lambda_target_hi} Tag⁻¹  |  {status}"
+    )
     print(f"  Personen: N={n_total} (S₀={n_sus_0}, I₀={n_car_0})")
     print(f"  Seed: {seed}  |  Tage: {days}")
     print("=" * 60)
@@ -382,14 +397,7 @@ def main() -> None:
         )
 
     print("=" * 60)
-    if meta["days_to_100pct"] is not None:
-        print(f"→ 100% Infektion erreicht an Tag {meta['days_to_100pct']}")
-    else:
-        print(
-            f"→ Simulation beendet nach {days} Tagen ({meta['final_attack_pct']:.1f}% kumulativ infiziert)"
-        )
-
-    print("\nMeilensteine:")
+    print("\nMeilensteine (geschlossenes System):")
     for milestone in [25, 50, 75, 100]:
         day_hit = meta[f"days_to_{milestone}pct"]
         if day_hit is not None:

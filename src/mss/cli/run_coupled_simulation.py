@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import math
 import random
 from collections import Counter
@@ -167,7 +168,6 @@ _MICRO_PATIENT_DAILY_FIELDS = [
     "relative_transmissibility",
     "p_clearance",
     "severity_modifier",
-    "lethality_modifier",
     "episode_day",
     "n_strains",
     "total_population",
@@ -692,7 +692,6 @@ def _collect_micro_daily_logs(
                     "relative_transmissibility": float(patient.relative_transmissibility),
                     "p_clearance": float(patient.p_clearance),
                     "severity_modifier": float(patient.severity_modifier),
-                    "lethality_modifier": float(patient.lethality_modifier),
                     "episode_day": episode_day,
                     "n_strains": n_strains,
                     "total_population": total_population,
@@ -913,6 +912,143 @@ class _ParquetBatchWriter:
         if self._writer is not None:
             self._writer.close()
             self._writer = None
+
+
+def _build_settings_from_raw(raw: dict[str, Any], seed: int) -> CoupledSimulationSettings:
+    """Build CoupledSimulationSettings from an in-memory config dict.
+
+    Mirrors load_coupled_settings() but accepts a dict instead of a file path.
+    Always sets quiet=True and overrides the seed — intended for calibration loops.
+    """
+    raw = copy.deepcopy(raw)
+    run_raw = _require_mapping("run", raw.get("run"))
+    population_raw = _require_mapping("population", raw.get("population"))
+    macro_raw = dict(_require_mapping("macro", raw.get("macro")))
+    micro_raw = dict(_require_mapping("micro", raw.get("micro")))
+
+    micro_workers = micro_raw.pop("workers", None)
+    if micro_workers is not None:
+        micro_workers = _require_positive_int(micro_workers, "micro.workers")
+
+    run = RunSettings(
+        days=_require_positive_int(run_raw.get("days"), "run.days"),
+        seed=seed,
+        run_id=str(run_raw.get("run_id", "sweep")),
+        quiet=True,
+    )
+    population = PopulationSettings(
+        hospitals=_require_positive_int(population_raw.get("hospitals"), "population.hospitals"),
+        susceptible_count=_require_non_negative_int(
+            population_raw.get("susceptible_count"), "population.susceptible_count"
+        ),
+        carrier_count=_require_non_negative_int(
+            population_raw.get("carrier_count"), "population.carrier_count"
+        ),
+        initial_department=_parse_department(population_raw.get("initial_department")),
+        susceptible_template=_normalize_patient_template(
+            "population.susceptible_template",
+            _require_mapping(
+                "population.susceptible_template",
+                population_raw.get("susceptible_template"),
+            ),
+        ),
+        carrier_template=_normalize_patient_template(
+            "population.carrier_template",
+            _require_mapping("population.carrier_template", population_raw.get("carrier_template")),
+        ),
+    )
+    return CoupledSimulationSettings(
+        config_path=Path("(in-memory)"),
+        run=run,
+        population=population,
+        macro=MacroConfig(**macro_raw),
+        micro=MicroConfig(**micro_raw),
+        micro_workers=micro_workers,
+    )
+
+
+def run_realistic_once(
+    raw: dict[str, Any], seed: int, use_micro: bool = True
+) -> tuple[pd.DataFrame, dict[str, Any]]:
+    """Run one coupled simulation from a raw config dict.
+
+    Analogon zu run_once() aus run_single_ward_calibration.py — kein Parquet-Output,
+    kein Plot, kein Print. Gedacht fuer Kalibrierungs- und Sweep-Schleifen.
+
+    Args:
+        use_micro: Wenn False, wird der Mikro-Simulator uebersprungen. Patienten
+                   behalten ihre Template-Standardwerte (p_clearance,
+                   relative_transmissibility, severity_modifier) unveraendert.
+                   Fuer Phase-1/2-Kalibrierungen empfohlen.
+
+    Returns:
+        df:   Tages-DataFrame mit Spalten day, total_patients, susceptible, carriers,
+              prevalence, isolated_count, new_cases
+        meta: Zusammenfassung fuer das letzte Drittel:
+              seed, mean_prevalence, acquisition_rate_per_1000, isolation_fraction
+    """
+    settings = _build_settings_from_raw(raw, seed)
+
+    macro = MacroSimulator(
+        config=settings.macro,
+        n_hospitals=settings.population.hospitals,
+        seed=settings.run.seed,
+    )
+    micro: MicroSimulator | None = (
+        MicroSimulator(config=settings.micro, n_workers=1) if use_micro else None
+    )
+
+    _admit_initial_population(macro=macro, population=settings.population)
+    if micro is not None:
+        _seed_initial_micro_states(
+            macro=macro,
+            micro=micro,
+            n_hospitals=settings.population.hospitals,
+            seed=settings.run.seed,
+        )
+    patient_factory = _make_patient_factory(
+        population=settings.population,
+        macro_config=settings.macro,
+        seed=settings.run.seed,
+    )
+
+    rows = []
+    prev_carriers = settings.population.carrier_count
+    for day in range(1, settings.run.days + 1):
+        macro.step(
+            micro_simulator=micro,
+            run_id=settings.run.run_id,
+            patient_factory=patient_factory,
+        )
+        all_patients = [p for _, p in _iter_all_patients(macro, settings.population.hospitals)]
+        stats = _collect_patient_stats(all_patients)
+        new_cases = max(0, stats["carriers"] - prev_carriers)
+        prev_carriers = stats["carriers"]
+        rows.append({"day": day, "new_cases": new_cases, **stats})
+
+    if micro is not None:
+        micro.close()
+
+    df = pd.DataFrame(rows)
+    last_third_start = max(1, int(settings.run.days * 2 / 3))
+    last = df[df["day"] >= last_third_start]
+
+    mean_carriers = float(last["carriers"].mean())
+    mean_susceptible = float(last["susceptible"].mean())
+    mean_new_cases = float(last["new_cases"].mean())
+    mean_isolated = float(last["isolated_count"].mean())
+
+    acquisition_rate = mean_new_cases / mean_susceptible * 1000 if mean_susceptible > 0 else 0.0
+    isolation_fraction = mean_isolated / mean_carriers if mean_carriers > 0 else 0.0
+
+    meta: dict[str, Any] = {
+        "seed": seed,
+        "mean_prevalence": float(last["prevalence"].mean()),
+        "acquisition_rate_per_1000": acquisition_rate,
+        "isolation_fraction": isolation_fraction,
+        "mean_resistant_fraction": float(last["avg_resistant_fraction"].mean()),
+    }
+    return df, meta
 
 
 def _parse_args() -> argparse.Namespace:

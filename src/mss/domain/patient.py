@@ -101,10 +101,12 @@ class Patient:
     resistant_fraction: float = 0.0  # 0..1
     dominant_genotype: str = "S"  # "S", "R1", "R2", ...
     dominant_strain_name: str = ""
+    dominant_genome: Optional[list] = (
+        None  # gene vector of dominant strain; used as seed for transmission
+    )
     relative_transmissibility: float = 1.0  # multiplies macro beta
     p_clearance: float = 0.02  # daily probability C->S
-    severity_modifier: float = 1.0  # strain-driven (optional for macro)
-    lethality_modifier: float = 1.0  # strain-driven (optional for macro)
+    severity_modifier: float = 1.0  # strain-driven; scales carrier_extension_days in macro
 
     # Store last daily context for reproducibility/debugging
     _ctx: Optional[PatientDailyContext] = field(default=None, repr=False)
@@ -180,6 +182,7 @@ class Patient:
                 "resistant_fraction": self.resistant_fraction,
                 "dominant_genotype": self.dominant_genotype,
                 "dominant_strain_name": self.dominant_strain_name,
+                "seed_genome": self.dominant_genome,
             },
             # Reproducibility
             "seed": seed,
@@ -208,6 +211,8 @@ class Patient:
             self.dominant_genotype = str(updated_state["dominant_genotype"])
         if "dominant_strain_name" in updated_state:
             self.dominant_strain_name = str(updated_state["dominant_strain_name"])
+        if "dominant_genome" in updated_state:
+            self.dominant_genome = updated_state["dominant_genome"]
 
         # Derived effects for macro
         if "relative_transmissibility" in derived:
@@ -218,8 +223,6 @@ class Patient:
         # Optional strain-driven outcomes
         if "severity_modifier" in derived:
             self.severity_modifier = float(derived["severity_modifier"])
-        if "lethality_modifier" in derived:
-            self.lethality_modifier = float(derived["lethality_modifier"])
 
     # -------------------------
     # Helper getters for macro
@@ -238,14 +241,6 @@ class Patient:
         multiplier = self.vulnerability * immune_effect
         return max(0.0, multiplier)
 
-    def daily_death_risk_multiplier(self) -> float:
-        """
-        Only relevant if you model death in macro.
-        This is a multiplier on a base death risk.
-        """
-        # Example: vulnerability and strain lethality
-        return max(0.0, self.vulnerability) * max(0.0, self.lethality_modifier)
-
     def should_clear_today(self, rng) -> bool:
         """
         Macro calls this to decide C->S.
@@ -261,7 +256,7 @@ class Patient:
         self.resistant_fraction = 0.0
         self.dominant_genotype = "S"
         self.dominant_strain_name = ""
+        self.dominant_genome = None
         self.relative_transmissibility = 1.0
         self.p_clearance = 0.02
         self.severity_modifier = 1.0
-        self.lethality_modifier = 1.0

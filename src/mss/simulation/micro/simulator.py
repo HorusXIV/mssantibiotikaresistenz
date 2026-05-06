@@ -139,9 +139,10 @@ def _create_initial_population(
     resistant_fraction: float,
     config: SimulationConfig,
     seed: int | None,
+    seed_genome: np.ndarray | None = None,
 ) -> StrainPopulation:
     rng = np.random.default_rng(seed)
-    founder_pool = build_founder_pool(config)
+    founder_pool = build_founder_pool(config) if seed_genome is None else []
     return StrainPopulation.create_initial(
         resistant_fraction=resistant_fraction,
         dominant_genotype=dominant_genotype,
@@ -149,6 +150,7 @@ def _create_initial_population(
         dominant_strain_name=dominant_strain_name,
         founder_pool=founder_pool,
         strain_namespace=episode_id or "episode",
+        seed_genome=seed_genome,
     )
 
 
@@ -175,6 +177,10 @@ def _process_single_request(args: tuple) -> Dict[str, Any]:
         initial = request.get("initial_state", {})
         resistant_fraction = initial.get("resistant_fraction", 0.0)
         dominant_genotype = initial.get("dominant_genotype", "S")
+        raw_seed_genome = initial.get("seed_genome")
+        seed_genome = (
+            np.array(raw_seed_genome, dtype=np.float32) if raw_seed_genome is not None else None
+        )
         population = _create_initial_population(
             episode_id=str(request.get("episode_id", "")),
             dominant_genotype=dominant_genotype,
@@ -182,6 +188,7 @@ def _process_single_request(args: tuple) -> Dict[str, Any]:
             resistant_fraction=resistant_fraction,
             config=config,
             seed=request.get("seed", None),
+            seed_genome=seed_genome,
         )
 
     # Extract parameters from request
@@ -394,6 +401,7 @@ class MicroSimulator:
         resistant_fraction: float = 0.0,
         dominant_genotype: str = "S",
         dominant_strain_name: str | None = None,
+        seed_genome: np.ndarray | None = None,
         day: int = 0,
         seed: int | None = None,
     ) -> EpisodeState:
@@ -409,6 +417,7 @@ class MicroSimulator:
             resistant_fraction=resistant_fraction,
             config=self.config,
             seed=seed,
+            seed_genome=seed_genome,
         )
         state = EpisodeState(
             episode_id=episode_id,
@@ -462,6 +471,10 @@ def run_micro_simulation(
     initial = patient_request.get("initial_state", {})
     resistant_fraction = initial.get("resistant_fraction", 0.0)
     dominant_genotype = initial.get("dominant_genotype", "S")
+    raw_seed_genome = initial.get("seed_genome")
+    seed_genome = (
+        np.array(raw_seed_genome, dtype=np.float32) if raw_seed_genome is not None else None
+    )
 
     population = _create_initial_population(
         episode_id=str(patient_request.get("episode_id", "")),
@@ -470,6 +483,7 @@ def run_micro_simulation(
         resistant_fraction=resistant_fraction,
         config=config,
         seed=patient_request.get("seed", None),
+        seed_genome=seed_genome,
     )
 
     # Extract parameters

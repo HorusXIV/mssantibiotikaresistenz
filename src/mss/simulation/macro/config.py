@@ -58,6 +58,12 @@ class SimulationConfig:
     replacement_dominant_genotype: str = "S"
     max_occupancy_per_hospital: int = 200  # hard cap per hospital
 
+    # Daily mortality probability for all patients.
+    # Carriers are scaled by their severity_modifier (template: 1.2 → 0.0054/day).
+    # Derived from Swiss in-hospital mortality ~2.5 % per admission ÷ 5.5-day LOS.
+    # Source: BFS Medizinische Statistik 2022; Huang & Platt 2003, Ann Intern Med.
+    base_mortality_rate: float = 0.0045
+
     # Inter-hospital transfers (0.0 = disabled)
     # Per-patient daily probability of being transferred; destination is chosen
     # from all other hospitals, weighted by (free_capacity / distance).

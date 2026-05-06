@@ -292,15 +292,29 @@ class MacroSimulator:
         hospital_id: str,
         micro_simulator: Any,
     ) -> None:
-        """Discharge eligible susceptible patients; extend stays for carriers."""
+        """Discharge eligible susceptible patients; extend stays for carriers.
+
+        All patients face a daily mortality probability (base_mortality_rate).
+        For carriers this is scaled by severity_modifier — more virulent strains
+        carry higher mortality risk and extend the required isolation period.
+        """
         cfg = self._config
         if cfg.daily_admission_rate <= 0.0:
             return
         for p in patients:
             if p.planned_discharge_day is None:
                 continue
+
+            mortality_rate = cfg.base_mortality_rate
+            if p.state == HealthState.CARRIER:
+                mortality_rate *= p.severity_modifier
+            if self._rng.random() < mortality_rate:
+                self.discharge(p, micro_simulator)
+                continue
+
             if p.state == HealthState.CARRIER and self._day >= p.planned_discharge_day:
-                p.planned_discharge_day = self._day + int(cfg.carrier_extension_days)
+                extension = max(1, int(cfg.carrier_extension_days * p.severity_modifier))
+                p.planned_discharge_day = self._day + extension
             elif p.state == HealthState.SUSCEPTIBLE and self._day >= p.planned_discharge_day:
                 days_over = self._day - p.planned_discharge_day
                 p_d = 1.0 / (
@@ -610,7 +624,6 @@ class MacroSimulator:
             patient.dominant_strain_name = ""
             patient.relative_transmissibility = 1.0
             patient.severity_modifier = 1.0
-            patient.lethality_modifier = 1.0
             patient.p_clearance = 0.02
             return
 
@@ -618,8 +631,8 @@ class MacroSimulator:
         patient.resistant_fraction = resistance
         patient.dominant_genotype = genotype
         patient.dominant_strain_name = source.dominant_strain_name
+        patient.dominant_genome = source.dominant_genome
         patient.relative_transmissibility = source.relative_transmissibility
         patient.severity_modifier = source.severity_modifier
-        patient.lethality_modifier = source.lethality_modifier
         # Clearance is host-specific and will be recomputed by micro on the next day.
         patient.p_clearance = 0.02

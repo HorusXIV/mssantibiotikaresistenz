@@ -47,13 +47,12 @@ def _plot_batch(
     plot_path: Path,
 ) -> None:
     """Erstellt 4 aggregierte Visualisierungen ueber alle Batch-Laeufe."""
+    lambda_target_lo, lambda_target_hi = 0.0046, 0.0054
 
     days_per_run = combined["day"].max()
     lambda_0_theoretical = beta_eff * n_car_0 / n_total
-
-    # --- Aggregation pro Tag ---
     agg = (
-        combined.groupby("day")[["carriers", "lambda_t", "cumulative_attacked_pct"]]
+        combined.groupby("day")[["carriers", "lambda_t"]]
         .agg(
             carriers_mean=("carriers", "mean"),
             carriers_p5=("carriers", lambda x: x.quantile(0.05)),
@@ -61,16 +60,11 @@ def _plot_batch(
             lambda_mean=("lambda_t", "mean"),
             lambda_p5=("lambda_t", lambda x: x.quantile(0.05)),
             lambda_p95=("lambda_t", lambda x: x.quantile(0.95)),
-            attack_mean=("cumulative_attacked_pct", "mean"),
-            attack_p5=("cumulative_attacked_pct", lambda x: x.quantile(0.05)),
-            attack_p95=("cumulative_attacked_pct", lambda x: x.quantile(0.95)),
         )
         .reset_index()
     )
 
-    # Laufender Mittelwert der finalen Angriffsrate (Konvergenzplot)
-    final_attacks = summaries["final_attack_pct"].values
-    running_mean = np.cumsum(final_attacks) / np.arange(1, n_runs + 1)
+    day1_cases = combined[combined["day"] == 1]["new_cases"].values
 
     fig, axes = plt.subplots(2, 2, figsize=(14, 9))
 
@@ -87,17 +81,10 @@ def _plot_batch(
 
     # --- [0,0] Stochastische I(t)-Kurven + Mittelwert ---
     ax = axes[0, 0]
-    # Zufaellige Auswahl von 100 Laeufen als transparente Hintergrundlinien
     sample_ids = np.random.choice(n_runs, size=min(100, n_runs), replace=False)
     for run_id in sample_ids:
         g = combined[combined["run_id"] == run_id]
-        ax.plot(
-            g["day"],
-            g["carriers"] / n_total * 100,
-            color="firebrick",
-            alpha=0.06,
-            lw=0.6,
-        )
+        ax.plot(g["day"], g["carriers"] / n_total * 100, color="firebrick", alpha=0.06, lw=0.6)
     ax.plot(
         agg["day"],
         agg["carriers_mean"] / n_total * 100,
@@ -120,112 +107,82 @@ def _plot_batch(
     ax.legend(fontsize=9)
     ax.grid(alpha=0.3)
 
-    # --- [0,1] Verteilung Ausbruchszeiten ---
+    # --- [0,1] Kalibrierung: λ(0) als Funktion von β₀ ---
     ax = axes[0, 1]
+    beta_range = np.linspace(max(0.01, beta_0 * 0.3), beta_0 * 2.0, 300)
+    lambda_range = beta_range * contact_attempts * (1.0 - hygiene) * n_car_0 / n_total
+    ax.plot(beta_range, lambda_range, color="steelblue", lw=2, label="λ(0) = β₀ · c · (1−H) · I₀/N")
+    ax.axhspan(
+        lambda_target_lo,
+        lambda_target_hi,
+        alpha=0.2,
+        color="green",
+        label=f"Zielbereich [{lambda_target_lo}–{lambda_target_hi}] Tag⁻¹",
+    )
+    ax.axvline(beta_0, color="darkorange", lw=1.5, ls="--", alpha=0.6)
+    ax.scatter(
+        [beta_0],
+        [lambda_0_theoretical],
+        color="darkorange",
+        s=150,
+        zorder=5,
+        label=f"β₀ = {beta_0:.3f} → λ(0) = {lambda_0_theoretical:.4f} Tag⁻¹",
+    )
+    ax.set_xlabel("Transmissionsrate β₀")
+    ax.set_ylabel("Initiale Infektionskraft λ(0) [Tag⁻¹]")
+    ax.set_title(f"Kalibrierung: λ(0) als Funktion von β₀ ({n_runs} Seeds bestätigt)")
+    ax.legend(fontsize=9)
+    ax.grid(alpha=0.3)
+
+    # --- [1,0] Verteilung Tage bis 50% Durchseuchung ---
+    ax = axes[1, 0]
     days_50 = summaries["days_to_50pct"].dropna()
-    days_100 = summaries["days_to_100pct"].dropna()
-    n_reached_50 = len(days_50)
-    n_reached_100 = len(days_100)
-
-    bins = max(20, int(days_per_run / 20))
-    bin_range = (1, days_per_run)
-
-    if n_reached_50 > 0:
+    n_reached = len(days_50)
+    if n_reached > 0:
+        bins = max(15, int(days_per_run / 2))
         ax.hist(
             days_50,
             bins=bins,
-            range=bin_range,
+            range=(1, days_per_run),
             color="steelblue",
-            alpha=0.65,
-            label=f"Tage bis 50% (n={n_reached_50}/{n_runs})",
+            alpha=0.75,
+            label=f"Tage bis 50% (n={n_reached}/{n_runs})",
         )
-    if n_reached_100 > 0:
-        ax.hist(
-            days_100,
-            bins=bins,
-            range=bin_range,
-            color="firebrick",
-            alpha=0.55,
-            label=f"Tage bis 100% (n={n_reached_100}/{n_runs})",
-        )
-
-    for col, color, label in [
-        ("days_to_50pct", "steelblue", "Median 50%"),
-        ("days_to_100pct", "firebrick", "Median 100%"),
-    ]:
-        vals = summaries[col].dropna()
-        if len(vals) > 0:
-            ax.axvline(
-                vals.median(),
-                color=color,
-                lw=2,
-                ls="--",
-                alpha=0.9,
-                label=f"{label}={vals.median():.0f} Tage",
-            )
-
-    ax.set_title("Verteilung: Tage bis 50% / 100% infiziert")
+        median_50 = days_50.median()
+        p5, p95 = days_50.quantile(0.05), days_50.quantile(0.95)
+        ax.axvline(median_50, color="navy", lw=2, ls="--", label=f"Median = {median_50:.0f} Tage")
+        ax.axvspan(p5, p95, alpha=0.1, color="navy", label=f"P5–P95 = [{p5:.0f}–{p95:.0f}] Tage")
+    else:
+        ax.text(0.5, 0.5, "50% nicht erreicht", transform=ax.transAxes, ha="center", va="center")
+    ax.set_title("Tage bis 50% Durchseuchung (geschlossenes System)")
     ax.set_xlabel("Tage [Tage]")
     ax.set_ylabel("Anzahl Läufe")
-    ax.legend(fontsize=8)
+    ax.legend(fontsize=9)
     ax.grid(alpha=0.3, axis="y")
 
-    # --- [1,0] Mittlere Force of Infection ---
-    ax = axes[1, 0]
-    ax.plot(
-        agg["day"],
-        agg["lambda_mean"],
-        color="darkorange",
-        lw=2.5,
-        label="Mittleres λ(t)",
-    )
-    ax.fill_between(
-        agg["day"],
-        agg["lambda_p5"],
-        agg["lambda_p95"],
-        alpha=0.25,
-        color="darkorange",
-        label="5.–95. Perzentil",
-    )
-    ax.axhline(
-        lambda_0_theoretical,
-        color="darkorange",
-        lw=1,
-        ls="--",
-        alpha=0.5,
-        label=f"λ(0) theoretisch = {lambda_0_theoretical:.4f} Tag⁻¹",
-    )
-    ax.set_title("Force of Infection λ(t) — Mittelwert ± Konfidenzband")
-    ax.set_xlabel("Tag [Tage]")
-    ax.set_ylabel("Infektionshazard [Tag⁻¹]")
-    ax.legend(fontsize=9)
-    ax.grid(alpha=0.3)
-
-    # --- [1,1] Monte-Carlo-Konvergenz ---
+    # --- [1,1] Erstinfektionen Tag 1 — Stochastische Validierung von λ(0) ---
     ax = axes[1, 1]
-    run_indices = np.arange(1, n_runs + 1)
-    ax.plot(run_indices, running_mean, color="purple", lw=1.5, label="Laufender Mittelwert")
-    final_val = running_mean[-1]
-    ax.axhline(
-        final_val,
-        color="purple",
-        lw=1,
+    expected_cases = lambda_0_theoretical * n_sus_0
+    vals, counts = np.unique(day1_cases, return_counts=True)
+    ax.bar(vals, counts / n_runs * 100, color="darkorange", alpha=0.75, label="Simuliert")
+    ax.axvline(
+        expected_cases,
+        color="green",
+        lw=2,
         ls="--",
-        alpha=0.6,
-        label=f"Endwert = {final_val:.1f}%",
+        label=f"Erwartungswert = {expected_cases:.2f}\n(λ(0) × S₀ = {lambda_0_theoretical:.4f} × {n_sus_0})",
     )
-    ax.set_title("Konvergenz: Mittlere finale Angriffsrate")
-    ax.set_xlabel("Anzahl Läufe")
-    ax.set_ylabel("Laufender Mittelwert [%]")
-    ax.set_ylim(0, 105)
+    ax.set_title("Erstinfektionen Tag 1 — Stochastische Validierung λ(0)")
+    ax.set_xlabel("Neue Fälle an Tag 1")
+    ax.set_ylabel("Anteil Läufe [%]")
+    ax.set_xticks(range(int(day1_cases.max()) + 2))
     ax.legend(fontsize=9)
-    ax.grid(alpha=0.3)
+    ax.grid(alpha=0.3, axis="y")
 
     plt.tight_layout()
     plot_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(plot_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
-    print(f"  Plot gespeichert → {plot_path}")
 
 
 # ---------------------------------------------------------------------------
@@ -271,7 +228,7 @@ def main() -> None:
     lambda_0 = beta_eff * n_car_0 / n_total
 
     output_dir = args.output_dir or (
-        PROJECT_ROOT / "outputs" / datetime.now().strftime("%Y%m%d_%H%M%S")
+        PROJECT_ROOT / "outputs" / (datetime.now().strftime("%Y%m%d_%H%M%S") + "_Single_Ward_Batch")
     )
     data_dir = output_dir / "data"
     plot_dir = output_dir / "plots"
@@ -280,7 +237,12 @@ def main() -> None:
     print(f"Batch-Kalibrierung: {n_runs} Laeufe")
     print(f"  Config:  {args.config}")
     print(f"  β₀={beta_0:.3f}  c={contact_attempts:.1f} Kontakte/Tag  H={hygiene:.2f}")
-    print(f"  → β_eff = {beta_eff:.4f} Tag⁻¹  |  λ(0) = {lambda_0:.4f} Tag⁻¹")
+    lambda_target_lo, lambda_target_hi = 0.0046, 0.0054
+    in_range = lambda_target_lo <= lambda_0 <= lambda_target_hi
+    status = "OK  -- innerhalb Zielbereich" if in_range else "WARNUNG -- ausserhalb Zielbereich"
+    print(
+        f"  → β_eff = {beta_eff:.4f} Tag⁻¹  |  λ(0) = {lambda_0:.4f} Tag⁻¹  |  Ziel: {lambda_target_lo}–{lambda_target_hi} Tag⁻¹  |  {status}"
+    )
     print(f"  Personen: N={n_total} (S₀={n_sus_0}, I₀={n_car_0})  |  Tage/Lauf: {days}")
     print(f"  Seeds: 0 bis {n_runs - 1} (deterministisch, reproduzierbar)")
     print("=" * 65)
@@ -294,7 +256,7 @@ def main() -> None:
         all_dfs.append(df)
         all_metas.append(meta)
 
-        if (i + 1) % 100 == 0 or i == 0:
+        if (i + 1) % max(1, n_runs // 4) == 0 or i == 0:
             pct_done = (i + 1) / n_runs * 100
             print(f"  [{pct_done:5.1f}%] Lauf {i + 1:>{len(str(n_runs))}}/{n_runs} abgeschlossen")
 
@@ -317,9 +279,6 @@ def main() -> None:
             )
         else:
             print(f"  {milestone:3d}% nicht erreicht in {days} Tagen (0/{n_runs} Laeufe)")
-
-    mean_final = summaries["final_attack_pct"].mean()
-    print(f"\n  Mittlere finale Angriffsrate: {mean_final:.1f}%")
 
     # Parquet speichern
     data_dir.mkdir(parents=True, exist_ok=True)

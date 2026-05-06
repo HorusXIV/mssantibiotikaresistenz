@@ -22,7 +22,6 @@ from .genome import (
     GeneIndex,
     classify_genotype,
     compute_fitness,
-    compute_lethality,
     compute_resistant_fraction,
     compute_severity,
     compute_transmissibility,
@@ -345,8 +344,15 @@ class StrainPopulation:
         dominant_strain_name: str | None = None,
         founder_pool: list[FounderStrain] | None = None,
         strain_namespace: str = "population",
+        seed_genome: np.ndarray | None = None,
     ) -> StrainPopulation:
-        """Create initial population with optional resistance."""
+        """Create initial population with optional resistance.
+
+        When seed_genome is provided (transmitted strain transfer), all strains
+        are initialised as variations around that genome: the dominant slot gets
+        an exact copy, every other slot gets seed_genome + N(0, 0.02).
+        When seed_genome is None the standard founder-pool path is used.
+        """
         if rng is None:
             rng = np.random.default_rng()
 
@@ -361,30 +367,47 @@ class StrainPopulation:
         next_serial = 0
         founder_pool = founder_pool or []
 
-        susceptible_founders = _select_founders_for_genotype(
-            founder_pool,
-            "S",
-            n_susceptible_strains,
-            rng,
-            preferred_name=dominant_strain_name if dominant_genotype == "S" else None,
-        )
-
         # Susceptible strains
         sus_pop = initial_population * (1 - resistant_fraction)
+
+        if seed_genome is None:
+            susceptible_founders = _select_founders_for_genotype(
+                founder_pool,
+                "S",
+                n_susceptible_strains,
+                rng,
+                preferred_name=dominant_strain_name if dominant_genotype == "S" else None,
+            )
+
         for i in range(n_susceptible_strains):
-            founder = susceptible_founders[i] if i < len(susceptible_founders) else None
-            if founder is not None:
-                genome = founder.genome.copy()
-                preferred_name = founder.founder_name
-                founder_id = founder.founder_id
-            else:
-                genome = create_wild_type_genome()
-                genome += rng.normal(0, 0.02, NUM_GENES).astype(np.float32)
-                genome = np.clip(genome, 0.0, 1.0)
+            if seed_genome is not None:
+                genome = (
+                    seed_genome.copy().astype(np.float32)
+                    if i == 0
+                    else np.clip(
+                        seed_genome + rng.normal(0, 0.02, NUM_GENES).astype(np.float32),
+                        0.0,
+                        1.0,
+                    )
+                )
                 preferred_name = (
                     dominant_strain_name if dominant_genotype == "S" and i == 0 else None
                 )
                 founder_id = _seed_founder_id(strain_namespace, len(founder_ids))
+            else:
+                founder = susceptible_founders[i] if i < len(susceptible_founders) else None
+                if founder is not None:
+                    genome = founder.genome.copy()
+                    preferred_name = founder.founder_name
+                    founder_id = founder.founder_id
+                else:
+                    genome = create_wild_type_genome()
+                    genome += rng.normal(0, 0.02, NUM_GENES).astype(np.float32)
+                    genome = np.clip(genome, 0.0, 1.0)
+                    preferred_name = (
+                        dominant_strain_name if dominant_genotype == "S" and i == 0 else None
+                    )
+                    founder_id = _seed_founder_id(strain_namespace, len(founder_ids))
             strains.append(genome)
             pops.append(sus_pop / n_susceptible_strains)
             names.append(
@@ -400,27 +423,41 @@ class StrainPopulation:
         if resistant_fraction > 0 and n_resistant_strains > 0:
             res_pop = initial_population * resistant_fraction
             resistant_target = dominant_genotype if dominant_genotype != "S" else "R1"
-            resistant_founders = _select_founders_for_genotype(
-                founder_pool,
-                resistant_target,
-                n_resistant_strains,
-                rng,
-                preferred_name=dominant_strain_name if dominant_genotype != "S" else None,
-            )
+
+            if seed_genome is None:
+                resistant_founders = _select_founders_for_genotype(
+                    founder_pool,
+                    resistant_target,
+                    n_resistant_strains,
+                    rng,
+                    preferred_name=dominant_strain_name if dominant_genotype != "S" else None,
+                )
+
             for i in range(n_resistant_strains):
-                founder = resistant_founders[i] if i < len(resistant_founders) else None
-                if founder is not None:
-                    genome = founder.genome.copy()
-                    preferred_name = founder.founder_name
-                    founder_id = founder.founder_id
-                else:
-                    genome = _create_seed_genome_for_genotype(dominant_genotype)
-                    genome += rng.normal(0, 0.02, NUM_GENES).astype(np.float32)
-                    genome = np.clip(genome, 0.0, 1.0)
+                if seed_genome is not None:
+                    genome = np.clip(
+                        seed_genome + rng.normal(0, 0.02, NUM_GENES).astype(np.float32),
+                        0.0,
+                        1.0,
+                    )
                     preferred_name = (
                         dominant_strain_name if i == 0 and dominant_genotype != "S" else None
                     )
                     founder_id = _seed_founder_id(strain_namespace, len(founder_ids))
+                else:
+                    founder = resistant_founders[i] if i < len(resistant_founders) else None
+                    if founder is not None:
+                        genome = founder.genome.copy()
+                        preferred_name = founder.founder_name
+                        founder_id = founder.founder_id
+                    else:
+                        genome = _create_seed_genome_for_genotype(dominant_genotype)
+                        genome += rng.normal(0, 0.02, NUM_GENES).astype(np.float32)
+                        genome = np.clip(genome, 0.0, 1.0)
+                        preferred_name = (
+                            dominant_strain_name if i == 0 and dominant_genotype != "S" else None
+                        )
+                        founder_id = _seed_founder_id(strain_namespace, len(founder_ids))
                 strains.append(genome)
                 pops.append(res_pop / n_resistant_strains)
                 names.append(
@@ -1063,7 +1100,6 @@ def population_to_response(
 
     # Compute derived effects from dominant strain
     transmissibility = float(compute_transmissibility(dominant_genome))
-    lethality = float(compute_lethality(dominant_genome))
     severity = float(compute_severity(dominant_genome))
     p_clearance = compute_clearance_probability(population, immune_strength, immune_status, config)
 
@@ -1072,10 +1108,10 @@ def population_to_response(
             "resistant_fraction": resistant_fraction,
             "dominant_genotype": dominant_genotype,
             "dominant_strain_name": dominant_strain_name,
+            "dominant_genome": dominant_genome.tolist(),
         },
         "derived_effects": {
             "relative_transmissibility": transmissibility,
-            "lethality_modifier": lethality,
             "severity_modifier": severity,
             "p_clearance": p_clearance,
         },
