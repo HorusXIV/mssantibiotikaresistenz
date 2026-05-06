@@ -1,0 +1,37 @@
+# =============================================================================
+# Phase 3 — Sweep: macro.transmission_resistance_mutation_std
+# =============================================================================
+#
+# Was wird kalibriert?
+#   Standardabweichung der Normalverteilung, aus der die Genmutation beim
+#   Uebertragen gesampelt wird (N(0, std) auf das Quellgenom addiert).
+#   Groessere std → groessere phaenotopische Distanz zwischen Quell- und
+#   Zielstamm → hoehere genetische Diversitaet auf Populationsebene.
+#
+# Zielgroesse: mean_resistant_fraction
+#   Mittlerer resistenter Anteil unter Carriern (letztes Drittel).
+#   Zielwert 0.073 (Swissnoso 2022).
+#
+# Unterschied zu transmission_mutation_probability:
+#   - probability: ob ueberhaupt eine Mutation stattfindet
+#   - std: wie gross die Mutation ist, wenn sie stattfindet
+#   Deshalb: erst probability kalibrieren (Phase 3a), dann std (Phase 3b).
+#
+# HINWEIS: Laengere Simulationslaeufe noetig (kein run_days_override).
+# =============================================================================
+
+# kein run_days_override: 365 Tage fuer Resistenzevolution noetig
+
+parameter:
+  section: macro
+  name: transmission_resistance_mutation_std
+  min: 0.01
+  max: 0.20
+  n_steps: 7
+
+target:
+  metric: mean_resistant_fraction
+  value: 0.073
+  label: "Swissnoso 2022 (mecA-Resistenzanteil ~7.3 % bei MRSA-Carriern)"
+
+n_seeds: 5

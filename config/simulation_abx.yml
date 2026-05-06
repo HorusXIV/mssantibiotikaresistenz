@@ -32,7 +32,6 @@ population:
         relative_transmissibility: 1.3
         p_clearance: 0.015
         severity_modifier: 1.0
-        lethality_modifier: 1.0
 
 macro:
     base_hygiene: 0.42

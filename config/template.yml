@@ -39,7 +39,6 @@
 # - relative_transmissibility
 # - p_clearance
 # - severity_modifier
-# - lethality_modifier
 #
 # Forbidden template fields because the runner or macro layer owns them:
 # - _ctx
@@ -117,7 +116,6 @@ population:
     # The same general patient-template fields are allowed here too.
     age_years: 65
     compliance: 0.70
-    vulnerability: 1.3
     immune_strength: 0.75
     immune_status: normal
     sociability: 1.0
@@ -147,10 +145,6 @@ population:
     # Initial strain-driven severity multiplier.
     # Optional in macro; may be overwritten by micro output.
     severity_modifier: 1.2
-
-    # Initial strain-driven lethality multiplier.
-    # Optional in macro; may be overwritten by micro output.
-    lethality_modifier: 1.1
 
 macro:
   # -------------------------------------------------------------------------

@@ -7,94 +7,79 @@ run:
   quiet: false
 
 population:
-  hospitals: 6
+  hospitals: 6 # DONE
 
   # Geschätzt: ~2% der Patienten Carrier
-  susceptible_count: 980
-  carrier_count: 20
+  susceptible_count: 980 # DONE
+  carrier_count: 20 # DONE
 
-  initial_department: ward
+  initial_department: ward # DONE
 
   susceptible_template:
-    compliance: 0.75        # -> adherence wird täglich daraus abgeleitet
-    vulnerability: 1.1
-    immune_strength: 0.9
-    immune_status: normal
-    sociability: 1.0
+    compliance: 0.80 # DONE -> adherence wird täglich daraus abgeleitet
+    vulnerability: 1.0 # DONE
+    immune_strength: 1.0 # DONE
+    immune_status: normal # DONE
+    sociability: 1.0 # DONE
 
   carrier_template:
-    compliance: 0.70        # -> adherence wird täglich daraus abgeleitet
-    vulnerability: 1.3
-    immune_strength: 0.75
-    immune_status: normal
-    sociability: 1.0
-    resistant_fraction: 0.45
-    dominant_genotype: R2
-    relative_transmissibility: 1.2
-    p_clearance: 0.0039 #DONE
-    severity_modifier: 1.2
-    lethality_modifier: 1.1
+    compliance: 0.70 # DONE -> adherence wird täglich daraus abgeleitet
+    immune_strength: 0.75 # Geschätzt — leicht reduziert für persistente Carrier; Phase 3 kalibrieren
+    immune_status: normal # DONE
+    sociability: 1.0 # DONE
+    resistant_fraction: 0.073 # DONE
+    dominant_genotype: R2 # DONE
+    relative_transmissibility: 1 # DONE VORERST 1
+    p_clearance: 0.0039 # DONE
+    severity_modifier: 1.2 # DONE
 
 macro:
   # Grid
-  dept_grid_cols: 3
-  dept_grid_rows: 2
-  dept_grid_icu_rows: 1
-  network_grid_cols: 3
+  dept_grid_cols: 5 # DONE
+  dept_grid_rows: 4 # DONE
+  dept_grid_icu_rows: 1 # DONE
+  network_grid_cols: 3 # DONE
 
-
-  # Geschätzt
-  daily_contact_attempts: 12.0
-  # Geschätzt ohne Recherche
-  base_hygiene: 0.75
-  # Kalibriert
-  base_transmission_rate: 0.09
-
-
-  # SCHÄTZBAR
+  daily_contact_attempts: 14.0 # DONE
+  base_hygiene: 0.75 # DONE
+  base_transmission_rate: 0.07 # DONE
 
   # LOS
   los_mean_ward: 5.0 # DONE
   los_mean_icu: 2.8 # DONE
-  los_sigma: 0.6 # Vorerst nicht
+  los_sigma: 0.6 # DONE
 
   icu_abx_probability: 0.62 # DONE
   ward_abx_probability: 0.326 # DONE
 
-  daily_admission_rate: 126.0
+  daily_admission_rate: 126.0 # DONE
 
-  community_carrier_fraction: 0.017 #DONE
+  community_carrier_fraction: 0.017 # DONE
 
   carrier_extension_days: 12.0 # DONE
 
-  max_occupancy_per_hospital: 200
+  max_occupancy_per_hospital: 200 # DONE
 
   daily_transfer_rate: 0.004 # DONE
 
-  # base_carrier_mortality_rate: 0.002
+  base_mortality_rate: 0.0045 # DONE
 
-  replacement_resistant_fraction: 0.2 #
-  replacement_dominant_genotype: "S"
+  replacement_resistant_fraction: 0.2 # DONE
+  replacement_dominant_genotype: "S" # DONE
 
+  carrier_isolation_probability: 0.65 # DONE
 
-  # KALIBRIERBAR
-
-  carrier_isolation_probability: 0.65
-
-  base_isolation_effectiveness: 0.65
-
-  proximity_decay_alpha: 0.5
+  base_diagnostic_speed: 1.0 # Vorerst grob geschätzt
 
   # Discharge
-  discharge_logistic_k: 1.0
-  discharge_logistic_t_half: 3.0
+  discharge_logistic_k: 1.0 # Vorerst grob geschätzt
+  discharge_logistic_t_half: 3.0 # Vorerst grob geschätzt
 
+  # KALIBRIERT
+  base_isolation_effectiveness: 0.98 # Kalibriert
+  proximity_decay_alpha: 1.5 # Kalibriert
   transmission_mutation_probability: 0.25
   transmission_resistance_mutation_std: 0.08
-
-  # Vorerst nicht kalibrieren
-  base_diagnostic_speed: 1.0
-
 
 
 micro:

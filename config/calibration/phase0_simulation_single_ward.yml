@@ -1,5 +1,5 @@
 run:
-  days: 14
+  days: 30
   seed: 42
   run_id: single_ward_calibration
   quiet: false
@@ -12,17 +12,17 @@ population:
 
 macro:
   # Kalibriert
-  base_transmission_rate: 0.09
+  base_transmission_rate: 0.07
   # Geschätzt
-  daily_contact_attempts: 12.0
+  daily_contact_attempts: 14.0
   # Geschätzt ohne Quelle
   base_hygiene: 0.75
 
-  # Effektive Uebertragungsrate: beta_eff = beta_0 * c * (1 - H)
+  # Effektive Übertragungsrate: beta_eff = beta_0 * c * (1 - H)
   # Bei obigen Werten: beta_eff = 0.09 * 12 * 0.25 = 0.27 Tag^-1
 
   # ================================================================
-  # DEAKTIVIERT -- fuer saubere SI-Beobachtung ohne Stoerfaktoren
+  # DEAKTIVIERT -- für saubere SI-Beobachtung ohne Störfaktoren
   # ================================================================
   carrier_isolation_probability: 0.0       # Keine Isolation
   base_isolation_effectiveness: 0.0       # Isolation hat keinen Effekt
@@ -31,13 +31,13 @@ macro:
   ward_abx_probability: 0.0
   transmission_mutation_probability: 0.0  # Keine Resistenzmutationen
   transmission_resistance_mutation_std: 0.0
-  base_carrier_mortality_rate: 0.0        # Keine Sterblichkeit
+  base_mortality_rate: 0.0                # Keine Sterblichkeit
   daily_admission_rate: 0.0              # Geschlossenes System -- kein Ein-/Ausgang
   community_carrier_fraction: 0.0
   daily_transfer_rate: 0.0
   severity_icu_threshold: 99.0           # Keine ICU-Eskalation
 
-  # Niemand verlaesst die Ward in 100 Tagen (LOS = 10 Jahre)
+  # Niemand verlässt den Ward in 100 Tagen (LOS = 10 Jahre)
   los_mean_ward: 3650.0
   los_mean_icu: 3650.0
   los_sigma: 0.01
