@@ -221,7 +221,6 @@ class TestMicroResponseStructure:
             "relative_transmissibility",
             "p_clearance",
             "severity_modifier",
-            "lethality_modifier",
         ]
         for field in required_derived_fields:
             assert field in derived, f"Missing derived_effects field: {field}"
@@ -301,7 +300,6 @@ class TestEndToEndIntegration:
                 "relative_transmissibility": 1.0,
                 "p_clearance": 0.02,
                 "severity_modifier": 1.0,
-                "lethality_modifier": 1.0,
             },
         }
 
@@ -431,14 +429,12 @@ class TestValueRanges:
     def test_modifiers_non_negative(
         self, carrier_patient: Patient, micro_simulator: MicroSimulator
     ):
-        """severity_modifier and lethality_modifier should be >= 0."""
+        """severity_modifier should be >= 0."""
         request = carrier_patient.make_micro_request(run_id="run_001", day=1, dt_days=1, seed=42)
         response = micro_simulator.process_request(request)
 
         sm = response["derived_effects"]["severity_modifier"]
-        lm = response["derived_effects"]["lethality_modifier"]
         assert sm >= 0.0, f"severity_modifier {sm} should be non-negative"
-        assert lm >= 0.0, f"lethality_modifier {lm} should be non-negative"
 
 
 # =============================================================================

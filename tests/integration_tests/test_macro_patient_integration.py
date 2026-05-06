@@ -11,9 +11,9 @@ These tests verify that:
 
 The macro layer is a *carrier model*: patient states are SUSCEPTIBLE and CARRIER only.
 Macro owns S→C and C→S transitions. Micro-derived attributes stored on Patient
-(relative_transmissibility, p_clearance, severity_modifier, lethality_modifier,
-resistant_fraction) may influence macro behaviour but are never written by macro
-except through Patient.clear_carriage().
+(relative_transmissibility, p_clearance, severity_modifier, resistant_fraction)
+may influence macro behaviour but are never written by macro except through
+Patient.clear_carriage().
 """
 
 from __future__ import annotations
@@ -872,7 +872,6 @@ class TestTransmission:
             dominant_genotype="R3",
             relative_transmissibility=1.7,
             severity_modifier=1.4,
-            lethality_modifier=1.2,
             p_clearance=0.0,
         )
         recipient = Patient(patient_id="sus_target", state=HealthState.SUSCEPTIBLE)
@@ -887,7 +886,6 @@ class TestTransmission:
         assert recipient.dominant_genotype == "R3"
         assert recipient.relative_transmissibility == pytest.approx(1.7)
         assert recipient.severity_modifier == pytest.approx(1.4)
-        assert recipient.lethality_modifier == pytest.approx(1.2)
         assert recipient.p_clearance == pytest.approx(0.02)
 
 
@@ -941,7 +939,6 @@ class TestClearance:
             relative_transmissibility=2.0,
             p_clearance=1.0,
             severity_modifier=1.5,
-            lethality_modifier=1.3,
         )
         hospital.admit(patient, hospital_id=_H1, department=Department.WARD)
         hospital.step()
@@ -953,7 +950,6 @@ class TestClearance:
         assert patient.relative_transmissibility == 1.0
         assert patient.p_clearance == 0.02
         assert patient.severity_modifier == 1.0
-        assert patient.lethality_modifier == 1.0
 
     def test_p_clearance_respected_statistically(self):
         """With p_clearance=0.5, roughly half of 200 runs should clear after one day."""
@@ -1469,7 +1465,6 @@ class TestPatientInterfaceCompatibility:
                             "relative_transmissibility": 1.0,
                             "p_clearance": 0.0,
                             "severity_modifier": 1.0,
-                            "lethality_modifier": 1.0,
                         },
                     }
                     for req in requests
@@ -1513,7 +1508,6 @@ class TestPatientInterfaceCompatibility:
                             "relative_transmissibility": 1.0,
                             "p_clearance": 0.0,
                             "severity_modifier": 1.0,
-                            "lethality_modifier": 1.0,
                         },
                     }
                     for req in requests
@@ -1554,7 +1548,6 @@ class TestPatientInterfaceCompatibility:
                             "relative_transmissibility": 1.0,
                             "p_clearance": 1.0,
                             "severity_modifier": 1.0,
-                            "lethality_modifier": 1.0,
                         },
                     }
                     for req in requests
@@ -1660,7 +1653,6 @@ class TestPatientInterfaceCompatibility:
             relative_transmissibility=1.8,
             p_clearance=0.0,
             severity_modifier=1.5,
-            lethality_modifier=1.3,
         )
         hospital.admit(patient, hospital_id=_H1, department=Department.WARD)
         for _ in range(10):
@@ -1670,7 +1662,6 @@ class TestPatientInterfaceCompatibility:
         assert patient.relative_transmissibility == 1.8
         assert patient.p_clearance == 0.0
         assert patient.severity_modifier == 1.5
-        assert patient.lethality_modifier == 1.3
 
     def test_public_helper_methods(self, carrier_patient: Patient, susceptible_patient: Patient):
         """Patient helper methods used by macro must be callable and well-typed."""
