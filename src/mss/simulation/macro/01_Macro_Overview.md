@@ -29,16 +29,18 @@ Der Zustand eines Patienten ist auf dieser Ebene binär: **SUSCEPTIBLE (S)** ode
 Jeden simulierten Tag werden die folgenden Schritte **in dieser Reihenfolge** ausgeführt:
 
 ```
-1. Spontane Erholung (C → S)          pro Spital
-2. Entlassung                          pro Spital
+1. Pro Spital (im Loop):
+   a. Spontane Erholung (C → S)
+   b. Kontext-Update + Isolationserkennung
+   c. Mikro-Requests sammeln
+2. Entlassung (inkl. Mortalität)       pro Spital
 3. Aufnahme neuer Patienten            global (Poisson)
-4. Kontext-Update + Isolation          pro Patient
-5. Mikro-Batch (bakterielle Evolution) alle Carrier global
-6. Übertragung (S → C)                 pro Spital
-7. Verlegungen zwischen Spitälern      global
+4. Mikro-Batch anwenden                alle Carrier global
+5. Übertragung (S → C)                 pro Spital
+6. Verlegungen zwischen Spitälern      global
 ```
 
-Die Reihenfolge ist bewusst gewählt: Wer heute gesund wird, kann noch heute entlassen werden (Schritt 1 vor 2).
+Die Reihenfolge ist bewusst gewählt: Clearance und Kontext-Update laufen gemeinsam im Spital-Loop, bevor Entlassung und Aufnahme verarbeitet werden. Wer heute gesund wird (1a), ist bei der Entlassung (2) bereits als Susceptible sichtbar.
 
 ---
 
@@ -162,8 +164,16 @@ Patienten werden nicht exakt am geplanten Entlassungstag entlassen, sondern mit 
 
 #### `carrier_extension_days`
 - **Typ:** float (Tage)
-- **Einfluss:** Wenn ein Carrier erkannt wird (Isolation), wird der geplante Entlassungstag um diese Anzahl Tage verschoben. Gilt nur einmalig ab dem Erkennungstag.
-- **Logik:** `planned_discharge_day = erkennungstag + carrier_extension_days`
+- **Einfluss:** Wird an zwei Stellen verwendet:
+  1. **Bei Ersterkennung** (Transition nicht-isoliert → isoliert): `planned_discharge_day = erkennungstag + carrier_extension_days` (ohne Skalierung).
+  2. **Rollierender Discharge-Loop**: Solange ein Carrier noch aktiv ist und seinen Entlassungstag überschritten hat, wird das Datum täglich neu gesetzt: `planned_discharge_day = heute + carrier_extension_days × severity_modifier`. Schwerere Fälle (höherer `severity_modifier`) bleiben entsprechend länger.
+
+#### `base_mortality_rate`
+- **Typ:** float, [0, 1]
+- **Einfluss:** Tägliche Sterbewahrscheinlichkeit für alle Patienten. Wird für Carrier mit `severity_modifier` multipliziert.
+- **Formel:** `mortality_rate = base_mortality_rate × severity_modifier` (nur für Carrier; für Susceptible = `base_mortality_rate`)
+- **Basis:** Abgeleitet aus Schweizer Spitalmortalität ~2.5% pro Aufenthalt ÷ 5.5-Tage-LoS (BFS Medizinische Statistik 2022; Huang & Platt 2003). Standard: `0.0045` → ~0.5% Tageswahrscheinlichkeit.
+- **Konsequenz:** Ein Patient wird via `discharge()` aus dem Spital entfernt, bevor die Entlassungslogistik greift. Carrier-Verstorbene haben keinen Entlassungs-Plot-Eintrag.
 
 #### `discharge_logistic_k`
 - **Typ:** float
@@ -301,7 +311,7 @@ Für jeden aktiven Carrier baut `patient.make_micro_request()` einen Dictionary-
         "age_years": 65,
         "immune_strength": 0.75,
         "immune_status": "normal",
-        "vulnerability": 1.3,
+        "vulnerability": 1.0,
         "history_flags": ["prior_abx"]
     },
     "initial_state": {
@@ -328,8 +338,7 @@ Die Antwort des Mikro-Layers wird via `patient.apply_micro_response()` auf den P
     "derived_effects": {
         "relative_transmissibility": 1.3,  # → patient.relative_transmissibility
         "p_clearance": 0.005,              # → patient.p_clearance
-        "severity_modifier": 1.4,
-        "lethality_modifier": 1.1
+        "severity_modifier": 1.4           # → patient.severity_modifier
     }
 }
 ```
@@ -377,7 +386,8 @@ Die Antwort des Mikro-Layers wird via `patient.apply_micro_response()` auf den P
 | `los_mean_ward` | Verweildauer | Mittlere Ward-Verweildauer (Log-Normal) |
 | `los_mean_icu` | Verweildauer | Mittlere ICU-Verweildauer (Log-Normal) |
 | `los_sigma` | Verweildauer | Streuung der Verweildauerverteilung |
-| `carrier_extension_days` | Entlassung | Verlängerung des Aufenthalts bei Carrier-Erkennung |
+| `carrier_extension_days` | Entlassung | Verlängerung des Aufenthalts bei Carrier-Erkennung (× `severity_modifier` im Discharge-Loop) |
+| `base_mortality_rate` | Entlassung | Tägliche Basissterblichkeit; für Carrier × `severity_modifier` |
 | `discharge_logistic_k` | Entlassung | Steilheit der Entlassungskurve |
 | `discharge_logistic_t_half` | Entlassung | Verzögerung nach Zieldatum bis 50% Entlassungswahrscheinlichkeit |
 | `daily_admission_rate` | Aufnahmen | Neue Patienten/Tag (Poisson) |
