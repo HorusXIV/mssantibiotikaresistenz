@@ -21,14 +21,29 @@ The repository now follows a clearer rule set:
 
 ```text
 MSS/
+├── Organizational/
+│   ├── Mini_Challenge.md
+│   └── Modulbeschreibung.md
 ├── config/
+│   ├── calibration/
+│   │   ├── phase0_simulation_single_ward.yml
+│   │   ├── phase1_isolation_effectiveness.yml
+│   │   ├── phase1_proximity_decay.yml
+│   │   ├── phase2_carrier_sociability.yml
+│   │   ├── phase2_susceptible_immune_strength.yml
+│   │   ├── phase2_susceptible_sociability.yml
+│   │   ├── phase2_susceptible_vulnerability.yml
+│   │   ├── phase3_carrier_immune_strength.yml
+│   │   ├── phase3_mutation_probability.yml
+│   │   └── phase3_resistance_mutation_std.yml
+│   ├── 01_Parameterübersicht.md
 │   ├── simulation_abx.yml
-│   └── simulation_realistic.yml
+│   ├── simulation_realistic.yml
+│   └── template.yml
 ├── containers/
 │   └── mss_image.def
 ├── docs/
 │   ├── organizational/
-│   │   └── .gitkeep
 │   └── system_overview/
 │       ├── Flowchart_v0.mmd
 │       ├── Flowchart_v1.mmd
@@ -39,21 +54,22 @@ MSS/
 │       ├── amr_system_map_nodes.csv
 │       └── build_gephi_graphs.py
 ├── logs/
-│   ├── .gitkeep
 │   └── *.out
 ├── outputs/
-│   ├── csv/
-│   │   ├── .gitkeep
-│   │   └── *.csv
-│   └── plots/
-│       ├── .gitkeep
-│       └── *.png
+│   └── <timestamp>_<name>/
+│       ├── data/
+│       │   └── *.parquet
+│       └── plots/
+│           └── *.png
 ├── src/
 │   └── mss/
 │       ├── __init__.py
 │       ├── cli/
 │       │   ├── __init__.py
 │       │   ├── run_coupled_simulation.py
+│       │   ├── run_parameter_sweep.py
+│       │   ├── run_single_ward_batch.py
+│       │   ├── run_single_ward_calibration.py
 │       │   └── visualize_results.py
 │       ├── domain/
 │       │   ├── __init__.py
@@ -61,12 +77,14 @@ MSS/
 │       └── simulation/
 │           ├── __init__.py
 │           ├── macro/
+│           │   ├── 01_Macro_Overview.md
 │           │   ├── __init__.py
 │           │   ├── agents.py
 │           │   ├── config.py
 │           │   ├── grid.py
 │           │   └── simulator.py
 │           └── micro/
+│               ├── 01_Micro_Overview.md
 │               ├── __init__.py
 │               ├── engine.py
 │               ├── genome.py
@@ -86,7 +104,6 @@ MSS/
 ├── .pre-commit-config.yaml
 ├── pyproject.toml
 ├── README.md
-├── report.xml
 ├── slurm_runner.sh
 └── uv.lock
 ```
@@ -124,15 +141,32 @@ Within-host bacterial evolution logic.
 
 Executable entry points that assemble the application from lower-level modules.
 
-- `run_coupled_simulation.py`: loads YAML configuration, runs the coupled macro/micro simulation, and writes CSV outputs.
-- `visualize_results.py`: reads generated CSV outputs and writes plots.
+- `run_coupled_simulation.py`: loads YAML configuration, runs the coupled macro/micro simulation, and writes Parquet outputs. Also exposes `run_realistic_once()` used by the sweep calibration tool.
+- `run_single_ward_calibration.py`: analytical β₀ calibration for a single ward; derives `base_transmission_rate` from a closed-form formula and validates it with simulation.
+- `run_single_ward_batch.py`: runs the single-ward calibration across a grid of seed/parameter combinations and aggregates results.
+- `run_parameter_sweep.py`: structured parameter sweep calibration; varies one YAML parameter over a defined grid, runs the simulation for each value, and plots the effect on a target metric.
+- `visualize_results.py`: reads generated Parquet outputs and writes diagnostic plots.
 
 ### `config/`
 
 Runtime configuration files. Keep these environment- or scenario-specific, not code-specific.
 
-- `simulation_realistic.yml`: main realistic simulation scenario.
+- `simulation_realistic.yml`: main realistic simulation scenario with calibrated parameter values.
 - `simulation_abx.yml`: alternative scenario tuned for antibiotic-focused runs.
+- `template.yml`: fully documented reference file listing every supported YAML variable with explanations. Copy and adapt for new scenarios.
+- `01_Parameterübersicht.md`: parameter reference table documenting all model parameters, their types (geschätzt / kalibriert / nicht identifizierbar), sources, and calibration results.
+- `calibration/`: sweep configuration files for each calibration phase.
+  - `phase0_simulation_single_ward.yml`: single-ward β₀ calibration (analytical).
+  - `phase1_*.yml`: Phase 1 sweeps — macro transmission and isolation parameters.
+  - `phase2_*.yml`: Phase 2 sweeps — patient template parameters (macro layer only, micro disabled).
+  - `phase3_*.yml`: Phase 3 sweeps — micro/resistance parameters.
+
+### `Organizational/`
+
+Module-level planning and assessment documents.
+
+- `Mini_Challenge.md`: task description for the mini-challenge component.
+- `Modulbeschreibung.md`: module requirements, learning outcomes, and assessment criteria.
 
 ### `docs/`
 
@@ -149,12 +183,20 @@ Automated verification for the new `src` layout.
 - `test_run_coupled_simulation.py`: configuration loading and initial population setup.
 - `integration_tests/`: cross-module behavioral tests for macro, micro, and grid interactions.
 
+### `src/mss/simulation/macro/` — inline docs
+
+- `01_Macro_Overview.md`: detailed description of the macro simulation layer, transmission model, and parameter semantics.
+
+### `src/mss/simulation/micro/` — inline docs
+
+- `01_Micro_Overview.md`: description of the within-host micro simulation layer, genome model, and evolution mechanics.
+
 ### `outputs/`
 
-Generated simulation artifacts. These are not source files.
+Generated simulation artifacts. These are not source files. Each run creates a timestamped subdirectory:
 
-- `outputs/csv/`: simulation result tables.
-- `outputs/plots/`: rendered diagnostic plots.
+- `outputs/<timestamp>_<name>/data/`: simulation result tables as Parquet files.
+- `outputs/<timestamp>_<name>/plots/`: rendered diagnostic plots.
 
 ### `logs/`
 
@@ -198,16 +240,35 @@ Install dependencies:
 uv sync
 ```
 
-Run the coupled simulation:
+Run the coupled macro/micro simulation:
 
 ```bash
 uv run mss-run --config config/simulation_realistic.yml
 ```
 
-Generate plots from existing CSV output:
+Generate plots from existing Parquet output:
 
 ```bash
-uv run mss-visualize --csv-dir outputs/csv --plot-dir outputs/plots
+uv run mss-visualize --output-dir outputs/<timestamp>_<name>
+```
+
+Run the single-ward β₀ calibration (Phase 0):
+
+```bash
+uv run mss-calibrate --config config/calibration/phase0_simulation_single_ward.yml
+```
+
+Run the β₀ calibration across a parameter batch:
+
+```bash
+uv run mss-calibrate-batch --config config/calibration/phase0_simulation_single_ward.yml
+```
+
+Run a parameter sweep calibration (Phase 1/2/3):
+
+```bash
+uv run mss-sweep --sweep config/calibration/phase1_isolation_effectiveness.yml
+uv run mss-sweep --sweep config/calibration/phase2_susceptible_vulnerability.yml --n-seeds 5
 ```
 
 Run tests:
@@ -283,9 +344,11 @@ To keep the structure healthy over time:
 For new developers, the fastest path is:
 
 1. Read this README for the repository map.
-2. Start with `src/mss/domain/patient.py` to understand the shared contract.
-3. Read `src/mss/simulation/macro/simulator.py` and `src/mss/simulation/micro/simulator.py` to understand orchestration boundaries.
-4. Run `uv run pytest` to validate the environment.
-5. Run `uv run mss-run --config config/simulation_realistic.yml` and inspect `outputs/csv/` and `outputs/plots/`.
+2. Read `config/01_Parameterübersicht.md` for an overview of all model parameters and their calibration status.
+3. Read `config/template.yml` for a fully documented reference of every supported YAML variable.
+4. Start with `src/mss/domain/patient.py` to understand the shared contract.
+5. Read `src/mss/simulation/macro/simulator.py` and `src/mss/simulation/micro/simulator.py` to understand orchestration boundaries.
+6. Run `uv run pytest` to validate the environment.
+7. Run `uv run mss-run --config config/simulation_realistic.yml` and inspect the generated `outputs/` directory.
 
 During onboarding reviews, emphasize one rule: if a file does not belong under `src/mss`, it should only exist at the repository root if it is configuration, documentation, automation, or generated output.
