@@ -765,7 +765,6 @@ def selection_step(
     dose_level: str,
     adherence: float,
     immune_strength: float,
-    immune_status: str,
     rng: np.random.Generator,
 ) -> StrainPopulation:
     """
@@ -788,7 +787,6 @@ def selection_step(
         dose_level=dose_level,
         adherence=adherence,
         immune_strength=immune_strength,
-        immune_status=immune_status,
     )
 
     # Growth based on fitness
@@ -959,7 +957,6 @@ def simulate_day(
     dose_level: str,
     adherence: float,
     immune_strength: float,
-    immune_status: str,
     config: SimulationConfig = None,
     seed: int = None,
 ) -> Tuple[StrainPopulation, Dict[str, Any]]:
@@ -972,7 +969,6 @@ def simulate_day(
         dose_level: "low", "std", or "high"
         adherence: Patient adherence (0-1)
         immune_strength: Patient immune strength
-        immune_status: "normal" or "suppressed"
         config: Simulation configuration
         seed: Random seed for reproducibility
 
@@ -993,9 +989,7 @@ def simulate_day(
 
     for step in range(config.steps_per_day):
         # 1. Selection (growth/death based on fitness)
-        pop = selection_step(
-            pop, config, abx_class, dose_level, adherence, immune_strength, immune_status, rng
-        )
+        pop = selection_step(pop, config, abx_class, dose_level, adherence, immune_strength, rng)
 
         # 2. Mutation
         pop = mutate_population(pop, config, abx_stress, rng)
@@ -1023,7 +1017,6 @@ def simulate_day(
 def compute_clearance_probability(
     population: StrainPopulation,
     immune_strength: float,
-    immune_status: str,
     config: SimulationConfig = None,
 ) -> float:
     """
@@ -1047,12 +1040,10 @@ def compute_clearance_probability(
     else:
         # Logistic function: low clearance at high pop
         ratio = total_pop / config.carrying_capacity
-        base_prob = 0.02 * (1.0 - ratio)
+        base_prob = 0.006 * (1.0 - ratio)
 
     # Immune modulation
     immune_mult = immune_strength
-    if immune_status == "suppressed":
-        immune_mult *= 0.3
 
     # Stealth of dominant strain reduces clearance
     if population.n_strains > 0:
@@ -1084,7 +1075,6 @@ def get_dominant_strain(population: StrainPopulation) -> Tuple[np.ndarray, str, 
 def population_to_response(
     population: StrainPopulation,
     immune_strength: float,
-    immune_status: str,
     config: SimulationConfig = None,
 ) -> Dict[str, Any]:
     """
@@ -1101,7 +1091,7 @@ def population_to_response(
     # Compute derived effects from dominant strain
     transmissibility = float(compute_transmissibility(dominant_genome))
     severity = float(compute_severity(dominant_genome))
-    p_clearance = compute_clearance_probability(population, immune_strength, immune_status, config)
+    p_clearance = compute_clearance_probability(population, immune_strength, config)
 
     return {
         "updated_state": {

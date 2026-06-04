@@ -206,16 +206,14 @@ def compute_abx_survival(
     return survival[0] if single else survival
 
 
-def compute_immune_survival(
-    genomes: np.ndarray, immune_strength: float, immune_status: str
-) -> np.ndarray:
+def compute_immune_survival(genomes: np.ndarray, immune_strength: float) -> np.ndarray:
     """
     Compute survival factor against immune system.
 
     Args:
         genomes: Shape (n_strains, NUM_GENES) or (NUM_GENES,)
-        immune_strength: Patient immune strength multiplier
-        immune_status: "normal" or "suppressed"
+        immune_strength: Patient immune strength multiplier (lower = weaker
+            immune competence; immunocompromised patients carry a low value)
 
     Returns:
         Survival factor array (0-1)
@@ -226,8 +224,6 @@ def compute_immune_survival(
 
     # Base immune clearance rate
     base_clearance = 0.15 * immune_strength
-    if immune_status == "suppressed":
-        base_clearance *= 0.3
 
     # Stealth gene reduces immune detection
     stealth = genomes[:, GeneIndex.STEALTH]
@@ -245,7 +241,6 @@ def compute_fitness(
     dose_level: str = "std",
     adherence: float = 1.0,
     immune_strength: float = 1.0,
-    immune_status: str = "normal",
     costs: ResistanceCosts = None,
 ) -> np.ndarray:
     """
@@ -259,7 +254,6 @@ def compute_fitness(
         dose_level: Dose level
         adherence: Patient adherence
         immune_strength: Patient immune strength
-        immune_status: Immune status
         costs: Resistance cost parameters
 
     Returns:
@@ -278,7 +272,7 @@ def compute_fitness(
 
     # Multiply by survival factors
     abx_survival = compute_abx_survival(genomes, abx_class, dose_level, adherence)
-    immune_survival = compute_immune_survival(genomes, immune_strength, immune_status)
+    immune_survival = compute_immune_survival(genomes, immune_strength)
 
     fitness = base_fitness * abx_survival * immune_survival
     fitness = np.clip(fitness, 0.001, 1.0)

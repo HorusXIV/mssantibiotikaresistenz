@@ -199,7 +199,6 @@ def _process_single_request(args: tuple) -> Dict[str, Any]:
 
     host = request.get("host", {})
     immune_strength = host.get("immune_strength", 1.0)
-    immune_status = host.get("immune_status", "normal")
 
     # Run simulation
     final_pop, history = simulate_day(
@@ -208,15 +207,12 @@ def _process_single_request(args: tuple) -> Dict[str, Any]:
         dose_level=dose_level,
         adherence=adherence,
         immune_strength=immune_strength,
-        immune_status=immune_status,
         config=config,
         seed=request.get("seed", None),
     )
 
     # Build response
-    response = population_to_response(
-        final_pop, immune_strength=immune_strength, immune_status=immune_status, config=config
-    )
+    response = population_to_response(final_pop, immune_strength=immune_strength, config=config)
 
     # Add episode tracking
     response["episode_id"] = request.get("episode_id")
@@ -494,7 +490,6 @@ def run_micro_simulation(
 
     host = patient_request.get("host", {})
     immune_strength = host.get("immune_strength", 1.0)
-    immune_status = host.get("immune_status", "normal")
 
     # Run simulation
     final_pop, _ = simulate_day(
@@ -503,15 +498,12 @@ def run_micro_simulation(
         dose_level=dose_level,
         adherence=adherence,
         immune_strength=immune_strength,
-        immune_status=immune_status,
         config=config,
         seed=patient_request.get("seed", None),
     )
 
     # Build response
-    response = population_to_response(
-        final_pop, immune_strength=immune_strength, immune_status=immune_status, config=config
-    )
+    response = population_to_response(final_pop, immune_strength=immune_strength, config=config)
 
     response["episode_id"] = patient_request.get("episode_id")
     response["patient_id"] = patient_request.get("patient_id")
