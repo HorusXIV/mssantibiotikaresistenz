@@ -1,0 +1,44 @@
+# =============================================================================
+# Kalibrierung 2 — Sweep: macro.proximity_decay_alpha
+# =============================================================================
+#
+# Was wird kalibriert?
+#   Räumlicher Abklingexponent der Transmissionswahrscheinlichkeit:
+#   w = exp(-alpha * distanz). Höhere Werte → Übertragung konzentriert sich auf
+#   nahe Zellen (Zimmernachbarn), niedrige Werte → stationsweit gleich verteilt.
+#
+# Zielgrösse: same_cell_transmission_fraction
+#   Anteil der In-Hospital-Übertragungen, deren Quelle in DERSELBEN Gitterzelle
+#   (Zimmer/Bettzone) liegt. Diese Grösse wird allein von alpha bestimmt und ist
+#   NICHT mit β₀/Isolation konfundiert (die ändern das Niveau, nicht die
+#   Distanzverteilung) — daher die eigene, isolierte Kalibrierungsachse.
+#
+# Belegter Zielwert: ~0.25 (20–30 %)
+#   Anteil nosokomialer MRSA-Akquisitionen, der einem Zimmernachbarn zuzuordnen
+#   ist. Bandbreite über Studien: ~10–40 % (Akut-Setting eher 20–30 %).
+#   Quellen: VA-LTCF ~36 % (Obergrenze); ICU-WGS ~20 % patient-to-patient;
+#   hierarchisches Raummodell: schwache räumliche Struktur (untere Grenze).
+#   Hinweis: Das Gitter ist eine Abstraktion (Zelle ≈ Zimmer/Bettzone), der
+#   glatte Distanz-Abfall ist eine Vereinfachung — die Literatur stützt v.a. den
+#   Zimmer-Effekt, nicht einen Gradienten über die ganze Station.
+# =============================================================================
+
+run_days_override: 90
+
+parameter:
+  section: macro
+  name: proximity_decay_alpha
+  min: 0.8
+  max: 1.2
+  n_steps: 8
+  unit: "1/Gitterzelle"
+
+target:
+  metric: same_cell_transmission_fraction
+  value: 0.25
+  unit: "Anteil"
+  label: "Zimmernachbar-Übertragungsanteil ~20–30% (VA-LTCF, ICU-WGS, Raummodell)"
+
+n_seeds: 100          # hohe Seed-Zahl → glatte, monotone Kurve; Ergebnis: α ≈ 1.05 trifft 0.25
+
+use_micro: false

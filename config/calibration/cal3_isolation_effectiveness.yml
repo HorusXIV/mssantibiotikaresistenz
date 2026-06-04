@@ -1,0 +1,48 @@
+# =============================================================================
+# Kalibrierung 3 — Sweep: macro.base_isolation_effectiveness
+# =============================================================================
+#
+# Was wird kalibriert?
+#   Per-Patient-Transmissionsreduktion für isolierte Carrier (1 = vollständig
+#   geblockt, 0 = wirkungslos).
+#
+# Zielgrösse: acquisition_reduction
+#   Relative Reduktion der kumulativen In-Hospital-Übertragungen bei wirksamer
+#   Isolation gegenüber unwirksamer Isolation: 1 - n_an / n_aus. Im Verhältnis
+#   kürzt sich β₀ (und c, Hygiene, Raumstruktur) heraus → eigene, β₀-unabhängige
+#   Achse. Das absolute Niveau eignet sich NICHT (mit β₀ konfundiert).
+#
+# Counterfactual (baseline_overrides): base_isolation_effectiveness = 0
+#   Gleiche Isolationspolitik (Erkennung + LOS-Verlängerung), aber Wirksamkeit 0.
+#   So kürzt sich die LOS-Verlängerung heraus und das Verhältnis misst NUR die
+#   Transmissionsreduktion durch die Wirksamkeit.
+#
+# Belegter Zielwert: ~0.40 (Bandbreite 0.20–0.60)
+#   Kontaktisolation senkt die MRSA-Akquisition populationsweit um ~20–60 %.
+#   Hinweis: base_isolation_effectiveness ist mit carrier_isolation_probability
+#   konfundiert (Verhältnis ≈ coverage × eff) — letzteres bleibt fixiert.
+# =============================================================================
+
+run_days_override: 90
+
+parameter:
+  section: macro
+  name: base_isolation_effectiveness
+  min: 0.30
+  max: 0.90
+  n_steps: 8
+  unit: "Anteil"
+
+baseline_overrides:
+  macro:
+    base_isolation_effectiveness: 0.0
+
+target:
+  metric: acquisition_reduction
+  value: 0.60
+  unit: "Anteil"
+  label: "Akquisitionsreduktion durch Kontaktisolation ~20–60% (oberes Band)"
+
+n_seeds: 30
+
+use_micro: false
