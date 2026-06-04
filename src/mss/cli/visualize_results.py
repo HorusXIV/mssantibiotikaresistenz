@@ -107,8 +107,8 @@ def plot_population_overview(daily: pd.DataFrame, plot_dir: Path) -> None:
     ax.plot(days, daily["susceptible"], color="steelblue", lw=1.5, label="Susceptible")
     ax.plot(days, daily["carriers"], color="firebrick", lw=1.5, label="Carriers")
     ax.set_title("Patient Counts")
-    ax.set_xlabel("Day")
-    ax.set_ylabel("Patients")
+    ax.set_xlabel("Day (d)")
+    ax.set_ylabel("Patients (count)")
     ax.legend(fontsize=8)
     ax.grid(alpha=0.3)
 
@@ -118,7 +118,7 @@ def plot_population_overview(daily: pd.DataFrame, plot_dir: Path) -> None:
     ax.plot(days, prev, color="firebrick", lw=1, alpha=0.5, label="Daily")
     ax.plot(days, _rolling(prev), color="firebrick", lw=2, label=f"{ROLLING_WINDOW}d mean")
     ax.set_title("Carrier Prevalence (%)")
-    ax.set_xlabel("Day")
+    ax.set_xlabel("Day (d)")
     ax.set_ylabel("Prevalence (%)")
     ax.set_ylim(0, max(prev.max() * 1.15, 30))
     ax.legend(fontsize=8)
@@ -129,9 +129,9 @@ def plot_population_overview(daily: pd.DataFrame, plot_dir: Path) -> None:
     res = daily["avg_resistant_fraction"]
     ax.plot(days, res, color="darkorange", lw=1, alpha=0.5, label="Daily")
     ax.plot(days, _rolling(res), color="darkorange", lw=2, label=f"{ROLLING_WINDOW}d mean")
-    ax.set_title("Avg Resistant Fraction (carriers only)")
-    ax.set_xlabel("Day")
-    ax.set_ylabel("Resistant fraction")
+    ax.set_title("Avg Resistant Fraction (carriers, share)")
+    ax.set_xlabel("Day (d)")
+    ax.set_ylabel("Resistant fraction (share)")
     ax.set_ylim(0, 1)
     ax.legend(fontsize=8)
     ax.grid(alpha=0.3)
@@ -141,8 +141,8 @@ def plot_population_overview(daily: pd.DataFrame, plot_dir: Path) -> None:
     ax.plot(days, daily["isolated_count"], color="purple", lw=1.5, label="Isolated (flag)")
     ax.plot(days, daily["abx_on_count"], color="teal", lw=1.5, label="On ABX")
     ax.set_title("Clinical Load (Isolation flag & ABX)")
-    ax.set_xlabel("Day")
-    ax.set_ylabel("Patients")
+    ax.set_xlabel("Day (d)")
+    ax.set_ylabel("Patients (count)")
     ax.legend(fontsize=8)
     ax.grid(alpha=0.3)
 
@@ -161,7 +161,7 @@ def plot_occupancy_stability(hosp: pd.DataFrame, plot_dir: Path) -> None:
         return
 
     fig, ax = plt.subplots(figsize=(11, 5))
-    fig.suptitle("Hospital Occupancy Over Time", fontsize=14, fontweight="bold")
+    fig.suptitle("Hospital Occupancy (patients)", fontsize=14, fontweight="bold")
 
     hospital_ids = sorted(hosp["hospital_id"].unique())
     colors = plt.cm.tab10(np.linspace(0, 0.9, len(hospital_ids)))
@@ -189,8 +189,8 @@ def plot_occupancy_stability(hosp: pd.DataFrame, plot_dir: Path) -> None:
         zorder=5,
     )
 
-    ax.set_xlabel("Day")
-    ax.set_ylabel("Patients in hospital")
+    ax.set_xlabel("Day (d)")
+    ax.set_ylabel("Patients (count)")
     ax.legend(fontsize=8, ncol=2)
     ax.grid(alpha=0.3)
 
@@ -217,7 +217,7 @@ def plot_hospital_prevalence(hosp: pd.DataFrame, plot_dir: Path) -> None:
         return
 
     fig, ax = plt.subplots(figsize=(11, 5))
-    fig.suptitle("Carrier Prevalence per Hospital", fontsize=14, fontweight="bold")
+    fig.suptitle("Carrier Prevalence by Hospital (%)", fontsize=14, fontweight="bold")
 
     hospital_ids = sorted(hosp["hospital_id"].unique())
     colors = plt.cm.tab10(np.linspace(0, 0.9, len(hospital_ids)))
@@ -246,7 +246,7 @@ def plot_hospital_prevalence(hosp: pd.DataFrame, plot_dir: Path) -> None:
         zorder=5,
     )
 
-    ax.set_xlabel("Day")
+    ax.set_xlabel("Day (d)")
     ax.set_ylabel("Carrier prevalence (%)")
     ax.set_ylim(0, None)
     ax.legend(fontsize=8, ncol=2)
@@ -263,7 +263,7 @@ def plot_hospital_prevalence(hosp: pd.DataFrame, plot_dir: Path) -> None:
 
 def plot_department_mix(daily: pd.DataFrame, plot_dir: Path) -> None:
     fig, ax = plt.subplots(figsize=(11, 5))
-    fig.suptitle("Patient Distribution by Department + Isolation", fontsize=14, fontweight="bold")
+    fig.suptitle("Department Mix (patients)", fontsize=14, fontweight="bold")
 
     days = daily["day"].values
     ward = daily["ward_count"].values
@@ -285,8 +285,8 @@ def plot_department_mix(daily: pd.DataFrame, plot_dir: Path) -> None:
             zorder=5,
         )
 
-    ax.set_xlabel("Day")
-    ax.set_ylabel("Patients")
+    ax.set_xlabel("Day (d)")
+    ax.set_ylabel("Patients (count)")
     ax.legend(loc="upper right", fontsize=9)
     ax.grid(alpha=0.2)
 
@@ -334,7 +334,9 @@ def plot_hospital_grid_heatmap(hosp: pd.DataFrame, plot_dir: Path, grid_cols: in
 
     fig, ax = plt.subplots(figsize=(8, 4))
     fig.suptitle(
-        f"Hospital Grid — Carrier Prevalence (day {last_day})", fontsize=13, fontweight="bold"
+        f"Hospital Grid — Carrier Prevalence (%) (day {last_day})",
+        fontsize=13,
+        fontweight="bold",
     )
 
     im = ax.imshow(
@@ -359,7 +361,7 @@ def plot_hospital_grid_heatmap(hosp: pd.DataFrame, plot_dir: Path, grid_cols: in
     ax.set_yticks(range(grid_rows))
     ax.set_xticklabels([f"Col {c}" for c in range(grid_cols)])
     ax.set_yticklabels([f"Row {r}" for r in range(grid_rows)])
-    ax.set_title("Green = low prevalence  |  Red = high prevalence", fontsize=9)
+    ax.set_title("Low -> High prevalence (%)", fontsize=9)
 
     fig.tight_layout()
     _save(fig, plot_dir / "05_hospital_grid_heatmap.png")
@@ -370,96 +372,92 @@ def plot_hospital_grid_heatmap(hosp: pd.DataFrame, plot_dir: Path, grid_cols: in
 # ---------------------------------------------------------------------------
 
 
-def plot_department_grid(
-    hosp: pd.DataFrame,
-    plot_dir: Path,
-    dept_cols: int = 3,
-    dept_rows: int = 2,
-    icu_rows: int = 1,
-) -> None:
-    """Show the 3×2 department zone grid for every hospital on the final day.
+def plot_department_grid(cell_df: pd.DataFrame, plot_dir: Path) -> None:
+    """Per-cell carrier prevalence heatmap for every hospital (final day).
 
-    Cells are coloured by patient density (patients per zone cell).
-    ICU row = top, Ward rows = bottom, bottom-right cell = Isolation zone.
+    Each grid cell is coloured by its carrier prevalence (carriers / patients).
+    This is the spatial structure proximity_decay_alpha actually acts on: a
+    susceptible's infection risk is dominated by carriers in its own and
+    neighbouring cells. Grid dimensions and the ICU/Ward split are read from the
+    logged data, so the plot always matches the simulated grid. Each cell is
+    annotated with its prevalence and patient count n.
     """
-    if hosp.empty:
-        print("  skipped 06_department_grid.png (no per-hospital data)")
+    if cell_df.empty:
+        print("  skipped 06_department_grid.png (no per-cell data)")
         return
 
-    last_day = hosp["day"].max()
-    final = hosp[hosp["day"] == last_day].copy()
+    last_day = cell_df["day"].max()
+    final = cell_df[cell_df["day"] == last_day].copy()
     hospital_ids = sorted(final["hospital_id"].unique())
     n_hospitals = len(hospital_ids)
 
-    n_icu_cells = dept_cols * icu_rows
-    n_ward_cells = dept_cols * (dept_rows - icu_rows)
+    dept_cols = int(final["x"].max()) + 1
+    dept_rows = int(final["y"].max()) + 1
+    vmax = max(5.0, float(final["prevalence"].max()) * 100.0)
 
     ncols_fig = min(n_hospitals, 3)
     nrows_fig = math.ceil(n_hospitals / ncols_fig)
-    fig, axes = plt.subplots(nrows_fig, ncols_fig, figsize=(4.5 * ncols_fig, 3.5 * nrows_fig))
-    fig.suptitle(
-        "Department Grid — Patient Density per Zone (final day)", fontsize=13, fontweight="bold"
+    fig, axes = plt.subplots(
+        nrows_fig,
+        ncols_fig,
+        figsize=(4.5 * ncols_fig, 3.2 * nrows_fig),
+        constrained_layout=True,
     )
-
-    # Normalise axes shape for uniform indexing
+    fig.suptitle(
+        "Department Grid — Carrier Prevalence per Cell (final day)",
+        fontsize=13,
+        fontweight="bold",
+    )
     axes = np.array(axes).reshape(nrows_fig, ncols_fig)
 
-    max_density = 1.0
-    for hid in hospital_ids:
-        row_data = final[final["hospital_id"] == hid]
-        if row_data.empty:
-            continue
-        max_density = max(
-            max_density,
-            row_data["icu_count"].values[0] / max(n_icu_cells, 1),
-            row_data["ward_count"].values[0] / max(n_ward_cells, 1),
-        )
-
+    im = None
     for idx, hid in enumerate(hospital_ids):
         r, c = divmod(idx, ncols_fig)
         ax = axes[r, c]
-        row_data = final[final["hospital_id"] == hid]
-        if row_data.empty:
+        sub = final[final["hospital_id"] == hid]
+        if sub.empty:
             ax.axis("off")
             continue
 
-        ward_ct = int(row_data["ward_count"].values[0])
-        icu_ct = int(row_data["icu_count"].values[0])
-        ward_density = ward_ct / max(n_ward_cells, 1)
-        icu_density = icu_ct / max(n_icu_cells, 1)
-
-        # Build density matrix
-        grid = np.zeros((dept_rows, dept_cols))
+        prev_grid = np.zeros((dept_rows, dept_cols))
         labels: list[list[str]] = [[""] * dept_cols for _ in range(dept_rows)]
-        for gy in range(dept_rows):
-            for gx in range(dept_cols):
-                if gy < icu_rows:
-                    grid[gy, gx] = icu_density
-                    labels[gy][gx] = f"ICU\n~{icu_density:.0f}p"
-                else:
-                    grid[gy, gx] = ward_density
-                    labels[gy][gx] = f"Ward\n~{ward_density:.0f}p"
+        row_dept: dict[int, str] = {}
+        for _, cell in sub.iterrows():
+            x, y = int(cell["x"]), int(cell["y"])
+            prev_grid[y, x] = float(cell["prevalence"]) * 100.0
+            labels[y][
+                x
+            ] = f"{float(cell['prevalence']) * 100:.0f}%\nn={int(cell['total_patients'])}"
+            row_dept[y] = str(cell["department"])
 
-        im = ax.imshow(grid, cmap="YlOrRd", vmin=0, vmax=max_density, aspect="auto")
-        for gy in range(dept_rows):
-            for gx in range(dept_cols):
-                ax.text(gx, gy, labels[gy][gx], ha="center", va="center", fontsize=9, color="black")
+        im = ax.imshow(prev_grid, cmap="YlOrRd", vmin=0.0, vmax=vmax, aspect="auto")
+        for y in range(dept_rows):
+            for x in range(dept_cols):
+                ax.text(x, y, labels[y][x], ha="center", va="center", fontsize=7, color="black")
+
+        # Separate ICU rows (top) from Ward rows with a line.
+        icu_ys = [y for y, d in row_dept.items() if d == "icu"]
+        if icu_ys and len(icu_ys) < dept_rows:
+            ax.axhline(max(icu_ys) + 0.5, color="black", lw=1.5)
 
         ax.set_title(hid.replace("hospital_", "H"), fontsize=10)
         ax.set_xticks(range(dept_cols))
         ax.set_yticks(range(dept_rows))
-        ax.set_xticklabels([f"Col {i}" for i in range(dept_cols)], fontsize=7)
-        ax.set_yticklabels(
-            ["ICU" if gy < icu_rows else "Ward" for gy in range(dept_rows)],
-            fontsize=7,
-        )
-        fig.colorbar(im, ax=ax, fraction=0.05, pad=0.04, label="p/cell")
+        ax.set_xticklabels([f"C{i}" for i in range(dept_cols)], fontsize=7)
+        ax.set_yticklabels([row_dept.get(y, "")[:4] for y in range(dept_rows)], fontsize=7)
 
     for idx in range(n_hospitals, nrows_fig * ncols_fig):
         r, c = divmod(idx, ncols_fig)
         axes[r, c].axis("off")
 
-    fig.tight_layout()
+    if im is not None:
+        fig.colorbar(
+            im,
+            ax=axes.ravel().tolist(),
+            fraction=0.025,
+            pad=0.02,
+            label="Carrier prevalence (%)",
+        )
     _save(fig, plot_dir / "06_department_grid.png")
 
 
@@ -485,8 +483,8 @@ def plot_micro_evolution_overview(micro_daily: pd.DataFrame, plot_dir: Path) -> 
     ax.plot(days, carriers, lw=1.8, color="steelblue", label="Carrier count")
     ax.plot(days, active, lw=1.8, color="darkorange", label="Active micro episodes")
     ax.set_title("Carrier Load")
-    ax.set_xlabel("Day")
-    ax.set_ylabel("Count")
+    ax.set_xlabel("Day (d)")
+    ax.set_ylabel("Count (patients/episodes)")
     ax.legend(fontsize=8)
     ax.grid(alpha=0.3)
 
@@ -498,7 +496,7 @@ def plot_micro_evolution_overview(micro_daily: pd.DataFrame, plot_dir: Path) -> 
     ax.plot(days, p50, color="firebrick", lw=2, label="Median")
     ax.plot(days, _rolling(p50), color="black", lw=1.2, ls="--", label=f"{ROLLING_WINDOW}d mean")
     ax.set_title("Within-Host Resistance Distribution (%)")
-    ax.set_xlabel("Day")
+    ax.set_xlabel("Day (d)")
     ax.set_ylabel("Resistant fraction (%)")
     ax.legend(fontsize=8)
     ax.grid(alpha=0.3)
@@ -507,8 +505,8 @@ def plot_micro_evolution_overview(micro_daily: pd.DataFrame, plot_dir: Path) -> 
     mean_total_pop = _series(micro_daily, "mean_total_population")
     ax = axes[1, 0]
     ln1 = ax.plot(days, mean_n_strains, color="purple", lw=2, label="Mean strains / episode")
-    ax.set_xlabel("Day")
-    ax.set_ylabel("Strains", color="purple")
+    ax.set_xlabel("Day (d)")
+    ax.set_ylabel("Strains (count)", color="purple")
     ax.tick_params(axis="y", labelcolor="purple")
     ax.grid(alpha=0.3)
     ax2 = ax.twinx()
@@ -519,7 +517,7 @@ def plot_micro_evolution_overview(micro_daily: pd.DataFrame, plot_dir: Path) -> 
         lw=1.8,
         label=r"log10(mean total population + 1)",
     )
-    ax2.set_ylabel(r"log10 population", color="teal")
+    ax2.set_ylabel(r"log10 population (a.u.)", color="teal")
     ax2.tick_params(axis="y", labelcolor="teal")
     ax.set_title("Strain Diversity and Bacterial Load")
     lines = ln1 + ln2
@@ -537,8 +535,8 @@ def plot_micro_evolution_overview(micro_daily: pd.DataFrame, plot_dir: Path) -> 
         label="Mean relative transmissibility",
     )
     ax.set_title("Micro-Derived Clinical Effectors")
-    ax.set_xlabel("Day")
-    ax.set_ylabel("Value")
+    ax.set_xlabel("Day (d)")
+    ax.set_ylabel("Value (%, rel.)")
     ax.legend(fontsize=8)
     ax.grid(alpha=0.3)
 
@@ -591,7 +589,7 @@ def plot_micro_genotype_stream(micro_genotype: pd.DataFrame, plot_dir: Path) -> 
     ax.stackplot(
         pivot.index, [pivot[c] * 100 for c in pivot.columns], labels=pivot.columns, colors=colors
     )
-    ax.set_xlabel("Day")
+    ax.set_xlabel("Day (d)")
     ax.set_ylabel("Share of carriers (%)")
     ax.set_ylim(0, 100)
     ax.legend(loc="upper left", fontsize=8, ncol=3)
@@ -629,11 +627,11 @@ def plot_micro_hospital_heatmap(micro_hosp: pd.DataFrame, plot_dir: Path) -> Non
         return
 
     fig, ax = plt.subplots(figsize=(12, max(4, 0.5 * len(heat.index) + 2)))
-    fig.suptitle("Hospital Micro Resistance Heatmap", fontsize=14, fontweight="bold")
+    fig.suptitle("Hospital Resistance Heatmap (%)", fontsize=14, fontweight="bold")
     im = ax.imshow(
         heat.values, aspect="auto", cmap="YlOrRd", vmin=0, vmax=max(25.0, np.max(heat.values))
     )
-    ax.set_xlabel("Day")
+    ax.set_xlabel("Day (d)")
     ax.set_ylabel("Hospital")
     ax.set_xticks(range(len(heat.columns)))
     ax.set_xticklabels([str(int(day)) for day in heat.columns], rotation=90, fontsize=7)
@@ -826,6 +824,9 @@ def run(
 
     daily, hosp, micro_daily, micro_hosp, micro_patient, micro_genotype = _load(data_dir)
 
+    cell_path = data_dir / "macro_cell_daily.parquet"
+    cell_df = pd.read_parquet(cell_path) if cell_path.exists() else pd.DataFrame()
+
     if not quiet:
         print(f"Reading data from: {data_dir}")
         print(f"  macro_daily:             {len(daily)} rows")
@@ -841,7 +842,7 @@ def run(
     plot_hospital_prevalence(hosp, plot_dir)
     plot_department_mix(daily, plot_dir)
     plot_hospital_grid_heatmap(hosp, plot_dir)
-    plot_department_grid(hosp, plot_dir)
+    plot_department_grid(cell_df, plot_dir)
     plot_micro_evolution_overview(micro_daily, plot_dir)
     plot_micro_genotype_stream(micro_genotype, plot_dir)
     plot_micro_hospital_heatmap(micro_hosp, plot_dir)

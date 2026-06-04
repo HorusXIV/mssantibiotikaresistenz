@@ -90,7 +90,6 @@ _DAILY_FIELDS = [
     "abx_on_count",
     "ward_count",
     "icu_count",
-    "isolation_count",
 ]
 
 _DAILY_BY_HOSPITAL_FIELDS = [
@@ -106,7 +105,18 @@ _DAILY_BY_HOSPITAL_FIELDS = [
     "abx_on_count",
     "ward_count",
     "icu_count",
-    "isolation_count",
+]
+
+_MACRO_CELL_DAILY_FIELDS = [
+    "day",
+    "run_id",
+    "hospital_id",
+    "x",
+    "y",
+    "department",
+    "total_patients",
+    "carriers",
+    "prevalence",
 ]
 
 _MICRO_DAILY_FIELDS = [
@@ -161,7 +171,6 @@ _MICRO_PATIENT_DAILY_FIELDS = [
     "dose_level",
     "adherence",
     "immune_strength",
-    "immune_status",
     "resistant_fraction",
     "dominant_genotype",
     "dominant_strain_name",
@@ -429,13 +438,19 @@ def _make_patient_factory(
         pid = f"dyn_{counter[0]:07d}"
         is_carrier = rng.random() < macro_config.community_carrier_fraction
         if is_carrier:
+            # Community carriers are carriers: use the carrier template (immune_strength,
+            # compliance, severity_modifier, p_clearance, …) and only override the
+            # resistance state with the community values. Without this they would inherit
+            # susceptible host traits and carrier-specific parameters (e.g. immune_strength)
+            # could not be calibrated against the steady-state carrier population.
+            template = dict(population.carrier_template)
+            template["resistant_fraction"] = macro_config.replacement_resistant_fraction
+            template["dominant_genotype"] = macro_config.replacement_dominant_genotype
             return Patient(
                 patient_id=pid,
                 state=HealthState.CARRIER,
                 episode_id=f"community_ep_{counter[0]:07d}",
-                resistant_fraction=macro_config.replacement_resistant_fraction,
-                dominant_genotype=macro_config.replacement_dominant_genotype,
-                **population.susceptible_template,
+                **template,
             )
         return Patient(
             patient_id=pid,
@@ -491,7 +506,6 @@ def _collect_patient_stats(patients: list[Patient]) -> dict[str, float | int]:
     abx_on_count = sum(1 for p in patients if p.regimen.on)
     ward_count = sum(1 for p in patients if p.department == Department.WARD)
     icu_count = sum(1 for p in patients if p.department == Department.ICU)
-    isolation_count = sum(1 for p in patients if p.department == Department.ISOLATION)
     prevalence = len(carriers) / total if total else 0.0
 
     return {
@@ -504,7 +518,6 @@ def _collect_patient_stats(patients: list[Patient]) -> dict[str, float | int]:
         "abx_on_count": abx_on_count,
         "ward_count": ward_count,
         "icu_count": icu_count,
-        "isolation_count": isolation_count,
     }
 
 
@@ -536,6 +549,33 @@ def _collect_macro_daily_logs(
     global_row.update(_collect_patient_stats(all_patients))
 
     return global_row, by_hospital
+
+
+def _collect_cell_daily_logs(
+    macro: MacroSimulator,
+    n_hospitals: int,
+    day: int,
+    run_id: str,
+) -> list[dict[str, float | int | str]]:
+    """Per-cell occupancy rows for every hospital grid cell (carrier prevalence)."""
+    rows: list[dict[str, float | int | str]] = []
+    for i in range(1, n_hospitals + 1):
+        hid = f"hospital_{i:03d}"
+        for cell in macro.get_cell_stats(hid):
+            rows.append(
+                {
+                    "day": day,
+                    "run_id": run_id,
+                    "hospital_id": hid,
+                    "x": int(cell["x"]),
+                    "y": int(cell["y"]),
+                    "department": str(cell["department"]),
+                    "total_patients": int(cell["total_patients"]),
+                    "carriers": int(cell["carriers"]),
+                    "prevalence": float(cell["prevalence"]),
+                }
+            )
+    return rows
 
 
 def _mean_or_zero(values: list[float]) -> float:
@@ -685,7 +725,6 @@ def _collect_micro_daily_logs(
                     "dose_level": patient.regimen.dose_level,
                     "adherence": float(patient.adherence),
                     "immune_strength": float(patient.immune_strength),
-                    "immune_status": patient.immune_status,
                     "resistant_fraction": float(patient.resistant_fraction),
                     "dominant_genotype": patient.dominant_genotype,
                     "dominant_strain_name": patient.dominant_strain_name,
@@ -979,7 +1018,7 @@ def run_realistic_once(
         use_micro: Wenn False, wird der Mikro-Simulator uebersprungen. Patienten
                    behalten ihre Template-Standardwerte (p_clearance,
                    relative_transmissibility, severity_modifier) unveraendert.
-                   Fuer Phase-1/2-Kalibrierungen empfohlen.
+                   Für die Makro-Kalibrierungen empfohlen.
 
     Returns:
         df:   Tages-DataFrame mit Spalten day, total_patients, susceptible, carriers,
@@ -1013,7 +1052,9 @@ def run_realistic_once(
     )
 
     rows = []
-    prev_carriers = settings.population.carrier_count
+    # True in-hospital acquisitions: per-day delta of the colonization counter
+    # (only S->C transmission, excludes community-imported carriers and churn).
+    prev_colonizations = macro.get_colonization_count()
     for day in range(1, settings.run.days + 1):
         macro.step(
             micro_simulator=micro,
@@ -1022,8 +1063,9 @@ def run_realistic_once(
         )
         all_patients = [p for _, p in _iter_all_patients(macro, settings.population.hospitals)]
         stats = _collect_patient_stats(all_patients)
-        new_cases = max(0, stats["carriers"] - prev_carriers)
-        prev_carriers = stats["carriers"]
+        colonizations = macro.get_colonization_count()
+        new_cases = colonizations - prev_colonizations
+        prev_colonizations = colonizations
         rows.append({"day": day, "new_cases": new_cases, **stats})
 
     if micro is not None:
@@ -1041,12 +1083,21 @@ def run_realistic_once(
     acquisition_rate = mean_new_cases / mean_susceptible * 1000 if mean_susceptible > 0 else 0.0
     isolation_fraction = mean_isolated / mean_carriers if mean_carriers > 0 else 0.0
 
+    # Spatial transmission structure: fraction of in-hospital transmissions whose
+    # source was a same-cell (roommate) carrier — set by proximity_decay_alpha.
+    n_transmissions = macro.get_transmission_count()
+    same_cell_transmission_fraction = (
+        macro.get_same_cell_transmission_count() / n_transmissions if n_transmissions > 0 else 0.0
+    )
+
     meta: dict[str, Any] = {
         "seed": seed,
         "mean_prevalence": float(last["prevalence"].mean()),
         "acquisition_rate_per_1000": acquisition_rate,
         "isolation_fraction": isolation_fraction,
         "mean_resistant_fraction": float(last["avg_resistant_fraction"].mean()),
+        "same_cell_transmission_fraction": same_cell_transmission_fraction,
+        "n_transmissions": n_transmissions,
     }
     return df, meta
 
@@ -1117,6 +1168,7 @@ def main() -> None:
     final_summary = None
     macro_daily_path = data_dir / "macro_daily.parquet"
     macro_daily_by_hospital_path = data_dir / "macro_daily_by_hospital.parquet"
+    macro_cell_daily_path = data_dir / "macro_cell_daily.parquet"
     micro_daily_path = data_dir / "micro_daily.parquet"
     micro_daily_by_hospital_path = data_dir / "micro_daily_by_hospital.parquet"
     micro_patient_daily_path = data_dir / "micro_patient_daily.parquet"
@@ -1130,6 +1182,10 @@ def main() -> None:
     macro_daily_by_hospital_writer = _ParquetBatchWriter(
         macro_daily_by_hospital_path,
         _DAILY_BY_HOSPITAL_FIELDS,
+    )
+    macro_cell_daily_writer = _ParquetBatchWriter(
+        macro_cell_daily_path,
+        _MACRO_CELL_DAILY_FIELDS,
     )
     micro_daily_writer = _ParquetBatchWriter(micro_daily_path, _MICRO_DAILY_FIELDS)
     micro_daily_by_hospital_writer = _ParquetBatchWriter(
@@ -1195,6 +1251,14 @@ def main() -> None:
         )
         macro_daily_writer.append_rows([global_row])
         macro_daily_by_hospital_writer.append_rows(hospital_rows)
+        macro_cell_daily_writer.append_rows(
+            _collect_cell_daily_logs(
+                macro=macro,
+                n_hospitals=settings.population.hospitals,
+                day=day,
+                run_id=settings.run.run_id,
+            )
+        )
         (
             micro_global_row,
             micro_hospital_rows,
@@ -1253,6 +1317,7 @@ def main() -> None:
     if final_summary is None:
         macro_daily_writer.close()
         macro_daily_by_hospital_writer.close()
+        macro_cell_daily_writer.close()
         micro_daily_writer.close()
         micro_daily_by_hospital_writer.close()
         micro_patient_daily_writer.close()
@@ -1265,6 +1330,7 @@ def main() -> None:
 
     macro_daily_writer.close()
     macro_daily_by_hospital_writer.close()
+    macro_cell_daily_writer.close()
     micro_daily_writer.close()
     micro_daily_by_hospital_writer.close()
     micro_patient_daily_writer.close()
