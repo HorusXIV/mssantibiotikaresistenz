@@ -80,13 +80,52 @@ def test_draw_los_icu_longer_than_ward() -> None:
     assert icu_mean > ward_mean
 
 
-def test_carrier_extends_planned_discharge_day() -> None:
-    cfg = SimulationConfig(daily_admission_rate=1.0, carrier_extension_days=10)
+def test_carrier_extends_planned_discharge_day_on_detection() -> None:
+    """On first detection a carrier's discharge is extended once by
+    carrier_extension_days * severity_modifier. The extension happens in the
+    context phase of step(), not via a rolling re-extension in _discharge_phase."""
+    cfg = SimulationConfig(
+        daily_admission_rate=1.0,
+        carrier_extension_days=10,
+        carrier_isolation_probability=1.0,  # detection certain
+        base_diagnostic_speed=1.0,
+        base_mortality_rate=0.0,  # no death confounder
+    )
     sim = MacroSimulator(config=cfg, n_hospitals=1, seed=5)
     patient = Patient(
         patient_id="car_ext",
         state=HealthState.CARRIER,
         episode_id="ep_ext",
+        p_clearance=0.0,  # no clearance confounder
+        severity_modifier=1.0,
+    )
+    sim.admit(patient, hospital_id=_H1, department=Department.WARD)
+    patient.planned_discharge_day = 2  # small, so detection extension overwrites it
+
+    # One step: clearance (none) -> detection (certain) extends discharge once.
+    # patient_factory omitted -> admission phase skipped.
+    sim.step(micro_simulator=None)
+
+    assert patient.is_isolated is True
+    assert patient.planned_discharge_day == sim._day + 10
+
+
+def test_discharge_phase_does_not_reextend_carrier() -> None:
+    """A carrier past its planned day is NOT rolled forward; it faces the same
+    logistic discharge as a susceptible (it can leave while still colonized)."""
+    cfg = SimulationConfig(
+        daily_admission_rate=1.0,
+        carrier_extension_days=10,
+        base_mortality_rate=0.0,
+        discharge_logistic_k=1.0,
+        discharge_logistic_t_half=3.0,
+    )
+    sim = MacroSimulator(config=cfg, n_hospitals=1, seed=5)
+    patient = Patient(
+        patient_id="car_ext",
+        state=HealthState.CARRIER,
+        episode_id="ep_ext",
+        severity_modifier=1.0,
     )
     sim.admit(patient, hospital_id=_H1, department=Department.WARD)
     sim._day = 7
@@ -94,7 +133,9 @@ def test_carrier_extends_planned_discharge_day() -> None:
 
     sim._discharge_phase([patient], _H1, micro_simulator=None)
 
-    assert patient.planned_discharge_day == 17
+    # Either discharged (removed) or still admitted with UNCHANGED planned day —
+    # never rolled forward to 17 as the old buggy behavior did.
+    assert patient.planned_discharge_day == 7
 
 
 def test_logistic_p_increases_over_target() -> None:

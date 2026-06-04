@@ -254,3 +254,42 @@ def test_proximity_transmission_higher_same_dept() -> None:
     far_count = sum(run_trial(seed + 1000, False) for seed in range(200))
 
     assert same_count >= far_count + 10
+
+
+def test_cell_stats_per_cell_counts_and_prevalence() -> None:
+    model = _MesaModel()
+    grid = HospitalDepartmentGrid(
+        cols=3,
+        rows=3,
+        icu_rows=1,
+        mesa_model=model,
+        rng=_FixedChoiceRng(),  # all same-zone patients land on the first cell
+        alpha=0.5,
+    )
+    # Two carriers + one susceptible into the ward (all → first ward cell),
+    # one carrier into the ICU (→ first ICU cell).
+    for pid, state, dept in [
+        ("w_car1", HealthState.CARRIER, Department.WARD),
+        ("w_car2", HealthState.CARRIER, Department.WARD),
+        ("w_sus", HealthState.SUSCEPTIBLE, Department.WARD),
+        ("i_car", HealthState.CARRIER, Department.ICU),
+    ]:
+        grid.assign_to_department(PatientAgent(Patient(patient_id=pid, state=state), model), dept)
+
+    stats = {(c["x"], c["y"]): c for c in grid.cell_stats()}
+
+    # Every cell of the 3×3 grid is represented (including empty ones).
+    assert len(stats) == 9
+    assert all(c["total_patients"] == 0 for pos, c in stats.items() if c["total_patients"] == 0)
+
+    ward_cell = stats[(0, 1)]  # first ward cell (y >= icu_rows)
+    assert ward_cell["total_patients"] == 3
+    assert ward_cell["carriers"] == 2
+    assert ward_cell["prevalence"] == 2 / 3
+    assert ward_cell["department"] == "ward"
+
+    icu_cell = stats[(0, 0)]  # first ICU cell (y < icu_rows)
+    assert icu_cell["total_patients"] == 1
+    assert icu_cell["carriers"] == 1
+    assert icu_cell["prevalence"] == 1.0
+    assert icu_cell["department"] == "icu"

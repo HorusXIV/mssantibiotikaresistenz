@@ -44,9 +44,7 @@ def carrier_patient() -> Patient:
         episode_id="episode_001",
         age_years=55,
         compliance=0.85,
-        vulnerability=1.2,
         immune_strength=0.9,
-        immune_status="normal",
         sociability=1.0,
     )
     # Set up the daily context
@@ -141,8 +139,6 @@ class TestMicroRequestStructure:
         required_host_fields = [
             "age_years",
             "immune_strength",
-            "immune_status",
-            "vulnerability",
             "history_flags",
         ]
         for field in required_host_fields:
@@ -542,22 +538,21 @@ class TestDepartmentScenarios:
 
 
 # =============================================================================
-# Immune Status Tests
+# Immune Strength Tests
 # =============================================================================
 
 
-class TestImmuneStatusScenarios:
-    """Tests different immune status settings."""
+class TestImmuneStrengthScenarios:
+    """Tests different immune strength levels."""
 
-    @pytest.mark.parametrize("immune_status", ["normal", "suppressed"])
-    def test_immune_statuses_work(self, immune_status: str, micro_simulator: MicroSimulator):
-        """All immune statuses should be processable."""
+    @pytest.mark.parametrize("immune_strength", [0.3, 1.0, 1.8])
+    def test_immune_strengths_work(self, immune_strength: float, micro_simulator: MicroSimulator):
+        """All immune strength levels should be processable."""
         patient = Patient(
             patient_id="test_patient",
             state=HealthState.CARRIER,
             episode_id="episode_001",
-            immune_status=immune_status,
-            immune_strength=0.5 if immune_status == "suppressed" else 1.0,
+            immune_strength=immune_strength,
         )
         ctx = PatientDailyContext(
             hospital_id="hospital_001",
@@ -706,13 +701,12 @@ class TestEdgeCases:
         response = micro_simulator.process_request(request)
         patient.apply_micro_response(response)
 
-    def test_high_vulnerability_patient(self, micro_simulator: MicroSimulator):
-        """Patient with very high vulnerability should be processable."""
+    def test_low_immune_strength_patient(self, micro_simulator: MicroSimulator):
+        """Patient with very low immune strength should be processable."""
         patient = Patient(
             patient_id="test_patient",
             state=HealthState.CARRIER,
             episode_id="episode_001",
-            vulnerability=3.0,
             immune_strength=0.3,
         )
         ctx = PatientDailyContext(
@@ -915,7 +909,6 @@ class TestLifecycleDynamics:
             dose_level="std",
             adherence=1.0,
             immune_strength=0.8,
-            immune_status="normal",
             config=SimulationConfig(
                 base_mutation_rate=0.0,
                 base_hgt_rate=0.0,
@@ -958,7 +951,6 @@ class TestLifecycleDynamics:
             dose_level="std",
             adherence=1.0,
             immune_strength=0.8,
-            immune_status="normal",
             config=SimulationConfig(
                 base_mutation_rate=0.0,
                 base_hgt_rate=0.0,
@@ -983,7 +975,6 @@ class TestLifecycleDynamics:
             dose_level="high",
             adherence=1.0,
             immune_strength=2.0,
-            immune_status="normal",
             config=SimulationConfig(base_mutation_rate=0.0, base_hgt_rate=0.0),
             seed=123,
         )

@@ -34,7 +34,7 @@ def _write_config(path: Path) -> None:
             },
             "carrier_template": {
                 "age_years": 70,
-                "immune_status": "suppressed",
+                "immune_strength": 0.5,
                 "resistant_fraction": 0.6,
                 "dominant_genotype": "R2",
                 "relative_transmissibility": 1.9,
@@ -51,8 +51,6 @@ def _write_config(path: Path) -> None:
             "icu_abx_probability": 0.5,
             "ward_abx_probability": 0.1,
             "carrier_isolation_probability": 0.25,
-            "transmission_mutation_probability": 0.05,
-            "transmission_resistance_mutation_std": 0.02,
         },
         "micro": {
             "workers": 1,
