@@ -12,22 +12,18 @@ population:
     susceptible_template:
         age_years: 50
         compliance: 0.8
-        vulnerability: 1.0
         immune_strength: 1.0
-        immune_status: normal
         sociability: 1.0
         adherence: 1.0
         history_flags: []
     carrier_template:
         age_years: 50
         compliance: 0.8
-        vulnerability: 1.0
         immune_strength: 1.0
-        immune_status: normal
         sociability: 1.0
         adherence: 1.0
         history_flags: []
-        resistant_fraction: 0.55
+        resistant_fraction: 0.90
         dominant_genotype: R2
         relative_transmissibility: 1.3
         p_clearance: 0.015
@@ -42,9 +38,6 @@ macro:
     icu_abx_probability: 0.85
     ward_abx_probability: 0.4
     carrier_isolation_probability: 0.25
-    transmission_mutation_probability: 0.3
-    transmission_resistance_mutation_std: 0.1
-
     # LOS + Discharge
     los_mean_ward: 7.0
     los_mean_icu: 12.0
@@ -57,8 +50,8 @@ macro:
     # Steady-state target for ~10k patients with effective LOS around 11 days: ~900/day
     daily_admission_rate: 900.0
     community_carrier_fraction: 0.08
-    replacement_resistant_fraction: 0.12
-    replacement_dominant_genotype: "S"
+    replacement_resistant_fraction: 0.90
+    replacement_dominant_genotype: "R2"
     max_occupancy_per_hospital: 50
 
     # Grid (Feature 2 — used once Mesa grids are integrated)

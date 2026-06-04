@@ -26,11 +26,8 @@
 # Allowed template fields:
 # - age_years
 # - compliance
-# - vulnerability
 # - immune_strength
-# - immune_status
 # - sociability
-# - treatment_phase
 # - adherence
 # - history_flags
 # - resistant_fraction
@@ -89,17 +86,9 @@ population:
     # Used in `Patient.update_context()` to derive daily adherence.
     compliance: 0.75
 
-    # Host-level susceptibility / severity multiplier.
-    # Used by the macro layer, not directly by the current micro engine.
-    vulnerability: 1.1
-
-    # Host immune strength multiplier.
-    # Used directly by the micro layer and by macro susceptibility logic.
+    # Single immune-competence multiplier (1.0 = normal, lower = immunocompromised).
+    # Drives macro susceptibility (1/immune_strength) and micro clearance/survival.
     immune_strength: 0.9
-
-    # Host immune state.
-    # Common values: `normal`, `suppressed`
-    immune_status: normal
 
     # Contact-rate multiplier used by macro transmission.
     sociability: 1.0
@@ -117,7 +106,6 @@ population:
     age_years: 65
     compliance: 0.70
     immune_strength: 0.75
-    immune_status: normal
     sociability: 1.0
     adherence: 0.70
     history_flags: ["prior_abx"]
@@ -178,16 +166,6 @@ macro:
 
   # Daily chance that a non-isolated carrier is detected and isolated.
   carrier_isolation_probability: 0.65
-
-  # -------------------------------------------------------------------------
-  # Transmission inheritance
-  # -------------------------------------------------------------------------
-
-  # Probability that a newly transmitted strain mutates slightly during handover.
-  transmission_mutation_probability: 0.25
-
-  # Standard deviation of the resistance perturbation during transmission inheritance.
-  transmission_resistance_mutation_std: 0.08
 
   # -------------------------------------------------------------------------
   # Length of stay and discharge

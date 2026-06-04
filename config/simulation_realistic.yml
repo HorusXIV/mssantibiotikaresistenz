@@ -2,84 +2,81 @@
 
 run:
   days: 365
-  seed: 42
+  seed: 4
   run_id: realistic_run
   quiet: false
 
 population:
-  hospitals: 6 # DONE
+  hospitals: 6                    # Anzahl Spitäler im Netzwerk [Stück]
 
   # Geschätzt: ~2% der Patienten Carrier
-  susceptible_count: 980 # DONE
-  carrier_count: 20 # DONE
+  susceptible_count: 980          # Startpopulation Susceptible [Patienten] -> zusammen 1000, 2% Carrier-Anteil
+  carrier_count: 20               # Startpopulation Carrier [Patienten]
 
-  initial_department: ward # DONE
+  initial_department: ward        # Kategorie: ward | icu
 
   susceptible_template:
-    compliance: 0.80 # DONE -> adherence wird täglich daraus abgeleitet
-    vulnerability: 1.0 # DONE
-    immune_strength: 1.0 # DONE
-    immune_status: normal # DONE
-    sociability: 1.0 # DONE
+    compliance: 0.80              # Verhaltens-Compliance [0–1] -> skaliert Antibiotikawirkung via adherence im Mikro-Layer
+    immune_strength: 1.0          # Immunkompetenz-Multiplikator [Referenz = 1.0] -> Makro-Suszeptibilität (1/immune_strength) + Mikro-Clearance
+    sociability: 1.0              # Kontaktintensitäts-Multiplikator [Referenz = 1.0] -> skaliert base_transmission_rate
 
   carrier_template:
-    compliance: 0.70 # DONE -> adherence wird täglich daraus abgeleitet
-    immune_strength: 0.75 # Geschätzt — leicht reduziert für persistente Carrier; Phase 3 kalibrieren
-    immune_status: normal # DONE
-    sociability: 1.0 # DONE
-    resistant_fraction: 0.073 # DONE
-    dominant_genotype: R2 # DONE
-    relative_transmissibility: 1 # DONE VORERST 1
-    p_clearance: 0.0039 # DONE
-    severity_modifier: 1.2 # DONE
+    compliance: 0.70              # Verhaltens-Compliance [0–1] -> leicht tiefer als Susceptible; wirkt via adherence im Mikro
+    immune_strength: 0.75         # Immunkompetenz-Multiplikator [Referenz = 1.0] -> 25% schwächer; wirkt im Mikro auf Immun-Clearance
+    sociability: 1.0              # Kontaktintensitäts-Multiplikator [Referenz = 1.0] -> skaliert base_transmission_rate
+    resistant_fraction: 0.90      # Anteil MRSA an Gesamt-S.aureus innerhalb des Carriers [0–1]
+    dominant_genotype: R2         # Resistenzklasse [S | R1 | R2 | R3]
+    relative_transmissibility: 1  # Übertragungs-Multiplikator [Referenz = 1.0] -> Initialwert für Tag 1; danach täglich vom Mikro aktualisiert
+    p_clearance: 0.0039           # Spontane Dekolonisierungswahrscheinlichkeit [Wahrscheinlichkeit / Patient*Tag]
+    severity_modifier: 1.2        # Schweregard-Multiplikator [Referenz = 1.0] -> skaliert carrier_extension_days und base_mortality_rate
 
 macro:
-  # Grid
-  dept_grid_cols: 5 # DONE
-  dept_grid_rows: 4 # DONE
-  dept_grid_icu_rows: 1 # DONE
-  network_grid_cols: 3 # DONE
+  # --- Räumliches Gitter ---
+  dept_grid_cols: 5               # Spalten im Abteilungsgitter [Gitterzellen] -> 5×4 = 20 Positionen pro Spital
+  dept_grid_rows: 4               # Reihen im Abteilungsgitter [Gitterzellen]
+  dept_grid_icu_rows: 1           # ICU-Reihen [Gitterzellen] -> 1/4 = 25% ICU-Anteil
+  network_grid_cols: 3            # Spalten im Spitalnetzwerk [Gitterzellen] -> 3×2-Raster für 6 Spitäler
 
-  daily_contact_attempts: 14.0 # DONE
-  base_hygiene: 0.75 # DONE
-  base_transmission_rate: 0.07 # DONE
+  # --- Transmission ---
+  daily_contact_attempts: 14.0    # Relevante Kontaktepisoden [Kontakte / Patient*Tag]
+  base_hygiene: 0.75              # Hygieneeffektivität [0–1] -> Reduktionsfaktor auf den Gesamt-Hazard: wirksamer Anteil = 1−0.75 = 0.25
+  base_transmission_rate: 0.07    # Kolonisierungswahrscheinlichkeit [Wahrscheinlichkeit / Kontakt*Carrier] -> kalibriert (β₀)
 
-  # LOS
-  los_mean_ward: 5.0 # DONE
-  los_mean_icu: 2.8 # DONE
-  los_sigma: 0.6 # DONE
+  # --- Verweildauer (Log-Normal-Verteilung) ---
+  los_mean_ward: 5.0              # Mittlere Aufenthaltsdauer Normalstation [Tage]
+  los_mean_icu: 2.8               # Mittlere Aufenthaltsdauer Intensivstation [Tage]
+  los_sigma: 0.6                  # Log-Normal-Formparameter [–] -> bestimmt Streuungsbreite der LOS-Verteilung; typisch 0.4–0.8
 
-  icu_abx_probability: 0.62 # DONE
-  ward_abx_probability: 0.326 # DONE
+  # --- Antibiotikaverordnung ---
+  icu_abx_probability: 0.62       # Antibiotikaverordnungs-Wahrscheinlichkeit ICU [Wahrscheinlichkeit / Patient*Tag]
+  ward_abx_probability: 0.326     # Antibiotikaverordnungs-Wahrscheinlichkeit Normalstation [Wahrscheinlichkeit / Patient*Tag]
 
-  daily_admission_rate: 126.0 # DONE
+  # --- Patientenfluss ---
+  daily_admission_rate: 126.0           # Neuaufnahmen [Patienten / Tag] -> ≈ 21/Spital*Tag; bei LOS 5 Tage: Steady-State ≈ 105/Spital
+  community_carrier_fraction: 0.017     # Anteil MRSA-positiver Neuaufnahmen aus der Gemeinschaft [0–1]
+  max_occupancy_per_hospital: 200       # Kapazitätsgrenze [Patienten / Spital]
+  daily_transfer_rate: 0.004            # Verlegungswahrscheinlichkeit [Wahrscheinlichkeit / Patient*Tag]
 
-  community_carrier_fraction: 0.017 # DONE
+  # --- Entlassung & Mortalität ---
+  carrier_extension_days: 12.0    # Aufenthaltsverlängerung bei MRSA-Erkennung [Tage] -> × severity_modifier im Discharge-Loop
+  base_mortality_rate: 0.0045     # Tägliche Sterblichkeit [Wahrscheinlichkeit / Patient*Tag]
+                                  # -> für Carrier: × severity_modifier = 0.0045×1.2 = 0.0054/Tag
+  discharge_logistic_k: 1.0       # Steilheit der logistischen Entlassungskurve [1/Tag]
+  discharge_logistic_t_half: 3.0  # Halbwert nach geplantem Entlassungstag [Tage] -> nach 3 Tagen: 50% Entlassungswahrsch.
 
-  carrier_extension_days: 12.0 # DONE
+  # --- Community-Carrier bei Aufnahme ---
+  replacement_resistant_fraction: 0.90  # Anteil MRSA an Gesamt-S.aureus bei neu eintretenden Community-Carriern [0–1]
+  replacement_dominant_genotype: "R2"  # Resistenzklasse neu eintretender Community-Carrier [S | R1 | R2 | R3]
 
-  max_occupancy_per_hospital: 200 # DONE
+  # --- Isolation & Diagnostik ---
+  carrier_isolation_probability: 0.65   # Erkennungs- und Isolationswahrscheinlichkeit [Wahrscheinlichkeit / nicht-isoliertem Carrier*Tag]
+  base_isolation_effectiveness: 0.47    # Transmissionsreduktion für isolierte Patienten [0–1] -> kalibriert
+  base_diagnostic_speed: 1.0            # Diagnostik-Geschwindigkeit [Multiplikator, Referenz = 1.0]
+                                        # -> 0.5 = halbierte Erkennungsrate (Kultur), 2.0 = doppelte Rate (PCR)
 
-  daily_transfer_rate: 0.004 # DONE
-
-  base_mortality_rate: 0.0045 # DONE
-
-  replacement_resistant_fraction: 0.2 # DONE
-  replacement_dominant_genotype: "S" # DONE
-
-  carrier_isolation_probability: 0.65 # DONE
-
-  base_diagnostic_speed: 1.0 # Vorerst grob geschätzt
-
-  # Discharge
-  discharge_logistic_k: 1.0 # Vorerst grob geschätzt
-  discharge_logistic_t_half: 3.0 # Vorerst grob geschätzt
-
-  # KALIBRIERT
-  base_isolation_effectiveness: 0.98 # Kalibriert
-  proximity_decay_alpha: 1.5 # Kalibriert
-  transmission_mutation_probability: 0.25
-  transmission_resistance_mutation_std: 0.08
+  # --- Räumlicher Zerfall ---
+  proximity_decay_alpha: 1.05     # Zerfallskoeffizient [1/Gitterzelle] in w = exp(−α*d) -> kalibriert
+                                  # -> Nachbar (d=1): 0.35, zwei Zellen (d=2): 0.12
 
 
 micro:
