@@ -25,13 +25,13 @@ dependencies = [
     "pyyaml (>=6.0,<7.0)",
     "mesa>=3.5.1",
     "funkybob>=2023.12.0",
+    "plotly>=6.8.0",
 ]
 
 [project.scripts]
 mss-run = "mss.cli.run_coupled_simulation:main"
 mss-visualize = "mss.cli.visualize_results:main"
 mss-calibrate = "mss.cli.run_single_ward_calibration:main"
-mss-calibrate-batch = "mss.cli.run_single_ward_batch:main"
 mss-sweep = "mss.cli.run_parameter_sweep:main"
 
 [dependency-groups]
