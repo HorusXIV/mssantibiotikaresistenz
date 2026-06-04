@@ -35,12 +35,6 @@ class SimulationConfig:
     # Detection / isolation of carriers
     carrier_isolation_probability: float = 0.30  # daily detection chance for non-isolated carriers
 
-    # Transmission inheritance
-    transmission_mutation_probability: float = (
-        0.08  # chance that transmitted strain shifts slightly
-    )
-    transmission_resistance_mutation_std: float = 0.04  # small perturbation of inherited resistance
-
     # LOS (Length of Stay) — Log-Normal distribution drawn at admission
     los_mean_ward: float = 8.0  # mean ward stay in days
     los_mean_icu: float = 14.0  # mean ICU stay in days

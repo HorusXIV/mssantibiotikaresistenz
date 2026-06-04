@@ -17,13 +17,6 @@ class HealthState(str, Enum):
 class Department(str, Enum):
     WARD = "ward"
     ICU = "icu"
-    ISOLATION = "isolation"
-
-
-class TreatmentPhase(str, Enum):
-    NONE = "none"
-    ON_ABX = "on_abx"
-    POST_ABX = "post_abx"
 
 
 # -------------------------
@@ -83,13 +76,12 @@ class Patient:
     # Intrinsic "base stats" (keep these stable during an episode)
     age_years: int = 50
     compliance: float = 0.8  # 0..1 (affects adherence, isolation compliance, etc.)
-    vulnerability: float = 1.0  # multiplier >= ~0.5 .. 3.0 (your choice)
-    immune_strength: float = 1.0  # multiplier; 1.0 = normal
-    immune_status: str = "normal"  # "normal"|"suppressed" (or more categories)
+    # Single immune-competence multiplier. Drives macro susceptibility (1/immune_strength)
+    # and micro clearance/survival. Low value = immunocompromised. 1.0 = normal.
+    immune_strength: float = 1.0
     sociability: float = 1.0  # contact-rate multiplier (macro uses)
 
     # Treatment info (patient-specific)
-    treatment_phase: TreatmentPhase = TreatmentPhase.NONE
     adherence: float = 1.0  # 0..1, can be derived from compliance each day
     regimen: AntibioticRegimen = field(default_factory=AntibioticRegimen)
 
@@ -131,14 +123,6 @@ class Patient:
             base = min(1.0, base + 0.1)
         self.adherence = max(0.0, min(1.0, base))
 
-        # Treatment phase (for micro; keep very simple)
-        if self.regimen.on:
-            self.treatment_phase = TreatmentPhase.ON_ABX
-        elif self.treatment_phase == TreatmentPhase.ON_ABX and not self.regimen.on:
-            self.treatment_phase = TreatmentPhase.POST_ABX
-        elif not self.regimen.on:
-            self.treatment_phase = TreatmentPhase.NONE
-
     # -------------------------
     # Patient -> Micro request (daily if carrier)
     # -------------------------
@@ -173,8 +157,6 @@ class Patient:
             "host": {
                 "age_years": self.age_years,
                 "immune_strength": self.immune_strength,
-                "immune_status": self.immune_status,
-                "vulnerability": self.vulnerability,
                 "history_flags": sorted(list(self.history_flags)),
             },
             # State handed over to micro
@@ -236,10 +218,8 @@ class Patient:
         return max(0.0, self.sociability) * max(0.0, self.relative_transmissibility)
 
     def susceptibility_multiplier_for_macro(self) -> float:
-        # Vulnerability / Immunkraft
-        immune_effect = 1.0 / max(0.1, self.immune_strength)
-        multiplier = self.vulnerability * immune_effect
-        return max(0.0, multiplier)
+        # Immune competence: weaker immunity (low immune_strength) raises susceptibility.
+        return 1.0 / max(0.1, self.immune_strength)
 
     def should_clear_today(self, rng) -> bool:
         """
@@ -250,9 +230,14 @@ class Patient:
     def clear_carriage(self) -> None:
         """
         Macro-owned transition: C -> S
+
+        Lifts contact isolation: a decolonized patient is no longer a carrier,
+        so the isolation flag must reset (otherwise they stay flagged isolated
+        and are artificially shielded from re-colonization).
         """
         self.state = HealthState.SUSCEPTIBLE
         self.episode_id = None
+        self.is_isolated = False
         self.resistant_fraction = 0.0
         self.dominant_genotype = "S"
         self.dominant_strain_name = ""

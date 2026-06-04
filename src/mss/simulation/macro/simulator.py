@@ -36,7 +36,6 @@ _ABX_CLASSES = [
     "aminoglycoside",
 ]
 _DOSE_LEVELS = ["low", "std", "high"]
-_GENOTYPE_ORDER = ["S", "R1", "R2", "R3"]
 
 
 class MacroSimulator:
@@ -89,6 +88,11 @@ class MacroSimulator:
         self._day = 0
         self._episode_counter = 0
         self._daily_transfers: List[Dict[str, str]] = []
+        # In-hospital transmission counters for the spatial calibration:
+        # how many S->C events had their source in the SAME grid cell (roommate)
+        # vs. total. Their ratio is set by proximity_decay_alpha.
+        self._transmission_count = 0
+        self._same_cell_transmission_count = 0
 
     # ------------------------------------------------------------------
     # Public API
@@ -175,6 +179,32 @@ class MacroSimulator:
             return []
         return list(grid.get_all_patients())
 
+    def get_cell_stats(self, hospital_id: str) -> List[Dict[str, object]]:
+        """Per-cell occupancy (x, y, department, total, carriers, prevalence)."""
+        grid = self._dept_grids.get(hospital_id)
+        if grid is None:
+            return []
+        return grid.cell_stats()
+
+    def get_colonization_count(self) -> int:
+        """Cumulative count of in-hospital S->C transmissions (true nosocomial
+        acquisitions). Incremented only in _colonize(); community/seed carriers
+        admitted directly as carriers do not count. The per-day delta is the
+        clean acquisition incidence, free of community-import and discharge churn.
+        """
+        return self._episode_counter
+
+    def get_transmission_count(self) -> int:
+        """Cumulative number of in-hospital transmission events (S->C)."""
+        return self._transmission_count
+
+    def get_same_cell_transmission_count(self) -> int:
+        """Cumulative in-hospital transmissions whose source was in the same grid
+        cell (roommate). same_cell / total is set by proximity_decay_alpha and is
+        the spatial observable to calibrate it against (roommate-attributable
+        transmission ~20-30% in the literature)."""
+        return self._same_cell_transmission_count
+
     # ------------------------------------------------------------------
     # Daily step
     # ------------------------------------------------------------------
@@ -235,11 +265,15 @@ class MacroSimulator:
                 ctx = self._build_context(p, hid)
                 p.update_context(ctx)
                 # On first detection (not-isolated → isolated): extend planned
-                # discharge so the patient stays at least carrier_extension_days
-                # from the day of detection. Subsequent days do NOT roll the date
-                # forward — the 14-day clock runs from the detection event itself.
+                # discharge once so the patient stays carrier_extension_days from
+                # the day of detection, scaled by severity_modifier (more virulent
+                # strains warrant longer isolation). Subsequent days do NOT roll
+                # the date forward — the clock runs from the detection event.
                 if p.state == HealthState.CARRIER and p.is_isolated and not was_isolated:
-                    extended = self._day + int(self._config.carrier_extension_days)
+                    extension = max(
+                        1, int(self._config.carrier_extension_days * p.severity_modifier)
+                    )
+                    extended = self._day + extension
                     if p.planned_discharge_day is None or extended > p.planned_discharge_day:
                         p.planned_discharge_day = extended
 
@@ -261,11 +295,21 @@ class MacroSimulator:
         self._admission_phase(patient_factory)
 
         if micro_simulator is not None and all_micro_requests:
-            self._apply_micro_phase(
-                micro_simulator=micro_simulator,
-                requests=all_micro_requests,
-                request_patients=request_patients,
-            )
+            # Requests were collected before the discharge phase. Drop any whose
+            # patient left today — discharge() already cleared their episode, so
+            # re-running the micro batch would re-store it and leak episode state.
+            kept = [
+                (req, pat)
+                for req, pat in zip(all_micro_requests, request_patients)
+                if pat.hospital_id is not None
+            ]
+            if kept:
+                reqs, pats = map(list, zip(*kept))
+                self._apply_micro_phase(
+                    micro_simulator=micro_simulator,
+                    requests=reqs,
+                    request_patients=pats,
+                )
 
         # 4. Transmission (S -> C)
         for hid in active_hospital_ids:
@@ -292,11 +336,16 @@ class MacroSimulator:
         hospital_id: str,
         micro_simulator: Any,
     ) -> None:
-        """Discharge eligible susceptible patients; extend stays for carriers.
+        """Discharge eligible patients via the logistic length-of-stay curve.
 
-        All patients face a daily mortality probability (base_mortality_rate).
-        For carriers this is scaled by severity_modifier — more virulent strains
-        carry higher mortality risk and extend the required isolation period.
+        All patients face a daily mortality probability (base_mortality_rate);
+        for carriers this is scaled by severity_modifier — more virulent strains
+        carry higher mortality risk. Carriers and susceptibles share the same
+        logistic discharge once they pass their planned discharge day. Detected
+        carriers already had that day pushed back by carrier_extension_days (in
+        the context phase), so they stay longer but are still discharged — they
+        leave colonized, mirroring real MRSA carriers sent home under contact
+        precautions.
         """
         cfg = self._config
         if cfg.daily_admission_rate <= 0.0:
@@ -312,10 +361,7 @@ class MacroSimulator:
                 self.discharge(p, micro_simulator)
                 continue
 
-            if p.state == HealthState.CARRIER and self._day >= p.planned_discharge_day:
-                extension = max(1, int(cfg.carrier_extension_days * p.severity_modifier))
-                p.planned_discharge_day = self._day + extension
-            elif p.state == HealthState.SUSCEPTIBLE and self._day >= p.planned_discharge_day:
+            if self._day >= p.planned_discharge_day:
                 days_over = self._day - p.planned_discharge_day
                 p_d = 1.0 / (
                     1.0
@@ -328,10 +374,15 @@ class MacroSimulator:
 
     @staticmethod
     def _poisson_draw(rng: random.Random, lam: float) -> int:
-        """Knuth's algorithm for Poisson sampling without numpy."""
+        """Knuth's algorithm for Poisson sampling without numpy.
+
+        The cap protects exp(-lam) from underflowing to 0.0 (which would loop
+        forever); a double underflows only beyond ~exp(-745), so 700 keeps the
+        sampled mean exact for every realistic admission rate.
+        """
         if lam <= 0:
             return 0
-        big_l = math.exp(-min(lam, 30.0))
+        big_l = math.exp(-min(lam, 700.0))
         k, p = 0, 1.0
         while p > big_l:
             k += 1
@@ -441,6 +492,9 @@ class MacroSimulator:
         if not carriers or not susceptible:
             return
 
+        # Source position per carrier (for the same-cell / roommate transmission metric).
+        carrier_pos = {a.patient.patient_id: a.pos for a in carriers}
+
         cfg = self._config
         n_total = max(1, len(agents))
 
@@ -492,6 +546,14 @@ class MacroSimulator:
             p_colonize = 1.0 - math.exp(-max(0.0, hazard))
             if self._rng.random() < p_colonize:
                 source = self._pick_transmission_source(weighted_carriers, weighted_force)
+                self._transmission_count += 1
+                if source is not None:
+                    src_pos = carrier_pos.get(source.patient_id)
+                    if (
+                        src_pos is not None
+                        and grid.chebyshev(sus_pos[0], sus_pos[1], src_pos[0], src_pos[1]) == 0
+                    ):
+                        self._same_cell_transmission_count += 1
                 self._colonize(sus, source=source)
 
     def get_daily_transfers(self) -> List[Dict[str, str]]:
@@ -589,27 +651,10 @@ class MacroSimulator:
         return weighted_carriers[-1][0] if weighted_carriers else None
 
     def _inherit_transmitted_state(self, source: Patient) -> tuple[float, str]:
-        """Copy the source strain with a small chance of mutational drift."""
+        """Copy the source strain to the newly colonized patient."""
         resistance = min(1.0, max(0.0, source.resistant_fraction))
         genotype = source.dominant_genotype
-
-        if self._rng.random() < self._config.transmission_mutation_probability:
-            delta = self._rng.gauss(0.0, self._config.transmission_resistance_mutation_std)
-            resistance = min(1.0, max(0.0, resistance + delta))
-            if abs(delta) >= self._config.transmission_resistance_mutation_std * 0.5:
-                step = 1 if delta > 0.0 else -1
-                genotype = self._shift_genotype(genotype, step)
-
         return resistance, genotype
-
-    def _shift_genotype(self, genotype: str, step: int) -> str:
-        """Move one resistance class up or down, clamped to the valid range."""
-        if genotype not in _GENOTYPE_ORDER:
-            return genotype
-
-        index = _GENOTYPE_ORDER.index(genotype)
-        shifted = min(len(_GENOTYPE_ORDER) - 1, max(0, index + step))
-        return _GENOTYPE_ORDER[shifted]
 
     def _colonize(self, patient: Patient, source: Patient | None = None) -> None:
         """Transition a susceptible patient to carrier (S -> C)."""

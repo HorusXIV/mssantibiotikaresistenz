@@ -6,7 +6,6 @@ from .patient import (
     HealthState,
     Patient,
     PatientDailyContext,
-    TreatmentPhase,
 )
 
 __all__ = [
@@ -15,5 +14,4 @@ __all__ = [
     "HealthState",
     "Patient",
     "PatientDailyContext",
-    "TreatmentPhase",
 ]

@@ -3,9 +3,9 @@ from __future__ import annotations
 import math
 from typing import Iterable
 
-from mesa.space import MultiGrid, SingleGrid
+from mesa.space import MultiGrid
 
-from mss.domain import Department, Patient
+from mss.domain import Department, HealthState, Patient
 
 
 class HospitalDepartmentGrid:
@@ -75,6 +75,39 @@ class HospitalDepartmentGrid:
     def get_all_patients(self) -> list[Patient]:
         return [agent.patient for agent in self.get_all_agents()]
 
+    def cell_stats(self) -> list[dict[str, object]]:
+        """Per-cell occupancy for every grid cell (including empty ones).
+
+        Returns one record per cell with its coordinates, department, total
+        patient count and carrier count. Enables a true per-cell prevalence
+        heatmap (carriers / total), exposing the spatial transmission structure
+        that proximity_decay_alpha acts on.
+        """
+        totals: dict[tuple[int, int], int] = {}
+        carriers: dict[tuple[int, int], int] = {}
+        for agent in self.get_all_agents():
+            pos = agent.pos
+            totals[pos] = totals.get(pos, 0) + 1
+            if agent.patient.state == HealthState.CARRIER:
+                carriers[pos] = carriers.get(pos, 0) + 1
+
+        records: list[dict[str, object]] = []
+        for y in range(self._rows):
+            for x in range(self._cols):
+                total = totals.get((x, y), 0)
+                carrier = carriers.get((x, y), 0)
+                records.append(
+                    {
+                        "x": x,
+                        "y": y,
+                        "department": self.dept_type_at((x, y)).value,
+                        "total_patients": total,
+                        "carriers": carrier,
+                        "prevalence": (carrier / total) if total else 0.0,
+                    }
+                )
+        return records
+
     def proximity_weight(self, pos_a: tuple[int, int], pos_b: tuple[int, int]) -> float:
         distance = self.chebyshev(pos_a[0], pos_a[1], pos_b[0], pos_b[1])
         return math.exp(-self._alpha * distance)
@@ -93,15 +126,12 @@ class HospitalNetworkGrid:
             raise ValueError("cols must be positive.")
 
         self._cols = cols
-        self._rows = math.ceil(len(hospital_ids) / cols) if hospital_ids else 0
         self._positions: dict[str, tuple[int, int]] = {}
 
         for idx, hid in enumerate(hospital_ids):
             x = idx % cols
             y = idx // cols
             self._positions[hid] = (x, y)
-
-        self._grid = SingleGrid(cols, max(self._rows, 1), torus=False)
 
     def distance(self, h1: str, h2: str) -> float:
         p1 = self._positions[h1]
