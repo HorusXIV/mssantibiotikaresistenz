@@ -143,11 +143,6 @@ Diese Werte wirken danach in der Makro-Ebene weiter:
 - Geht direkt in die Immun-Selektion ein.
 - Hoehere Werte erhoehen die Immunclearance und spaeter auch `p_clearance`.
 
-### `immune_status`
-
-- Relevant sind aktuell `"normal"` und `"suppressed"`.
-- `"suppressed"` reduziert die Immun-Clearance stark.
-
 ### `resistant_fraction`
 
 - Wird bei neuen Episoden als Anteil resistenter Startpopulation interpretiert.
@@ -167,19 +162,15 @@ Diese Werte wirken danach in der Makro-Ebene weiter:
 Diese Felder werden zwar in den Request geschrieben oder in `Patient` gepflegt, beeinflussen die Engine derzeit aber **nicht direkt**:
 
 - `age_years`
-- `vulnerability`
 - `history_flags`
 - `sociability`
 - `is_isolated`
 - `hospital_id`
-- `treatment_phase`
 - `severity_modifier`
-- `lethality_modifier`
 
 Davon wirken manche nur auf der Makro-Ebene:
 
 - `sociability` beeinflusst Transmission im Makro-Layer
-- `vulnerability` beeinflusst Makro-Suszeptibilitaet und Todesrisiko
 - `is_isolated` beeinflusst Makro-Transmission und Entlassungslogik
 
 ## Verbindung zum Makro-Layer
@@ -271,8 +262,6 @@ Ein Request aus `Patient.make_micro_request()` hat diese Struktur:
     "host": {
         "age_years": ...,
         "immune_strength": ...,
-        "immune_status": ...,
-        "vulnerability": ...,
         "history_flags": ...,
     },
     "initial_state": {
@@ -320,7 +309,6 @@ Wichtig fuer die Erklaerung:
 - `abx.dose_level`
 - `adherence`
 - `host.immune_strength`
-- `host.immune_status`
 - `initial_state.resistant_fraction`
 - `initial_state.dominant_genotype`
 - `initial_state.dominant_strain_name`
@@ -332,7 +320,6 @@ Wichtig fuer die Erklaerung:
 - `dt_days`
 - `setting`
 - `host.age_years`
-- `host.vulnerability`
 - `host.history_flags`
 
 Das ist wichtig fuer muendliche Erklaerungen: Im Datenmodell sind diese Felder schon vorgesehen, die aktuelle Engine verarbeitet aber nur einen Teil davon.
@@ -521,7 +508,6 @@ Interpretation:
 `compute_immune_survival(...)` berechnet:
 
 - Basisclearance = `0.15 * immune_strength`
-- bei `immune_status == "suppressed"` nur `30%` davon
 - `STEALTH` reduziert die Erkennung um bis zu `70%`
 
 Hoeheres `STEALTH` bedeutet also:
@@ -719,7 +705,6 @@ Einflussfaktoren:
 - `min_population`
 - `carrying_capacity`
 - `immune_strength`
-- `immune_status`
 - durchschnittliches `STEALTH` der Population
 
 Logik:
@@ -809,7 +794,6 @@ Wenn du die Dynamik schnell erklaeren musst, sind diese Parameter die Schluessel
 - Dosis
 - Adherence
 - `immune_strength`
-- `immune_status`
 
 ### Persistenz und Clearance
 
@@ -830,7 +814,7 @@ Die aktuelle Implementierung modelliert nicht:
 - Pharmakokinetik ueber den Tag
 - unterschiedliche Gewebe-/Organraeume
 - direkte Wirkung von Hygiene oder Isolation innerhalb des Wirts
-- Nutzung von `age_years`, `history_flags` oder `vulnerability` in der Engine
+- Nutzung von `age_years` oder `history_flags` in der Engine
 
 ## Ein typischer Tag eines Traeger-Patienten
 

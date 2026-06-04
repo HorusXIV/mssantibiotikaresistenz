@@ -53,7 +53,6 @@ Der Episodenzustand wird über Tage gespeichert. Eine neue Tagesberechnung begin
 | `abx.on`, `abx.class`, `abx.dose_level` | Antibiotika-Selektion und Stress |
 | `adherence` | skaliert effektive Antibiotika-Kill-Rate |
 | `host.immune_strength` | skaliert Immunclearance und spätere `p_clearance` |
-| `host.immune_status` | `suppressed` reduziert Immunclearance auf 30 % |
 | `initial_state.resistant_fraction` | resistenter Anteil bei neuer Episode |
 | `initial_state.dominant_genotype` | Seed-Klasse für resistente Startstämme |
 | `initial_state.dominant_strain_name` | bevorzugter Name für den dominanten Seed |
@@ -63,7 +62,6 @@ Diese Felder werden transportiert, aber aktuell nicht direkt von der Mikro-Engin
 
 - `setting`
 - `host.age_years`
-- `host.vulnerability`
 - `host.history_flags`
 - Hygiene, Isolation und Diagnostik wirken derzeit nur auf Makro-Ebene.
 
@@ -149,7 +147,6 @@ Immun-Überleben:
 
 ```text
 base_clearance = 0.15 * immune_strength
-if immune_status == "suppressed": base_clearance *= 0.3
 evasion = stealth * 0.7
 immune_survival = 1 - base_clearance * (1 - evasion)
 ```
@@ -211,7 +208,6 @@ elif total_population < min_population: base_prob = 0.3
 else: base_prob = 0.02 * (1 - total_population / carrying_capacity)
 
 immune_mult = immune_strength
-if immune_status == "suppressed": immune_mult *= 0.3
 stealth_effect = 1 - avg_stealth * 0.5
 p_clearance = clip(base_prob * immune_mult * stealth_effect, 0.001, 0.95)
 ```
@@ -323,7 +319,7 @@ Diese Größen können aus Online-Quellen sinnvoll abgeleitet werden:
 | Bereich | Parameter / Zielgröße | Warum online identifizierbar | Mögliche Quellen |
 |---|---|---|---|
 | MRSA-/S.-aureus-Prävalenz | initiale Carrier-Fraktion, `community_carrier_fraction`, Zielprävalenz | Surveillance- und PPS-Daten messen Kolonisation/Infektion direkt | Swissnoso, ECDC EARS-Net, nationale AMR-Berichte |
-| MRSA-Anteil / Resistenzanteil | `resistant_fraction`, `replacement_resistant_fraction` | Labor- und Surveillance-Daten erfassen MRSA-Anteile | ANRESIS, ECDC, CAESAR |
+| MRSA-Anteil / Resistenzanteil | `resistant_fraction`, `replacement_resistant_fraction` | Bei bestätigten MRSA-Carriern liegt MSSA-Anteil bei >90% der Patienten unter Nachweisgrenze (5%); nahezu klonale MRSA-Dominanz → 0.90 | Dall'Antonia et al. 2005, J Hosp Infect |
 | Carriage-Dauer / Dekolonisierung | Zielwert für `p_clearance`, `immune_strength`, Clearance-Schwellen | Studien messen Dauer von MRSA-/S.-aureus-Trägerschaft | z. B. Clin. Infect. Dis. 32(10):1393, S.-aureus-Nasal-Carriage-Studien |
 | Bakterielle Last | Größenordnung für `initial_population`, `carrying_capacity` | CFU/Swab-Studien berichten S.-aureus-Lasten von sehr niedrig bis Millionen und teils höher | Nasal-load-Studien, z. B. MRSA-Last unter Antibiotika |
 | Generationszeit / Replikation | grobe Plausibilität für `steps_per_day`, `growth_rate_per_step` | genomische Studien schätzen S.-aureus-Teilungsraten im menschlichen Nasenraum | BMC Genomics 2019 zu S. aureus im Nasenraum |

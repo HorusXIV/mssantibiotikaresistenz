@@ -125,17 +125,7 @@ p_colonize = 1 - exp(-max(0, hazard))
 
 ### Übertragungsvererbung
 
-Wenn ein Susceptible durch einen Carrier kolonisiert wird, erbt der neue Carrier den Stamm des Quell-Carriers — mit einer kleinen Zufallskomponente.
-
-#### `transmission_mutation_probability`
-- **Typ:** float, [0, 1]
-- **Einfluss:** Wahrscheinlichkeit, dass der übertragene Stamm bei der Kolonisierung eine kleine Mutation erfährt.
-- **Formel:** `if rng.random() < transmission_mutation_probability: delta = gauss(0, std)`
-
-#### `transmission_resistance_mutation_std`
-- **Typ:** float
-- **Einfluss:** Standardabweichung des Gausschen Mutationsdeltas auf den `resistant_fraction`-Wert. Grösserer Wert → grössere Drifts bei jeder Übertragung.
-- **Verbindung:** Beide Parameter steuern `_inherit_transmitted_state()` in `simulator.py`. Der resultierende `resistant_fraction` und `dominant_genotype` wird auf den neuen Carrier gesetzt und beim nächsten Tag an den Mikro-Layer übergeben.
+Wenn ein Susceptible durch einen Carrier kolonisiert wird, erbt der neue Carrier den Stamm des Quell-Carriers exakt (gleicher `resistant_fraction` und `dominant_genotype`). Die weitere Resistenzentwicklung übernimmt ab dem nächsten Tag der Mikro-Layer.
 
 ---
 
@@ -160,13 +150,11 @@ Die Verweildauer wird bei Aufnahme einmalig aus einer **Log-Normalverteilung** g
 
 ### Entlassung
 
-Patienten werden nicht exakt am geplanten Entlassungstag entlassen, sondern mit einer **logistischen Wahrscheinlichkeit** nach Überschreitung dieses Tages.
+Patienten werden nicht exakt am geplanten Entlassungstag entlassen, sondern mit einer **logistischen Wahrscheinlichkeit** nach Überschreitung dieses Tages. Carrier und Susceptible durchlaufen **dieselbe** Entlassungslogistik — ein erkannter Carrier hat lediglich einen späteren geplanten Entlassungstag (siehe `carrier_extension_days`) und verlässt das Spital ggf. noch kolonisiert (entspricht realen MRSA-Trägern unter Kontaktisolation, die nach Hause entlassen werden).
 
 #### `carrier_extension_days`
 - **Typ:** float (Tage)
-- **Einfluss:** Wird an zwei Stellen verwendet:
-  1. **Bei Ersterkennung** (Transition nicht-isoliert → isoliert): `planned_discharge_day = erkennungstag + carrier_extension_days` (ohne Skalierung).
-  2. **Rollierender Discharge-Loop**: Solange ein Carrier noch aktiv ist und seinen Entlassungstag überschritten hat, wird das Datum täglich neu gesetzt: `planned_discharge_day = heute + carrier_extension_days × severity_modifier`. Schwerere Fälle (höherer `severity_modifier`) bleiben entsprechend länger.
+- **Einfluss:** Wird **einmalig bei Ersterkennung** eines Carriers angewendet (Transition nicht-isoliert → isoliert): `planned_discharge_day = erkennungstag + carrier_extension_days × severity_modifier`. Schwerere Fälle (höherer `severity_modifier`) bleiben länger. Das Datum wird **nicht** rollierend weitergeschoben — nach Ablauf greift dieselbe logistische Entlassung wie bei Susceptible.
 
 #### `base_mortality_rate`
 - **Typ:** float, [0, 1]
@@ -183,7 +171,7 @@ Patienten werden nicht exakt am geplanten Entlassungstag entlassen, sondern mit 
 #### `discharge_logistic_t_half`
 - **Typ:** float (Tage)
 - **Einfluss:** Anzahl Tage nach dem Zieldatum, an denen die Entlassungswahrscheinlichkeit 50% beträgt. Bestimmt die typische Verzögerung.
-- **Beispiel:** `3.0` → Im Durchschnitt 3 Tage nach dem Zieldatum werden Susceptible entlassen.
+- **Beispiel:** `3.0` → Im Durchschnitt 3 Tage nach dem Zieldatum werden Patienten entlassen.
 
 ---
 
@@ -284,7 +272,7 @@ Der Patient gibt der Makro-Übertragungsformel zwei Grössen zurück:
 | Methode | Bestandteile | Einfluss |
 |---|---|---|
 | `transmission_multiplier_for_macro()` | `sociability × relative_transmissibility` | Skaliert `base_transmission_rate` nach oben/unten |
-| `susceptibility_multiplier_for_macro()` | `vulnerability × (1 / immune_strength) × prior_infection_flag` | Skaliert den Hazard nach oben/unten |
+| `susceptibility_multiplier_for_macro()` | `1 / immune_strength` | Skaliert den Hazard nach oben/unten (schwächere Immunität = höheres Risiko) |
 
 `relative_transmissibility` wird täglich vom Mikro-Layer aktualisiert — resistentere, besser angepasste Stämme können eine höhere Transmissibilität haben.
 
@@ -310,8 +298,6 @@ Für jeden aktiven Carrier baut `patient.make_micro_request()` einen Dictionary-
     "host": {
         "age_years": 65,
         "immune_strength": 0.75,
-        "immune_status": "normal",
-        "vulnerability": 1.0,
         "history_flags": ["prior_abx"]
     },
     "initial_state": {
@@ -381,12 +367,10 @@ Die Antwort des Mikro-Layers wird via `patient.apply_micro_response()` auf den P
 | `icu_abx_probability` | ABX-Politik | Wahrscheinlichkeit für ABX in ICU → Mikro-Selektionsdruck |
 | `ward_abx_probability` | ABX-Politik | Wahrscheinlichkeit für ABX auf Ward → Mikro-Selektionsdruck |
 | `carrier_isolation_probability` | Isolation | Basisrate für tägliche Carrier-Erkennung |
-| `transmission_mutation_probability` | Übertragungsvererbung | Chance auf Stamm-Drift bei Kolonisierung |
-| `transmission_resistance_mutation_std` | Übertragungsvererbung | Grösse des Resistenz-Drifts bei Kolonisierung |
 | `los_mean_ward` | Verweildauer | Mittlere Ward-Verweildauer (Log-Normal) |
 | `los_mean_icu` | Verweildauer | Mittlere ICU-Verweildauer (Log-Normal) |
 | `los_sigma` | Verweildauer | Streuung der Verweildauerverteilung |
-| `carrier_extension_days` | Entlassung | Verlängerung des Aufenthalts bei Carrier-Erkennung (× `severity_modifier` im Discharge-Loop) |
+| `carrier_extension_days` | Entlassung | Einmalige Verlängerung des Aufenthalts bei Carrier-Erkennung (× `severity_modifier`) |
 | `base_mortality_rate` | Entlassung | Tägliche Basissterblichkeit; für Carrier × `severity_modifier` |
 | `discharge_logistic_k` | Entlassung | Steilheit der Entlassungskurve |
 | `discharge_logistic_t_half` | Entlassung | Verzögerung nach Zieldatum bis 50% Entlassungswahrscheinlichkeit |

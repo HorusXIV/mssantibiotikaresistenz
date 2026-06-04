@@ -26,16 +26,9 @@ MSS/
 │   └── Modulbeschreibung.md
 ├── config/
 │   ├── calibration/
-│   │   ├── phase0_simulation_single_ward.yml
-│   │   ├── phase1_isolation_effectiveness.yml
-│   │   ├── phase1_proximity_decay.yml
-│   │   ├── phase2_carrier_sociability.yml
-│   │   ├── phase2_susceptible_immune_strength.yml
-│   │   ├── phase2_susceptible_sociability.yml
-│   │   ├── phase2_susceptible_vulnerability.yml
-│   │   ├── phase3_carrier_immune_strength.yml
-│   │   ├── phase3_mutation_probability.yml
-│   │   └── phase3_resistance_mutation_std.yml
+│   │   ├── cal1_simulation_single_ward.yml
+│   │   ├── cal2_proximity_decay.yml
+│   │   └── cal3_isolation_effectiveness.yml
 │   ├── 01_Parameterübersicht.md
 │   ├── simulation_abx.yml
 │   ├── simulation_realistic.yml
@@ -68,7 +61,6 @@ MSS/
 │       │   ├── __init__.py
 │       │   ├── run_coupled_simulation.py
 │       │   ├── run_parameter_sweep.py
-│       │   ├── run_single_ward_batch.py
 │       │   ├── run_single_ward_calibration.py
 │       │   └── visualize_results.py
 │       ├── domain/
@@ -142,8 +134,7 @@ Within-host bacterial evolution logic.
 Executable entry points that assemble the application from lower-level modules.
 
 - `run_coupled_simulation.py`: loads YAML configuration, runs the coupled macro/micro simulation, and writes Parquet outputs. Also exposes `run_realistic_once()` used by the sweep calibration tool.
-- `run_single_ward_calibration.py`: analytical β₀ calibration for a single ward; derives `base_transmission_rate` from a closed-form formula and validates it with simulation.
-- `run_single_ward_batch.py`: runs the single-ward calibration across a grid of seed/parameter combinations and aggregates results.
+- `run_single_ward_calibration.py`: analytical β₀ calibration for a single ward; derives `base_transmission_rate` from a closed-form formula and validates it with simulation. `--n-runs > 1` runs a stochastic ensemble over seeds and aggregates the results.
 - `run_parameter_sweep.py`: structured parameter sweep calibration; varies one YAML parameter over a defined grid, runs the simulation for each value, and plots the effect on a target metric.
 - `visualize_results.py`: reads generated Parquet outputs and writes diagnostic plots.
 
@@ -154,12 +145,11 @@ Runtime configuration files. Keep these environment- or scenario-specific, not c
 - `simulation_realistic.yml`: main realistic simulation scenario with calibrated parameter values.
 - `simulation_abx.yml`: alternative scenario tuned for antibiotic-focused runs.
 - `template.yml`: fully documented reference file listing every supported YAML variable with explanations. Copy and adapt for new scenarios.
-- `01_Parameterübersicht.md`: parameter reference table documenting all model parameters, their types (geschätzt / kalibriert / nicht identifizierbar), sources, and calibration results.
-- `calibration/`: sweep configuration files for each calibration phase.
-  - `phase0_simulation_single_ward.yml`: single-ward β₀ calibration (analytical).
-  - `phase1_*.yml`: Phase 1 sweeps — macro transmission and isolation parameters.
-  - `phase2_*.yml`: Phase 2 sweeps — patient template parameters (macro layer only, micro disabled).
-  - `phase3_*.yml`: Phase 3 sweeps — micro/resistance parameters.
+- `01_Parameterübersicht.md`: parameter reference table documenting all model parameters, their types (geschätzt / Kontextualisierungsparameter / kalibriert / Referenzwert / nicht identifizierbar), sources, and calibration results.
+- `calibration/`: one configuration file per calibration, numbered in execution order.
+  - `cal1_simulation_single_ward.yml`: single-ward β₀ calibration (analytical).
+  - `cal2_proximity_decay.yml`: spatial proximity decay vs. same-cell (roommate) transmission fraction.
+  - `cal3_isolation_effectiveness.yml`: isolation effectiveness vs. relative acquisition reduction (counterfactual baseline).
 
 ### `Organizational/`
 
@@ -252,23 +242,19 @@ Generate plots from existing Parquet output:
 uv run mss-visualize --output-dir outputs/<timestamp>_<name>
 ```
 
-Run the single-ward β₀ calibration (Phase 0):
+Run the single-ward β₀ calibration (calibration 1):
 
 ```bash
-uv run mss-calibrate --config config/calibration/phase0_simulation_single_ward.yml
+uv run mss-calibrate --config config/calibration/cal1_simulation_single_ward.yml
+# stochastic ensemble over many seeds:
+uv run mss-calibrate --config config/calibration/cal1_simulation_single_ward.yml --n-runs 1000
 ```
 
-Run the β₀ calibration across a parameter batch:
+Run a parameter sweep calibration (calibrations 2–3):
 
 ```bash
-uv run mss-calibrate-batch --config config/calibration/phase0_simulation_single_ward.yml
-```
-
-Run a parameter sweep calibration (Phase 1/2/3):
-
-```bash
-uv run mss-sweep --sweep config/calibration/phase1_isolation_effectiveness.yml
-uv run mss-sweep --sweep config/calibration/phase2_susceptible_vulnerability.yml --n-seeds 5
+uv run mss-sweep --sweep config/calibration/cal2_proximity_decay.yml
+uv run mss-sweep --sweep config/calibration/cal3_isolation_effectiveness.yml
 ```
 
 Run tests:
