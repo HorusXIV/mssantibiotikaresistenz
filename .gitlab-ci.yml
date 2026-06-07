@@ -6,7 +6,7 @@ variables:
   UV_CACHE_DIR: .uv-cache
 
 default:
-  image: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+  image: ghcr.io/astral-sh/uv:python3.13-bookworm-slim
   cache:
     key:
       files:
@@ -44,8 +44,7 @@ test:
   stage: test
   extends: .uv-setup
   script:
-    - uv run pytest tests/ --ignore=tests/integration_tests -v --tb=short || [ "$?" = "5" ]
-  coverage: '/TOTAL.*\s+(\d+%)$/'
+    - uv run pytest tests/ --ignore=tests/integration_tests -v --tb=short
   artifacts:
     when: always
     reports:

@@ -22,6 +22,6 @@ singularity exec \
   "${IMAGE_PATH}" \
   bash -lc "\
     cd ${WORKDIR} && \
-    uv sync && \
+    uv sync --frozen && \
     uv run mss-run --config config/simulation_abx.yml \
   "
