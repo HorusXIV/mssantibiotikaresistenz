@@ -1281,16 +1281,21 @@ class TestBatchAndNetwork:
         for p in patients:
             assert p.state in _VALID_STATES
 
-    def test_patient_count_conserved(self, hospital_network: MacroSimulator):
-        """Without admissions/discharges, total count is conserved."""
-        if hospital_network._config.daily_admission_rate > 0.0:
-            pytest.skip("Patient count is not conserved when daily admissions are enabled.")
+    def test_patient_count_conserved(self):
+        """Without admissions, discharges, or mortality, total count is conserved.
+
+        Mortality is decoupled from the admission flow, so a genuinely closed
+        cohort must also disable it. This isolates the property under test:
+        S<->C transitions and transfers never create or lose a patient.
+        """
+        cfg = SimulationConfig(daily_admission_rate=0.0, base_mortality_rate=0.0)
+        sim = MacroSimulator(config=cfg, n_hospitals=10, seed=42)
         patients = _make_patients(n_susceptible=30, n_carrier=10)
         for i, p in enumerate(patients):
-            hospital_network.admit(p, hospital_id=_HOSPITAL_IDS[i % 10], department=Department.WARD)
+            sim.admit(p, hospital_id=_HOSPITAL_IDS[i % 10], department=Department.WARD)
         for _ in range(20):
-            hospital_network.step()
-        total = sum(hospital_network.get_occupancy(h) for h in _HOSPITAL_IDS)
+            sim.step()
+        total = sum(sim.get_occupancy(h) for h in _HOSPITAL_IDS)
         assert total == len(patients)
 
     def test_patient_ids_stable(self, hospital_network: MacroSimulator):

@@ -914,6 +914,17 @@ class TestLifecycleDynamics:
                 base_hgt_rate=0.0,
                 stochastic_threshold=0.0,
                 stochastic_noise_scale=0.0,
+                # Pin the harsher turnover/damage regime this lifecycle-mechanism
+                # test targets, independent of the gentler production defaults.
+                growth_rate_per_step=0.3,
+                death_rate_per_step=0.1,
+                base_damage_per_step=0.03,
+                replication_damage_factor=0.25,
+                stress_damage_factor=0.20,
+                age_mortality_scale=0.015,
+                damage_mortality_scale=0.20,
+                lifecycle_half_life_steps=36.0,
+                dormancy_growth_penalty=0.25,
             ),
             seed=7,
         )
@@ -956,6 +967,17 @@ class TestLifecycleDynamics:
                 base_hgt_rate=0.0,
                 stochastic_threshold=0.0,
                 stochastic_noise_scale=0.0,
+                # Pin the harsher turnover/damage regime this lifecycle-mechanism
+                # test targets, independent of the gentler production defaults.
+                growth_rate_per_step=0.3,
+                death_rate_per_step=0.1,
+                base_damage_per_step=0.03,
+                replication_damage_factor=0.25,
+                stress_damage_factor=0.20,
+                age_mortality_scale=0.015,
+                damage_mortality_scale=0.20,
+                lifecycle_half_life_steps=36.0,
+                dormancy_growth_penalty=0.25,
             ),
             seed=17,
         )

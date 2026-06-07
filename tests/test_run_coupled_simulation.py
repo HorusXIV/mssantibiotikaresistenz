@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import yaml
@@ -8,6 +9,7 @@ from mss.cli.run_coupled_simulation import (
     _admit_initial_population,
     _collect_micro_raw_logs,
     _seed_initial_micro_states,
+    _write_run_meta,
     load_coupled_settings,
 )
 from mss.domain import Department, HealthState
@@ -107,6 +109,29 @@ def test_load_coupled_settings_reads_yaml(tmp_path: Path):
     assert settings.micro.founder_pool_size == 12
     assert settings.micro.gene_presence_threshold == 0.25
     assert settings.micro_workers == 1
+
+
+def test_write_run_meta_records_provenance(tmp_path: Path):
+    config_path = tmp_path / "config.yml"
+    _write_config(config_path)
+    settings = load_coupled_settings(config_path)
+
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    meta_path = _write_run_meta(data_dir, settings, run_ts="20260101_000000")
+
+    assert meta_path == data_dir / "run_meta.json"
+    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+
+    assert meta["run_timestamp"] == "20260101_000000"
+    assert meta["seed"] == 7
+    assert meta["run"]["days"] == 3
+    assert meta["micro_workers"] == 1
+    assert meta["macro"]["base_isolation_effectiveness"] == 0.7
+    assert meta["micro"]["steps_per_day"] == 10
+    assert meta["population"]["hospitals"] == 2
+    assert set(meta["git"]) == {"commit", "dirty"}
+    assert "python_version" in meta
 
 
 def test_admit_initial_population_uses_configured_templates(tmp_path: Path):
