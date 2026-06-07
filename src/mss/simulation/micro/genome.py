@@ -69,7 +69,7 @@ class ABXProfile:
     base_kill_rate: float = 0.8  # Base killing rate at standard dose
 
 
-# Predefined antibiotic profiles
+# Predefined antibiotic profiles (illustrative model values; efficacy/kill in 0-1).
 ABX_PROFILES: Dict[str, ABXProfile] = {
     "none": ABXProfile("none", 0.0, 0.0, 0.0, 0.0),
     "beta_lactam": ABXProfile("beta_lactam", 0.3, 0.8, 0.4, 0.75),
@@ -303,28 +303,6 @@ def compute_transmissibility(genomes: np.ndarray) -> np.ndarray:
     return transmissibility[0] if single else transmissibility
 
 
-def compute_lethality(genomes: np.ndarray) -> np.ndarray:
-    """
-    Compute lethality modifier based on virulence.
-
-    Args:
-        genomes: Shape (n_strains, NUM_GENES) or (NUM_GENES,)
-
-    Returns:
-        Lethality multiplier (centered around 1.0)
-    """
-    single = genomes.ndim == 1
-    if single:
-        genomes = genomes.reshape(1, -1)
-
-    virulence = genomes[:, GeneIndex.VIRULENCE]
-
-    # Virulence directly increases lethality
-    lethality = 0.5 + virulence * 1.5  # Range: 0.5 - 2.0
-
-    return lethality[0] if single else lethality
-
-
 def compute_severity(genomes: np.ndarray) -> np.ndarray:
     """
     Compute severity modifier based on virulence and adhesion.
@@ -359,6 +337,7 @@ def classify_genotype(genome: np.ndarray) -> str:
         + genome[GeneIndex.PERMEABILITY_REDUCTION]
     ) / 3.0
 
+    # Model thresholds on the mean resistance score (not clinically calibrated).
     if resistance_score < 0.2:
         return "S"
     elif resistance_score < 0.4:

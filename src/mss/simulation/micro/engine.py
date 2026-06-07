@@ -83,47 +83,51 @@ def _seed_founder_id(namespace: str, slot_index: int) -> str:
 
 @dataclass
 class SimulationConfig:
-    """Configuration for micro-simulation."""
+    """Configuration for micro-simulation.
+
+    Defaults mirror the canonical ``config/simulation_realistic.yml`` micro block,
+    so an unconfigured ``SimulationConfig()`` reproduces the production dynamics.
+    """
 
     steps_per_day: int = 12
-    max_strains: int = 50  # Max distinct strains to track
-    carrying_capacity: float = 1e9  # Max population size
-    min_population: float = 1e3  # Below this, clearance likely
-    clearance_threshold: float = 1e2  # Population for clearance
+    max_strains: int = 40  # Max distinct strains to track
+    carrying_capacity: float = 5e8  # Max population size
+    min_population: float = 100.0  # extinction floor: total population below this clears
+    clearance_threshold: float = 1000.0  # Population for clearance
 
     # Mutation parameters
-    base_mutation_rate: float = 0.01  # Base mutation per gene per step
-    mutation_std: float = 0.05  # Gaussian std for mutations
-    stress_mutation_boost: float = 3.0  # Mutation rate multiplier under ABX stress
+    base_mutation_rate: float = 0.012  # Base mutation per gene per step
+    mutation_std: float = 0.025  # Gaussian std for mutations
+    stress_mutation_boost: float = 40.0  # Mutation rate multiplier under ABX stress
 
     # HGT parameters
-    base_hgt_rate: float = 0.02  # Base probability of HGT per step
-    hgt_gene_transfer_prob: float = 0.3  # Prob of transferring each gene
+    base_hgt_rate: float = 0.03  # Base probability of HGT per step
+    hgt_gene_transfer_prob: float = 0.25  # Prob of transferring each gene
 
     # Selection parameters
-    selection_strength: float = 2.0  # Exponent for fitness-based selection
+    selection_strength: float = 2.5  # Exponent for fitness-based selection
 
     # Population dynamics
-    growth_rate_per_step: float = 0.3  # Max growth per step (before fitness)
-    death_rate_per_step: float = 0.1  # Base death rate per step
-    strain_prune_threshold: float = 1.0  # Drop numerically negligible strains
+    growth_rate_per_step: float = 0.18  # Max growth per step (before fitness)
+    death_rate_per_step: float = 0.06  # Base death rate per step
+    strain_prune_threshold: float = 200.0  # Drop numerically negligible strains
 
     # Lifecycle / turnover dynamics
-    base_damage_per_step: float = 0.03  # Background wear per step
-    replication_damage_factor: float = 0.25  # Extra wear from fast turnover
-    stress_damage_factor: float = 0.20  # Extra wear under environmental stress
+    base_damage_per_step: float = 0.004  # Background wear per step
+    replication_damage_factor: float = 0.03  # Extra wear from fast turnover
+    stress_damage_factor: float = 0.06  # Extra wear under environmental stress
     repair_rate_per_step: float = 0.08  # Damage repair / maintenance capacity
-    age_mortality_scale: float = 0.015  # How strongly lineage age raises death risk
-    damage_mortality_scale: float = 0.20  # How strongly accumulated damage raises death risk
-    lifecycle_half_life_steps: float = 36.0  # Age scale for senescence-like pressure
+    age_mortality_scale: float = 0.001  # How strongly lineage age raises death risk
+    damage_mortality_scale: float = 0.025  # How strongly accumulated damage raises death risk
+    lifecycle_half_life_steps: float = 200.0  # Age scale for senescence-like pressure
     max_damage_load: float = 5.0  # Saturation point for damage effects
-    dormancy_growth_penalty: float = 0.25  # Persistence trades growth for survival
+    dormancy_growth_penalty: float = 0.55  # Persistence trades growth for survival
     synergy_repair_dormancy_bonus: float = 0.25  # Quiescent repair synergy
     synergy_stress_tolerance_bonus: float = 0.20  # Stress hardening synergy
 
     # Demographic stochasticity
-    stochastic_threshold: float = 1e5  # Exact Poisson dynamics below this size
-    stochastic_noise_scale: float = 1.0  # Scales demographic noise above threshold
+    stochastic_threshold: float = 1e4  # Exact Poisson dynamics below this size
+    stochastic_noise_scale: float = 0.08  # Scales demographic noise above threshold
 
     # Founder-pool / logging helpers
     founder_pool_size: int = 0  # 0 disables the shared founder library
@@ -153,6 +157,8 @@ def _generate_founder_genome(
     if noise_std <= 0.0:
         return base.astype(np.float32, copy=True)
 
+    # Resample (up to 16x) until the noised genome still classifies as the target
+    # genotype, so founders stay within their intended resistance class.
     for _ in range(16):
         candidate = base.copy()
         candidate += rng.normal(0.0, noise_std, NUM_GENES).astype(np.float32)
@@ -1032,15 +1038,16 @@ def compute_clearance_probability(
     if total_pop <= 0:
         return 1.0
 
-    if total_pop < config.clearance_threshold:
-        return 0.95  # Very likely to clear
-
     if total_pop < config.min_population:
-        base_prob = 0.3
-    else:
-        # Logistic function: low clearance at high pop
-        ratio = total_pop / config.carrying_capacity
-        base_prob = 0.006 * (1.0 - ratio)
+        return 1.0  # extinction floor: carriage cleared
+
+    if total_pop < config.clearance_threshold:
+        return 0.95  # very likely to clear
+
+    # Logistic regime: 0.006 prefactor tuned so daily clearance matches the
+    # macro-level p_clearance ~= 0.0039/day (~1/255 days mean MRSA carriage).
+    ratio = total_pop / config.carrying_capacity
+    base_prob = 0.006 * (1.0 - ratio)
 
     # Immune modulation
     immune_mult = immune_strength
