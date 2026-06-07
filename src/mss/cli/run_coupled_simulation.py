@@ -4,10 +4,14 @@ from __future__ import annotations
 
 import argparse
 import copy
+import importlib.metadata
+import json
 import math
+import platform
 import random
+import subprocess
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable
@@ -312,7 +316,7 @@ def load_coupled_settings(config_path: Path = DEFAULT_CONFIG_PATH) -> CoupledSim
 
     run = RunSettings(
         days=_require_positive_int(run_raw.get("days"), "run.days"),
-        seed=_require_positive_int(run_raw.get("seed"), "run.seed"),
+        seed=_require_non_negative_int(run_raw.get("seed"), "run.seed"),
         run_id=str(run_raw.get("run_id", "dev_run")),
         quiet=bool(run_raw.get("quiet", False)),
     )
@@ -438,11 +442,9 @@ def _make_patient_factory(
         pid = f"dyn_{counter[0]:07d}"
         is_carrier = rng.random() < macro_config.community_carrier_fraction
         if is_carrier:
-            # Community carriers are carriers: use the carrier template (immune_strength,
-            # compliance, severity_modifier, p_clearance, …) and only override the
-            # resistance state with the community values. Without this they would inherit
-            # susceptible host traits and carrier-specific parameters (e.g. immune_strength)
-            # could not be calibrated against the steady-state carrier population.
+            # Community carriers use the carrier template (calibrated immunity,
+            # compliance, severity, clearance); only the resistance state is
+            # overridden with the community-import values.
             template = dict(population.carrier_template)
             template["resistant_fraction"] = macro_config.replacement_resistant_fraction
             template["dominant_genotype"] = macro_config.replacement_dominant_genotype
@@ -1009,22 +1011,21 @@ def _build_settings_from_raw(raw: dict[str, Any], seed: int) -> CoupledSimulatio
 def run_realistic_once(
     raw: dict[str, Any], seed: int, use_micro: bool = True
 ) -> tuple[pd.DataFrame, dict[str, Any]]:
-    """Run one coupled simulation from a raw config dict.
+    """Run one coupled simulation from a config dict (no files, plots, or prints).
 
-    Analogon zu run_once() aus run_single_ward_calibration.py — kein Parquet-Output,
-    kein Plot, kein Print. Gedacht fuer Kalibrierungs- und Sweep-Schleifen.
+    Analogous to run_once() in run_single_ward_calibration.py; intended for
+    calibration and sweep loops.
 
     Args:
-        use_micro: Wenn False, wird der Mikro-Simulator uebersprungen. Patienten
-                   behalten ihre Template-Standardwerte (p_clearance,
-                   relative_transmissibility, severity_modifier) unveraendert.
-                   Für die Makro-Kalibrierungen empfohlen.
+        use_micro: If False, the micro simulator is skipped and patients keep their
+            template defaults (p_clearance, relative_transmissibility,
+            severity_modifier). Recommended for the macro calibrations.
 
     Returns:
-        df:   Tages-DataFrame mit Spalten day, total_patients, susceptible, carriers,
-              prevalence, isolated_count, new_cases
-        meta: Zusammenfassung fuer das letzte Drittel:
-              seed, mean_prevalence, acquisition_rate_per_1000, isolation_fraction
+        df: daily DataFrame with day, total_patients, susceptible, carriers,
+            prevalence, isolated_count, new_cases.
+        meta: summary over the last third (seed, mean_prevalence,
+            acquisition_rate_per_1000, isolation_fraction).
     """
     settings = _build_settings_from_raw(raw, seed)
 
@@ -1119,7 +1120,70 @@ def _parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def _git_provenance(root: Path) -> dict[str, Any]:
+    """Best-effort git commit + dirty flag; ``None`` entries if unavailable."""
+
+    def _run(args: list[str]) -> str | None:
+        try:
+            result = subprocess.run(args, cwd=root, capture_output=True, text=True, check=True)
+            return result.stdout.strip()
+        except (subprocess.SubprocessError, OSError):
+            return None
+
+    commit = _run(["git", "rev-parse", "HEAD"])
+    status = _run(["git", "status", "--porcelain"])
+    return {"commit": commit, "dirty": None if status is None else bool(status)}
+
+
+def _json_default(obj: Any) -> Any:
+    """Fallback JSON encoder for numpy/enum/path/set values in the run metadata."""
+    if isinstance(obj, np.ndarray):
+        return obj.tolist()
+    if isinstance(obj, np.integer):
+        return int(obj)
+    if isinstance(obj, np.floating):
+        return float(obj)
+    if isinstance(obj, (set, frozenset)):
+        return sorted(obj)
+    if isinstance(obj, Department):
+        return obj.value
+    if isinstance(obj, Path):
+        return str(obj)
+    return str(obj)
+
+
+def _write_run_meta(
+    data_dir: Path,
+    settings: CoupledSimulationSettings,
+    run_ts: str,
+) -> Path:
+    """Persist a provenance record so a run is traceable to its exact inputs."""
+    try:
+        package_version = importlib.metadata.version("mss")
+    except importlib.metadata.PackageNotFoundError:
+        package_version = "unknown"
+
+    meta = {
+        "run_timestamp": run_ts,
+        "config_path": str(settings.config_path),
+        "git": _git_provenance(PROJECT_ROOT),
+        "python_version": platform.python_version(),
+        "package_version": package_version,
+        "seed": settings.run.seed,
+        "run": asdict(settings.run),
+        "population": asdict(settings.population),
+        "macro": asdict(settings.macro),
+        "micro": asdict(settings.micro),
+        "micro_workers": settings.micro_workers,
+    }
+    path = data_dir / "run_meta.json"
+    with path.open("w", encoding="utf-8") as handle:
+        json.dump(meta, handle, indent=2, default=_json_default, ensure_ascii=False)
+    return path
+
+
 def main() -> None:
+    """Load the config, run the coupled simulation, and write outputs and plots."""
     args = _parse_args()
     config_path = args.config if args.config is not None else DEFAULT_CONFIG_PATH
 
@@ -1130,6 +1194,9 @@ def main() -> None:
     data_dir.mkdir(parents=True, exist_ok=True)
 
     settings = load_coupled_settings(config_path)
+
+    run_meta_path = _write_run_meta(data_dir, settings, run_ts)
+    print(f"run_meta {run_meta_path}")
 
     macro = MacroSimulator(
         config=settings.macro,

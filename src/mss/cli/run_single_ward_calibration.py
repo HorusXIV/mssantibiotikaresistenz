@@ -1,21 +1,21 @@
-"""Einzelgitter-Kalibrierung fuer die Makro-Simulation.
+"""Single-ward calibration for the macro simulation.
 
-Dieses Skript laeuft den MacroSimulator auf einem einzigen, geschlossenen
-Gitter (eine Ward, N Personen) ohne Mikro-Simulation.
+Runs the MacroSimulator on a single closed grid (one ward, N people) without the
+micro simulation.
 
-Ziel: Realitaetsnahe Werte fuer die wichtigsten Transmissionsparameter finden,
-indem beobachtet wird wie lange es dauert bis alle Personen infiziert sind.
+Goal: find realistic values for the key transmission parameters by observing how
+long it takes until everyone is infected.
 
-Das Modell ist ein diskretes stochastisches SI-Modell ohne Erholung:
-    lambda(t) = beta_eff * I(t) / N         [Tag^-1]
-    beta_eff  = base_transmission_rate * daily_contact_attempts * (1 - base_hygiene)  [Tag^-1]
-    p_inf     = 1 - exp(-lambda(t))          [dimensionslos]
+The model is a discrete stochastic SI model without recovery:
+    lambda(t) = beta_eff * I(t) / N         [day^-1]
+    beta_eff  = base_transmission_rate * daily_contact_attempts * (1 - base_hygiene)  [day^-1]
+    p_inf     = 1 - exp(-lambda(t))          [dimensionless]
 
-Aufruf (Einzellauf):
+Single run:
     mss-calibrate
     mss-calibrate --config config/calibration/cal1_simulation_single_ward.yml
 
-Aufruf (Ensemble über mehrere Seeds):
+Ensemble over many seeds:
     mss-calibrate --n-runs 1000
 """
 
@@ -34,10 +34,8 @@ import yaml
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_CONFIG = PROJECT_ROOT / "config" / "calibration" / "cal1_simulation_single_ward.yml"
 
-
-# ---------------------------------------------------------------------------
-# Config laden
-# ---------------------------------------------------------------------------
+# Literature target band for lambda(0) [day^-1] (4.6-5.4 acquisitions / 1000 patient-days).
+LAMBDA_TARGET_LO, LAMBDA_TARGET_HI = 0.0046, 0.0054
 
 
 def _load_config(config_path: Path) -> Dict[str, Any]:
@@ -53,7 +51,7 @@ def _build_macro_config(raw: Dict[str, Any]):
 
 
 def _derive_transmission_params(raw: Dict[str, Any]) -> Tuple[float, float, float, float, float]:
-    """Gibt (beta_0, contact_attempts, hygiene, beta_eff, n_car_0/n_total) zurueck."""
+    """Return (beta_0, contact_attempts, hygiene, beta_eff, initial_carrier_fraction)."""
     pop = raw.get("population", {})
     macro_raw = raw.get("macro", {})
     n_sus_0 = int(pop.get("susceptible_count", 8))
@@ -64,11 +62,6 @@ def _derive_transmission_params(raw: Dict[str, Any]) -> Tuple[float, float, floa
     hygiene = float(macro_raw.get("base_hygiene", 0.65))
     beta_eff = beta_0 * contact_attempts * (1.0 - hygiene)
     return beta_0, contact_attempts, hygiene, beta_eff, n_car_0 / n_total
-
-
-# ---------------------------------------------------------------------------
-# Patienten erstellen
-# ---------------------------------------------------------------------------
 
 
 def _create_patients(raw: Dict[str, Any]) -> List[Any]:
@@ -84,7 +77,7 @@ def _create_patients(raw: Dict[str, Any]) -> List[Any]:
         p = Patient(
             patient_id=f"sus_{i:03d}",
             state=HealthState.SUSCEPTIBLE,
-            p_clearance=0.0,  # Keine spontane Selbstheilung
+            p_clearance=0.0,  # no spontaneous clearance
             department=Department.WARD,
         )
         patients.append(p)
@@ -94,7 +87,7 @@ def _create_patients(raw: Dict[str, Any]) -> List[Any]:
             patient_id=f"car_{i:03d}",
             state=HealthState.CARRIER,
             episode_id=f"ep_initial_{i:03d}",
-            p_clearance=0.0,  # Keine spontane Selbstheilung
+            p_clearance=0.0,  # no spontaneous clearance
             dominant_genotype="S",
             resistant_fraction=0.0,
             department=Department.WARD,
@@ -104,31 +97,26 @@ def _create_patients(raw: Dict[str, Any]) -> List[Any]:
     return patients
 
 
-# ---------------------------------------------------------------------------
-# Kernsimulation (wiederverwendbar fuer Batch-Laeufe)
-# ---------------------------------------------------------------------------
-
-
 def run_once(raw: Dict[str, Any], seed: int) -> Tuple[pd.DataFrame, Dict[str, Any]]:
-    """Fuehrt einen einzelnen Kalibrierungslauf durch und gibt (df, metadata) zurueck.
+    """Run a single calibration iteration and return (df, metadata).
 
-    Laeuft immer fuer die volle konfigurierte Laufzeit (kein Fruehausstieg), damit
-    Batch-Laeufe zeitlich vergleichbare Zeitreihen liefern.
+    Always runs the full configured duration (no early exit) so that ensemble
+    runs produce temporally comparable time series.
 
     Parameters
     ----------
     raw : dict
-        Geladene YAML-Konfiguration.
+        Loaded YAML config.
     seed : int
-        Zufallsseed fuer diesen Lauf.
+        Random seed for this run.
 
     Returns
     -------
     df : pd.DataFrame
-        Taeglich: day, susceptible, carriers, new_cases, prevalence_pct,
+        Daily: day, susceptible, carriers, new_cases, prevalence_pct,
         cumulative_attacked_pct, lambda_t.
     metadata : dict
-        seed, days_to_{25,50,75,100}pct (int oder None), final_attack_pct (float).
+        seed, days_to_{25,50,75,100}pct (int or None), final_attack_pct (float).
     """
     from mss.domain.patient import Department, HealthState
     from mss.simulation.macro.simulator import MacroSimulator
@@ -154,24 +142,21 @@ def run_once(raw: Dict[str, Any], seed: int) -> Tuple[pd.DataFrame, Dict[str, An
     records: List[Dict] = []
     milestones: Dict[int, int] = {}
     prev_carriers = n_car_0
-    cumulative = n_car_0  # initial carriers zaehlen als "je infiziert"
+    cumulative = n_car_0  # initial carriers count as "ever infected"
 
     for day in range(1, days + 1):
-        # Zustand zu Tagesbeginn erfassen
         current_before = macro.get_patients(hospital_id)
         n_c_before = sum(1 for p in current_before if p.state == HealthState.CARRIER)
         lambda_t = beta_eff * n_c_before / n_total
 
-        # Tagesupdate ausfuehren
         macro.step(micro_simulator=None, run_id=run_id)
 
-        # _colonize() setzt p_clearance=0.02 bei jeder Neuinfektion (designed fuer Mikro,
-        # das den Wert direkt ueberschreibt). Ohne Mikro bleibt 0.02 bestehen -> Oszillation.
-        # Fix: nach jedem Step alle Patienten auf p_clearance=0.0 zuruecksetzen.
+        # WORKAROUND: _colonize() sets p_clearance=0.02 on every new infection
+        # (intended for the micro layer to overwrite). Without micro, 0.02 persists
+        # and causes oscillation, so reset all patients to 0.0 after each step.
         for p in macro.get_patients(hospital_id):
             p.p_clearance = 0.0
 
-        # Zustand nach Tagesupdate erfassen
         current_after = macro.get_patients(hospital_id)
         n_c = sum(1 for p in current_after if p.state == HealthState.CARRIER)
         new_cases = max(0, n_c - prev_carriers)
@@ -209,11 +194,6 @@ def run_once(raw: Dict[str, Any], seed: int) -> Tuple[pd.DataFrame, Dict[str, An
     return df, metadata
 
 
-# ---------------------------------------------------------------------------
-# Einzellauf-Visualisierung
-# ---------------------------------------------------------------------------
-
-
 def _plot(
     df: pd.DataFrame,
     beta_eff: float,
@@ -226,8 +206,6 @@ def _plot(
     seed: int,
     plot_path: Path,
 ) -> None:
-    lambda_target_lo, lambda_target_hi = 0.0046, 0.0054
-
     carriers = df["carriers"]
     new_cases = df["new_cases"]
     cumulative_pct = df["cumulative_attacked_pct"]
@@ -236,26 +214,26 @@ def _plot(
     fig, axes = plt.subplots(2, 2, figsize=(13, 8))
 
     subtitle = (
-        f"β₀={beta_0:.3f} · c={contact_attempts:.1f} Kontakte/Tag · H={hygiene:.2f}"
-        f" → β_eff={beta_eff:.3f} Tag⁻¹ | λ(0)={lambda_0_theoretical:.4f} Tag⁻¹"
+        f"β₀={beta_0:.3f} · c={contact_attempts:.1f} contacts/day · H={hygiene:.2f}"
+        f" -> β_eff={beta_eff:.3f} day⁻¹ | λ(0)={lambda_0_theoretical:.4f} day⁻¹"
     )
     fig.suptitle(
-        f"Einzelgitter-Kalibrierung  |  N={n_total} (S₀={n_sus_0}, I₀={n_car_0})  |  Seed={seed}\n{subtitle}",
+        f"Single-ward calibration  |  N={n_total} (S₀={n_sus_0}, I₀={n_car_0})  |  seed={seed}\n{subtitle}",
         fontsize=11,
         fontweight="bold",
     )
 
-    # --- [0,0] Kalibrierung: λ(0) als Funktion von β₀ ---
+    # [0,0] Calibration: lambda(0) as a function of beta_0
     ax = axes[0, 0]
     beta_range = np.linspace(max(0.01, beta_0 * 0.3), beta_0 * 2.0, 300)
     lambda_range = beta_range * contact_attempts * (1.0 - hygiene) * n_car_0 / n_total
     ax.plot(beta_range, lambda_range, color="steelblue", lw=2, label="λ(0) = β₀ · c · (1−H) · I₀/N")
     ax.axhspan(
-        lambda_target_lo,
-        lambda_target_hi,
+        LAMBDA_TARGET_LO,
+        LAMBDA_TARGET_HI,
         alpha=0.2,
         color="green",
-        label=f"Zielbereich [{lambda_target_lo}–{lambda_target_hi}] Tag⁻¹",
+        label=f"target band [{LAMBDA_TARGET_LO}–{LAMBDA_TARGET_HI}] day⁻¹",
     )
     ax.axvline(beta_0, color="darkorange", lw=1.5, ls="--", alpha=0.6)
     ax.scatter(
@@ -264,41 +242,41 @@ def _plot(
         color="darkorange",
         s=150,
         zorder=5,
-        label=f"β₀ = {beta_0:.3f} → λ(0) = {lambda_0_theoretical:.4f} Tag⁻¹",
+        label=f"β₀ = {beta_0:.3f} -> λ(0) = {lambda_0_theoretical:.4f} day⁻¹",
     )
-    ax.set_xlabel("Transmissionsrate β₀ [pro Kontakt*Carrier]")
-    ax.set_ylabel("Initiale Infektionskraft λ(0) [Tag⁻¹]")
-    ax.set_title("Kalibrierung: λ(0) als Funktion von β₀")
+    ax.set_xlabel("transmission rate β₀ [per contact*carrier]")
+    ax.set_ylabel("initial force of infection λ(0) [day⁻¹]")
+    ax.set_title("Calibration: λ(0) as a function of β₀")
     ax.legend(fontsize=9)
     ax.grid(alpha=0.3)
 
-    # --- [0,1] SI-Dynamik ---
+    # [0,1] SI dynamics
     ax = axes[0, 1]
-    ax.plot(days, df["susceptible"], color="steelblue", lw=2, label="Susceptible S(t)")
-    ax.plot(days, carriers, color="firebrick", lw=2, label="Carrier I(t)")
-    ax.axhline(n_total, color="gray", lw=1, ls="--", alpha=0.5, label=f"Total N={n_total}")
-    ax.set_title("SI-Dynamik")
-    ax.set_xlabel("Tag [Tage]")
-    ax.set_ylabel("Patienten [Anzahl]")
+    ax.plot(days, df["susceptible"], color="steelblue", lw=2, label="susceptible S(t)")
+    ax.plot(days, carriers, color="firebrick", lw=2, label="carrier I(t)")
+    ax.axhline(n_total, color="gray", lw=1, ls="--", alpha=0.5, label=f"total N={n_total}")
+    ax.set_title("SI dynamics")
+    ax.set_xlabel("day")
+    ax.set_ylabel("patients")
     ax.legend(fontsize=9)
     ax.grid(alpha=0.3)
     ax.set_ylim(0, n_total * 1.15)
 
-    # --- [1,0] Tägliche Inzidenz ---
+    # [1,0] Daily incidence
     ax = axes[1, 0]
-    ax.bar(days, new_cases, color="firebrick", alpha=0.7, label="Neue Fälle/Tag")
-    ax.set_title("Tägliche Inzidenz")
-    ax.set_xlabel("Tag [Tage]")
-    ax.set_ylabel("Neue Fälle [Patienten]")
+    ax.bar(days, new_cases, color="firebrick", alpha=0.7, label="new cases/day")
+    ax.set_title("Daily incidence")
+    ax.set_xlabel("day")
+    ax.set_ylabel("new cases")
     ax.legend(fontsize=9)
     ax.grid(alpha=0.3, axis="y")
     if n_total > 0:
         ax2 = ax.twinx()
-        ax2.set_ylabel("Rate [pro 1000 Patienten-Tage]", fontsize=8, color="gray")
+        ax2.set_ylabel("rate [per 1000 patient-days]", fontsize=8, color="gray")
         ax2.set_ylim(0, max(ax.get_ylim()[1] / n_total * 1000, 0.1))
         ax2.tick_params(colors="gray")
 
-    # --- [1,1] Kumulative Angriffsrate (geschlossenes System) ---
+    # [1,1] Cumulative attack rate (closed system)
     ax = axes[1, 1]
     ax.plot(days, cumulative_pct, color="purple", lw=2)
     ax.fill_between(days, cumulative_pct, alpha=0.15, color="purple")
@@ -308,15 +286,15 @@ def _plot(
             day_hit = hit.iloc[0]["day"]
             ax.axvline(day_hit, color="gray", lw=1, ls=":", alpha=0.7)
             ax.annotate(
-                f"{label}\n→ Tag {int(day_hit)}",
+                f"{label}\n-> day {int(day_hit)}",
                 xy=(day_hit, pct_target),
                 xytext=(day_hit + 0.5, pct_target - 8),
                 fontsize=8,
                 color="gray",
             )
-    ax.set_title("Kumulative Angriffsrate (geschlossenes System)")
-    ax.set_xlabel("Tag [Tage]")
-    ax.set_ylabel("Kumulativ infiziert [%]")
+    ax.set_title("Cumulative attack rate (closed system)")
+    ax.set_xlabel("day")
+    ax.set_ylabel("cumulative infected [%]")
     ax.set_ylim(0, 110)
     ax.grid(alpha=0.3)
 
@@ -324,11 +302,6 @@ def _plot(
     plot_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(plot_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
-
-
-# ---------------------------------------------------------------------------
-# Ensemble (mehrere Seeds)
-# ---------------------------------------------------------------------------
 
 
 def _plot_batch(
@@ -344,9 +317,7 @@ def _plot_batch(
     n_runs: int,
     plot_path: Path,
 ) -> None:
-    """Erstellt 4 aggregierte Visualisierungen über alle Ensemble-Läufe."""
-    lambda_target_lo, lambda_target_hi = 0.0046, 0.0054
-
+    """Render four aggregated views across all ensemble runs."""
     days_per_run = combined["day"].max()
     lambda_0_theoretical = beta_eff * n_car_0 / n_total
     agg = (
@@ -367,17 +338,17 @@ def _plot_batch(
     fig, axes = plt.subplots(2, 2, figsize=(14, 9))
 
     subtitle = (
-        f"β₀={beta_0:.3f} · c={contact_attempts:.1f} Kontakte/Tag · H={hygiene:.2f}"
-        f" → β_eff={beta_eff:.3f} Tag⁻¹ | λ(0)={lambda_0_theoretical:.4f} Tag⁻¹"
+        f"β₀={beta_0:.3f} · c={contact_attempts:.1f} contacts/day · H={hygiene:.2f}"
+        f" -> β_eff={beta_eff:.3f} day⁻¹ | λ(0)={lambda_0_theoretical:.4f} day⁻¹"
     )
     fig.suptitle(
-        f"Einzelgitter-Kalibrierung (Ensemble)  |  {n_runs} Läufe  |"
+        f"Single-ward calibration (ensemble)  |  {n_runs} runs  |"
         f"  N={n_total} (S₀={n_sus_0}, I₀={n_car_0})\n{subtitle}",
         fontsize=11,
         fontweight="bold",
     )
 
-    # --- [0,0] Stochastische I(t)-Kurven + Mittelwert ---
+    # [0,0] Stochastic I(t) curves + mean
     ax = axes[0, 0]
     sample_ids = np.random.choice(n_runs, size=min(100, n_runs), replace=False)
     for run_id in sample_ids:
@@ -388,7 +359,7 @@ def _plot_batch(
         agg["carriers_mean"] / n_total * 100,
         color="firebrick",
         lw=2.5,
-        label="Mittelwert I(t)/N",
+        label="mean I(t)/N",
     )
     ax.fill_between(
         agg["day"],
@@ -396,26 +367,26 @@ def _plot_batch(
         agg["carriers_p95"] / n_total * 100,
         alpha=0.25,
         color="firebrick",
-        label="5.–95. Perzentil",
+        label="5th–95th percentile",
     )
-    ax.set_title(f"Prävalenz I(t)/N — {min(100, n_runs)} Läufe + Mittelwert")
-    ax.set_xlabel("Tag [Tage]")
-    ax.set_ylabel("Prävalenz I(t)/N [%]")
+    ax.set_title(f"prevalence I(t)/N - {min(100, n_runs)} runs + mean")
+    ax.set_xlabel("day")
+    ax.set_ylabel("prevalence I(t)/N [%]")
     ax.set_ylim(0, 105)
     ax.legend(fontsize=9)
     ax.grid(alpha=0.3)
 
-    # --- [0,1] Kalibrierung: λ(0) als Funktion von β₀ ---
+    # [0,1] Calibration: lambda(0) as a function of beta_0
     ax = axes[0, 1]
     beta_range = np.linspace(max(0.01, beta_0 * 0.3), beta_0 * 2.0, 300)
     lambda_range = beta_range * contact_attempts * (1.0 - hygiene) * n_car_0 / n_total
     ax.plot(beta_range, lambda_range, color="steelblue", lw=2, label="λ(0) = β₀ · c · (1−H) · I₀/N")
     ax.axhspan(
-        lambda_target_lo,
-        lambda_target_hi,
+        LAMBDA_TARGET_LO,
+        LAMBDA_TARGET_HI,
         alpha=0.2,
         color="green",
-        label=f"Zielbereich [{lambda_target_lo}–{lambda_target_hi}] Tag⁻¹",
+        label=f"target band [{LAMBDA_TARGET_LO}–{LAMBDA_TARGET_HI}] day⁻¹",
     )
     ax.axvline(beta_0, color="darkorange", lw=1.5, ls="--", alpha=0.6)
     ax.scatter(
@@ -424,15 +395,15 @@ def _plot_batch(
         color="darkorange",
         s=150,
         zorder=5,
-        label=f"β₀ = {beta_0:.3f} → λ(0) = {lambda_0_theoretical:.4f} Tag⁻¹",
+        label=f"β₀ = {beta_0:.3f} -> λ(0) = {lambda_0_theoretical:.4f} day⁻¹",
     )
-    ax.set_xlabel("Transmissionsrate β₀ [pro Kontakt*Carrier]")
-    ax.set_ylabel("Initiale Infektionskraft λ(0) [Tag⁻¹]")
-    ax.set_title(f"Kalibrierung: λ(0) als Funktion von β₀ ({n_runs} Seeds bestätigt)")
+    ax.set_xlabel("transmission rate β₀ [per contact*carrier]")
+    ax.set_ylabel("initial force of infection λ(0) [day⁻¹]")
+    ax.set_title(f"Calibration: λ(0) as a function of β₀ ({n_runs} seeds confirmed)")
     ax.legend(fontsize=9)
     ax.grid(alpha=0.3)
 
-    # --- [1,0] Verteilung Tage bis 50% Durchseuchung ---
+    # [1,0] Distribution of days to 50% attack
     ax = axes[1, 0]
     days_50 = summaries["days_to_50pct"].dropna()
     n_reached = len(days_50)
@@ -444,35 +415,35 @@ def _plot_batch(
             range=(1, days_per_run),
             color="steelblue",
             alpha=0.75,
-            label=f"Tage bis 50% (n={n_reached}/{n_runs})",
+            label=f"days to 50% (n={n_reached}/{n_runs})",
         )
         median_50 = days_50.median()
         p5, p95 = days_50.quantile(0.05), days_50.quantile(0.95)
-        ax.axvline(median_50, color="navy", lw=2, ls="--", label=f"Median = {median_50:.0f} Tage")
-        ax.axvspan(p5, p95, alpha=0.1, color="navy", label=f"P5–P95 = [{p5:.0f}–{p95:.0f}] Tage")
+        ax.axvline(median_50, color="navy", lw=2, ls="--", label=f"median = {median_50:.0f} days")
+        ax.axvspan(p5, p95, alpha=0.1, color="navy", label=f"P5–P95 = [{p5:.0f}–{p95:.0f}] days")
     else:
-        ax.text(0.5, 0.5, "50% nicht erreicht", transform=ax.transAxes, ha="center", va="center")
-    ax.set_title("Tage bis 50% Durchseuchung (geschlossenes System)")
-    ax.set_xlabel("Tage [Tage]")
-    ax.set_ylabel("Läufe [Anzahl]")
+        ax.text(0.5, 0.5, "50% not reached", transform=ax.transAxes, ha="center", va="center")
+    ax.set_title("Days to 50% attack (closed system)")
+    ax.set_xlabel("days")
+    ax.set_ylabel("runs")
     ax.legend(fontsize=9)
     ax.grid(alpha=0.3, axis="y")
 
-    # --- [1,1] Erstinfektionen Tag 1 — Stochastische Validierung von λ(0) ---
+    # [1,1] Day-1 first infections: stochastic validation of lambda(0)
     ax = axes[1, 1]
     expected_cases = lambda_0_theoretical * n_sus_0
     vals, counts = np.unique(day1_cases, return_counts=True)
-    ax.bar(vals, counts / n_runs * 100, color="darkorange", alpha=0.75, label="Simuliert")
+    ax.bar(vals, counts / n_runs * 100, color="darkorange", alpha=0.75, label="simulated")
     ax.axvline(
         expected_cases,
         color="green",
         lw=2,
         ls="--",
-        label=f"Erwartungswert = {expected_cases:.2f}\n(λ(0) × S₀ = {lambda_0_theoretical:.4f} × {n_sus_0})",
+        label=f"expected = {expected_cases:.2f}\n(λ(0) × S₀ = {lambda_0_theoretical:.4f} × {n_sus_0})",
     )
-    ax.set_title("Erstinfektionen Tag 1 — Stochastische Validierung λ(0)")
-    ax.set_xlabel("Neue Fälle an Tag 1 [Patienten]")
-    ax.set_ylabel("Anteil Läufe [%]")
+    ax.set_title("Day-1 first infections: stochastic validation of λ(0)")
+    ax.set_xlabel("new cases on day 1")
+    ax.set_ylabel("share of runs [%]")
     ax.set_xticks(range(int(day1_cases.max()) + 2))
     ax.legend(fontsize=9)
     ax.grid(alpha=0.3, axis="y")
@@ -498,7 +469,7 @@ def _run_ensemble(
     n_car_0: int,
     days: int,
 ) -> None:
-    """Führt n_runs Läufe mit Seeds 0..n_runs-1 aus und aggregiert die Ergebnisse."""
+    """Run n_runs simulations with seeds 0..n_runs-1 and aggregate the results."""
     out = output_dir or (
         PROJECT_ROOT
         / "outputs"
@@ -507,22 +478,21 @@ def _run_ensemble(
     data_dir = out / "data"
     plot_dir = out / "plots"
 
-    lambda_target_lo, lambda_target_hi = 0.0046, 0.0054
     status = (
-        "OK  -- innerhalb Zielbereich"
-        if lambda_target_lo <= lambda_0 <= lambda_target_hi
-        else "WARNUNG -- ausserhalb Zielbereich"
+        "OK -- within target band"
+        if LAMBDA_TARGET_LO <= lambda_0 <= LAMBDA_TARGET_HI
+        else "WARNING -- outside target band"
     )
     print("=" * 65)
-    print(f"Einzelgitter-Kalibrierung (Ensemble): {n_runs} Läufe")
+    print(f"Single-ward calibration (ensemble): {n_runs} runs")
     print(f"  Config:  {config_path}")
-    print(f"  β₀={beta_0:.3f}  c={contact_attempts:.1f} Kontakte/Tag  H={hygiene:.2f}")
+    print(f"  β₀={beta_0:.3f}  c={contact_attempts:.1f} contacts/day  H={hygiene:.2f}")
     print(
-        f"  → β_eff = {beta_eff:.4f} Tag⁻¹  |  λ(0) = {lambda_0:.4f} Tag⁻¹"
-        f"  |  Ziel: {lambda_target_lo}–{lambda_target_hi} Tag⁻¹  |  {status}"
+        f"  -> β_eff = {beta_eff:.4f} day⁻¹  |  λ(0) = {lambda_0:.4f} day⁻¹"
+        f"  |  target: {LAMBDA_TARGET_LO}–{LAMBDA_TARGET_HI} day⁻¹  |  {status}"
     )
-    print(f"  Personen: N={n_total} (S₀={n_sus_0}, I₀={n_car_0})  |  Tage/Lauf: {days}")
-    print(f"  Seeds: 0 bis {n_runs - 1} (deterministisch, reproduzierbar)")
+    print(f"  People: N={n_total} (S₀={n_sus_0}, I₀={n_car_0})  |  days/run: {days}")
+    print(f"  Seeds: 0 to {n_runs - 1} (deterministic, reproducible)")
     print("=" * 65)
 
     all_dfs: List[pd.DataFrame] = []
@@ -533,10 +503,10 @@ def _run_ensemble(
         all_metas.append(meta)
         if (i + 1) % max(1, n_runs // 4) == 0 or i == 0:
             pct_done = (i + 1) / n_runs * 100
-            print(f"  [{pct_done:5.1f}%] Lauf {i + 1:>{len(str(n_runs))}}/{n_runs} abgeschlossen")
+            print(f"  [{pct_done:5.1f}%] run {i + 1:>{len(str(n_runs))}}/{n_runs} done")
 
     print("=" * 65)
-    print("Aggregiere Ergebnisse...")
+    print("Aggregating results...")
     combined = pd.concat(all_dfs, ignore_index=True)
     summaries = pd.DataFrame(all_metas)
 
@@ -544,21 +514,21 @@ def _run_ensemble(
         vals = summaries[f"days_to_{milestone}pct"].dropna()
         if len(vals) > 0:
             print(
-                f"  {milestone:3d}% erreicht in {len(vals)}/{n_runs} Läufen"
-                f"  |  Median: {vals.median():.0f} Tage"
+                f"  {milestone:3d}% reached in {len(vals)}/{n_runs} runs"
+                f"  |  median: {vals.median():.0f} days"
                 f"  |  [P5={vals.quantile(0.05):.0f}, P95={vals.quantile(0.95):.0f}]"
             )
         else:
-            print(f"  {milestone:3d}% nicht erreicht in {days} Tagen (0/{n_runs} Läufe)")
+            print(f"  {milestone:3d}% not reached within {days} days (0/{n_runs} runs)")
 
     data_dir.mkdir(parents=True, exist_ok=True)
     combined_path = data_dir / "ensemble_all_runs.parquet"
     summary_path = data_dir / "ensemble_summary.parquet"
     combined.to_parquet(combined_path, index=False)
     summaries.to_parquet(summary_path, index=False)
-    print("\nGespeichert:")
-    print(f"  Alle Läufe → {combined_path}")
-    print(f"  Zusammenfassung → {summary_path}")
+    print("\nSaved:")
+    print(f"  All runs -> {combined_path}")
+    print(f"  Summary -> {summary_path}")
 
     plot_path = plot_dir / "01_single_ward_ensemble.png"
     _plot_batch(
@@ -574,35 +544,30 @@ def _run_ensemble(
         n_runs=n_runs,
         plot_path=plot_path,
     )
-    print(f"  Plot  → {plot_path}")
-
-
-# ---------------------------------------------------------------------------
-# Einstiegspunkt (Einzellauf oder Ensemble via --n-runs)
-# ---------------------------------------------------------------------------
+    print(f"  Plot  -> {plot_path}")
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Einzelgitter-Kalibrierung für Transmissionsparameter"
+        description="Single-ward calibration for transmission parameters"
     )
     parser.add_argument(
         "--config",
         type=Path,
         default=DEFAULT_CONFIG,
-        help="Pfad zur YAML-Konfigurationsdatei",
+        help="Path to the YAML config file",
     )
     parser.add_argument(
         "--n-runs",
         type=int,
         default=1,
-        help="Anzahl Läufe. 1 = detaillierter Einzellauf, >1 = Ensemble über Seeds 0..N-1",
+        help="Number of runs. 1 = detailed single run, >1 = ensemble over seeds 0..N-1",
     )
     parser.add_argument(
         "--output-dir",
         type=Path,
         default=None,
-        help="Ausgabeverzeichnis (default: outputs/YYYYMMDD_HHMMSS)",
+        help="Output directory (default: outputs/YYYYMMDD_HHMMSS)",
     )
     args = parser.parse_args()
 
@@ -645,25 +610,24 @@ def main() -> None:
     plot_dir = output_dir / "plots"
 
     print("=" * 60)
-    print("Einzelgitter-Kalibrierung")
+    print("Single-ward calibration")
     print(f"  Config:  {args.config}")
-    print(f"  β₀={beta_0:.3f}  c={contact_attempts:.1f} Kontakte/Tag  H={hygiene:.2f}")
-    lambda_target_lo, lambda_target_hi = 0.0046, 0.0054
-    in_range = lambda_target_lo <= lambda_0 <= lambda_target_hi
-    status = "OK  -- innerhalb Zielbereich" if in_range else "WARNUNG -- ausserhalb Zielbereich"
-    print(f"  → β_eff = {beta_eff:.4f} Tag⁻¹")
+    print(f"  β₀={beta_0:.3f}  c={contact_attempts:.1f} contacts/day  H={hygiene:.2f}")
+    in_range = LAMBDA_TARGET_LO <= lambda_0 <= LAMBDA_TARGET_HI
+    status = "OK -- within target band" if in_range else "WARNING -- outside target band"
+    print(f"  -> β_eff = {beta_eff:.4f} day⁻¹")
     print(
-        f"  → λ(0)  = {lambda_0:.4f} Tag⁻¹  |  Ziel: {lambda_target_lo}–{lambda_target_hi} Tag⁻¹  |  {status}"
+        f"  -> λ(0)  = {lambda_0:.4f} day⁻¹  |  target: {LAMBDA_TARGET_LO}–{LAMBDA_TARGET_HI} day⁻¹  |  {status}"
     )
-    print(f"  Personen: N={n_total} (S₀={n_sus_0}, I₀={n_car_0})")
-    print(f"  Seed: {seed}  |  Tage: {days}")
+    print(f"  People: N={n_total} (S₀={n_sus_0}, I₀={n_car_0})")
+    print(f"  Seed: {seed}  |  days: {days}")
     print("=" * 60)
 
     df, meta = run_once(raw, seed)
 
-    # Tabelle ausgeben (bis 100% oder Ende)
+    # Print the daily table up to 100% attack (or end of run)
     stop_day = meta["days_to_100pct"] or days
-    print(f"{'Tag':>5} {'S(t)':>6} {'I(t)':>6} {'Neu':>5} {'I/N [%]':>9} {'Kumul. [%]':>11}")
+    print(f"{'Day':>5} {'S(t)':>6} {'I(t)':>6} {'New':>5} {'I/N [%]':>9} {'Cumul. [%]':>11}")
     print("-" * 50)
     for _, row in df[df["day"] <= stop_day].iterrows():
         print(
@@ -672,19 +636,19 @@ def main() -> None:
         )
 
     print("=" * 60)
-    print("\nMeilensteine (geschlossenes System):")
+    print("\nMilestones (closed system):")
     for milestone in [25, 50, 75, 100]:
         day_hit = meta[f"days_to_{milestone}pct"]
         if day_hit is not None:
-            print(f"  {milestone:3d}% → Tag {day_hit}")
+            print(f"  {milestone:3d}% -> day {day_hit}")
         else:
-            print(f"  {milestone:3d}% → nicht erreicht in {days} Tagen")
+            print(f"  {milestone:3d}% -> not reached within {days} days")
 
     data_dir.mkdir(parents=True, exist_ok=True)
     parquet_path = data_dir / "calibration_daily.parquet"
     df.to_parquet(parquet_path, index=False)
-    print("\nGespeichert:")
-    print(f"  Daten → {parquet_path}")
+    print("\nSaved:")
+    print(f"  Data -> {parquet_path}")
 
     plot_path = plot_dir / "01_single_ward_calibration.png"
     _plot(
@@ -699,7 +663,7 @@ def main() -> None:
         seed=seed,
         plot_path=plot_path,
     )
-    print(f"  Plot  → {plot_path}")
+    print(f"  Plot  -> {plot_path}")
 
 
 if __name__ == "__main__":
