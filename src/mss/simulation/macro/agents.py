@@ -6,7 +6,7 @@ from mss.domain import Patient
 
 
 class _MesaModel(mesa.Model):
-    """Minimal Mesa model stub for agent construction."""
+    """Minimal Mesa model wrapper."""
 
 
 class PatientAgent(mesa.Agent):
@@ -17,4 +17,5 @@ class PatientAgent(mesa.Agent):
         self.patient = patient
 
     def step(self) -> None:
+        # No per-agent logic; the macro simulator drives patient state.
         return

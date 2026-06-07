@@ -20,9 +20,7 @@ class SimulationConfig:
     # Hospital environment
     base_hygiene: float = 0.7  # 0..1; higher ⇒ less transmission
     base_isolation_effectiveness: float = 0.8  # 0..1; how well isolation works
-    base_diagnostic_speed: float = (
-        1.0  # >0; multiplier on carrier_isolation_probability (1.0 = unchanged, 0.5 = half speed, 2.0 = double speed)
-    )
+    base_diagnostic_speed: float = 1.0  # >0; multiplier on carrier detection (1.0 = unchanged)
 
     # Transmission
     base_transmission_rate: float = 0.05  # per-carrier-per-susceptible daily beta
@@ -35,7 +33,7 @@ class SimulationConfig:
     # Detection / isolation of carriers
     carrier_isolation_probability: float = 0.30  # daily detection chance for non-isolated carriers
 
-    # LOS (Length of Stay) — Log-Normal distribution drawn at admission
+    # LOS (length of stay): log-normal distribution drawn at admission
     los_mean_ward: float = 8.0  # mean ward stay in days
     los_mean_icu: float = 14.0  # mean ICU stay in days
     los_sigma: float = 0.6  # log-normal sigma (shape parameter)
@@ -52,10 +50,8 @@ class SimulationConfig:
     replacement_dominant_genotype: str = "S"
     max_occupancy_per_hospital: int = 200  # hard cap per hospital
 
-    # Daily mortality probability for all patients.
-    # Carriers are scaled by their severity_modifier (template: 1.2 → 0.0054/day).
-    # Derived from Swiss in-hospital mortality ~2.5 % per admission ÷ 5.5-day LOS.
-    # Source: BFS Medizinische Statistik 2022; Huang & Platt 2003, Ann Intern Med.
+    # Daily mortality (carriers scaled by severity_modifier). Derived from CH
+    # in-hospital mortality ~2.5%/admission over ~5.5-day LOS (BFS 2022).
     base_mortality_rate: float = 0.0045
 
     # Inter-hospital transfers (0.0 = disabled)

@@ -114,6 +114,7 @@ class HospitalDepartmentGrid:
 
     @staticmethod
     def chebyshev(x1: int, y1: int, x2: int, y2: int) -> int:
+        # King-move distance: same cell = 0, any adjacent cell (incl. diagonal) = 1.
         return max(abs(x1 - x2), abs(y1 - y2))
 
 

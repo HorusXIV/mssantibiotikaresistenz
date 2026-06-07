@@ -248,8 +248,8 @@ class MacroSimulator:
                 continue
             active_hospital_ids.append(hid)
 
-            # 1. Clearance (C -> S) — must run before discharge so a carrier
-            #    who clears today is seen as susceptible in the discharge phase.
+            # 1a. Clearance (C -> S): must run before discharge so a carrier
+            #     who clears today is seen as susceptible in the discharge phase.
             for p in patients:
                 if p.state == HealthState.CARRIER:
                     if p.should_clear_today(self._rng):
@@ -259,16 +259,14 @@ class MacroSimulator:
                                 clear_episode(p.episode_id)
                         p.clear_carriage()
 
-            # 4. Context update
+            # 1b. Context update + isolation detection
             for p in patients:
                 was_isolated = p.is_isolated
                 ctx = self._build_context(p, hid)
                 p.update_context(ctx)
-                # On first detection (not-isolated → isolated): extend planned
-                # discharge once so the patient stays carrier_extension_days from
-                # the day of detection, scaled by severity_modifier (more virulent
-                # strains warrant longer isolation). Subsequent days do NOT roll
-                # the date forward — the clock runs from the detection event.
+                # On first detection, push discharge to detection day +
+                # carrier_extension_days (scaled by severity_modifier). The clock
+                # runs from detection and is not rolled forward again.
                 if p.state == HealthState.CARRIER and p.is_isolated and not was_isolated:
                     extension = max(
                         1, int(self._config.carrier_extension_days * p.severity_modifier)
@@ -277,7 +275,7 @@ class MacroSimulator:
                     if p.planned_discharge_day is None or extended > p.planned_discharge_day:
                         p.planned_discharge_day = extended
 
-            # 5. Micro exchange (carrier episodes)
+            # 1c. Collect micro requests (carrier episodes)
             if micro_simulator is not None:
                 requests, batch_patients = self._collect_micro_requests(
                     patients=patients, run_id=run_id
@@ -285,7 +283,7 @@ class MacroSimulator:
                 all_micro_requests.extend(requests)
                 request_patients.extend(batch_patients)
 
-        # 2. Discharge (after clearance — post-clearance state is visible here)
+        # 2. Discharge (after clearance, so post-clearance state is visible here)
         for hid in self._hospital_ids:
             self._discharge_phase(
                 list(self._dept_grids[hid].get_all_patients()), hid, micro_simulator
@@ -294,9 +292,10 @@ class MacroSimulator:
         # 3. Admissions
         self._admission_phase(patient_factory)
 
+        # 4. Micro batch
         if micro_simulator is not None and all_micro_requests:
             # Requests were collected before the discharge phase. Drop any whose
-            # patient left today — discharge() already cleared their episode, so
+            # patient left today; discharge() already cleared their episode, so
             # re-running the micro batch would re-store it and leak episode state.
             kept = [
                 (req, pat)
@@ -311,11 +310,11 @@ class MacroSimulator:
                     request_patients=pats,
                 )
 
-        # 4. Transmission (S -> C)
+        # 5. Transmission (S -> C)
         for hid in active_hospital_ids:
             self._do_transmission(hid)
 
-        # 5. Transfer stub
+        # 6. Inter-hospital transfers
         self._transfer_phase()
 
     # ------------------------------------------------------------------
@@ -348,17 +347,23 @@ class MacroSimulator:
         precautions.
         """
         cfg = self._config
-        if cfg.daily_admission_rate <= 0.0:
-            return
+        admissions_active = cfg.daily_admission_rate > 0.0
         for p in patients:
             if p.planned_discharge_day is None:
                 continue
 
+            # Mortality is evaluated daily, independent of admissions. Skipping the
+            # draw at rate 0 keeps the RNG stream stable for closed-cohort runs.
             mortality_rate = cfg.base_mortality_rate
             if p.state == HealthState.CARRIER:
                 mortality_rate *= p.severity_modifier
-            if self._rng.random() < mortality_rate:
+            if mortality_rate > 0.0 and self._rng.random() < mortality_rate:
                 self.discharge(p, micro_simulator)
+                continue
+
+            # Logistic length-of-stay discharge runs only while admissions are
+            # active (a closed cohort keeps everyone for clean observation).
+            if not admissions_active:
                 continue
 
             if self._day >= p.planned_discharge_day:
@@ -376,9 +381,8 @@ class MacroSimulator:
     def _poisson_draw(rng: random.Random, lam: float) -> int:
         """Knuth's algorithm for Poisson sampling without numpy.
 
-        The cap protects exp(-lam) from underflowing to 0.0 (which would loop
-        forever); a double underflows only beyond ~exp(-745), so 700 keeps the
-        sampled mean exact for every realistic admission rate.
+        lam is capped at 700 so exp(-lam) cannot underflow to 0.0 (which would
+        loop forever) for any realistic admission rate.
         """
         if lam <= 0:
             return 0
@@ -529,6 +533,8 @@ class MacroSimulator:
                 weighted_force += contrib
                 weighted_carriers.append((car_agent.patient, contrib))
 
+            # Daily infection hazard: contacts x (1 - hygiene) x normalized carrier
+            # pressure x host susceptibility; p_colonize = 1 - exp(-hazard).
             hazard = (
                 cfg.daily_contact_attempts
                 * hygiene_factor

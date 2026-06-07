@@ -29,7 +29,6 @@ class AntibioticRegimen:
     on: bool = False
     abx_class: str = "none"  # e.g. "beta_lactam", "fluoroquinolone"
     dose_level: str = "std"  # "low"|"std"|"high" (or numeric)
-    # If you later want duration tracking, keep it in macro or add days_on_abx here.
 
 
 @dataclass
@@ -85,7 +84,7 @@ class Patient:
     adherence: float = 1.0  # 0..1, can be derived from compliance each day
     regimen: AntibioticRegimen = field(default_factory=AntibioticRegimen)
 
-    # Medical history (keep it simple: flags)
+    # Medical history flags
     history_flags: Set[str] = field(default_factory=set)
     # Examples: {"prior_abx", "diabetes", "recent_surgery", "immunosuppression"}
 
@@ -116,8 +115,7 @@ class Patient:
         self.is_isolated = ctx.is_isolated
         self.regimen = ctx.regimen
 
-        # Derive adherence from compliance (simple mapping; tweak as you like)
-        # ICU might have better adherence due to supervision; you can encode that here too.
+        # Derive adherence from compliance; ICU gets a small bonus for supervision.
         base = self.compliance
         if self.department == Department.ICU:
             base = min(1.0, base + 0.1)
