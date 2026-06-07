@@ -30,6 +30,7 @@ MSS/
 │   │   ├── cal2_proximity_decay.yml
 │   │   └── cal3_isolation_effectiveness.yml
 │   ├── 01_Parameterübersicht.md
+│   ├── 02_Mikrosimulation_Parameterübersicht.md
 │   ├── simulation_abx.yml
 │   ├── simulation_realistic.yml
 │   └── template.yml
@@ -48,6 +49,8 @@ MSS/
 │       └── build_gephi_graphs.py
 ├── logs/
 │   └── *.out
+├── notebooks/
+│   └── output_explorer.ipynb
 ├── outputs/
 │   └── <timestamp>_<name>/
 │       ├── data/
@@ -146,6 +149,7 @@ Runtime configuration files. Keep these environment- or scenario-specific, not c
 - `simulation_abx.yml`: alternative scenario tuned for antibiotic-focused runs.
 - `template.yml`: fully documented reference file listing every supported YAML variable with explanations. Copy and adapt for new scenarios.
 - `01_Parameterübersicht.md`: parameter reference table documenting all model parameters, their types (geschätzt / Kontextualisierungsparameter / kalibriert / Referenzwert / nicht identifizierbar), sources, and calibration results.
+- `02_Mikrosimulation_Parameterübersicht.md`: parameter reference for the micro (within-host) evolution layer.
 - `calibration/`: one configuration file per calibration, numbered in execution order.
   - `cal1_simulation_single_ward.yml`: single-ward β₀ calibration (analytical).
   - `cal2_proximity_decay.yml`: spatial proximity decay vs. same-cell (roommate) transmission fraction.
@@ -165,6 +169,12 @@ Human-facing project documentation, diagrams, and analytical assets.
 - `docs/system_overview/`: system maps, Mermaid diagrams, and graph-building helper script.
 - `docs/organizational/`: reserved for planning or process documentation.
 
+### `notebooks/`
+
+Exploratory Jupyter notebooks for inspecting generated outputs. Not part of the importable package.
+
+- `output_explorer.ipynb`: loads the latest `outputs/<timestamp>` run and renders day-slider heatmaps and diagnostic views.
+
 ### `tests/`
 
 Automated verification for the new `src` layout.
@@ -173,11 +183,11 @@ Automated verification for the new `src` layout.
 - `test_run_coupled_simulation.py`: configuration loading and initial population setup.
 - `integration_tests/`: cross-module behavioral tests for macro, micro, and grid interactions.
 
-### `src/mss/simulation/macro/` — inline docs
+### `src/mss/simulation/macro/`: inline docs
 
 - `01_Macro_Overview.md`: detailed description of the macro simulation layer, transmission model, and parameter semantics.
 
-### `src/mss/simulation/micro/` — inline docs
+### `src/mss/simulation/micro/`: inline docs
 
 - `01_Micro_Overview.md`: description of the within-host micro simulation layer, genome model, and evolution mechanics.
 

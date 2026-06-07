@@ -17,10 +17,10 @@ Der Zustand eines Patienten ist auf dieser Ebene binär: **SUSCEPTIBLE (S)** ode
 
 | Datei | Zweck |
 |---|---|
-| `config.py` | `SimulationConfig` — alle Parameter der Makro-Ebene |
-| `simulator.py` | `MacroSimulator` — Tagesablauf, Formeln, Logik |
-| `grid.py` | `HospitalDepartmentGrid`, `HospitalNetworkGrid` — räumliche Modellierung |
-| `agents.py` | `PatientAgent` — Mesa-Wrapper für Patienten im Grid |
+| `config.py` | `SimulationConfig`, alle Parameter der Makro-Ebene |
+| `simulator.py` | `MacroSimulator`, Tagesablauf, Formeln, Logik |
+| `grid.py` | `HospitalDepartmentGrid`, `HospitalNetworkGrid`, räumliche Modellierung |
+| `agents.py` | `PatientAgent`, Mesa-Wrapper für Patienten im Grid |
 
 ---
 
@@ -150,11 +150,11 @@ Die Verweildauer wird bei Aufnahme einmalig aus einer **Log-Normalverteilung** g
 
 ### Entlassung
 
-Patienten werden nicht exakt am geplanten Entlassungstag entlassen, sondern mit einer **logistischen Wahrscheinlichkeit** nach Überschreitung dieses Tages. Carrier und Susceptible durchlaufen **dieselbe** Entlassungslogistik — ein erkannter Carrier hat lediglich einen späteren geplanten Entlassungstag (siehe `carrier_extension_days`) und verlässt das Spital ggf. noch kolonisiert (entspricht realen MRSA-Trägern unter Kontaktisolation, die nach Hause entlassen werden).
+Patienten werden nicht exakt am geplanten Entlassungstag entlassen, sondern mit einer **logistischen Wahrscheinlichkeit** nach Überschreitung dieses Tages. Carrier und Susceptible durchlaufen **dieselbe** Entlassungslogistik, ein erkannter Carrier hat lediglich einen späteren geplanten Entlassungstag (siehe `carrier_extension_days`) und verlässt das Spital ggf. noch kolonisiert (entspricht realen MRSA-Trägern unter Kontaktisolation, die nach Hause entlassen werden).
 
 #### `carrier_extension_days`
 - **Typ:** float (Tage)
-- **Einfluss:** Wird **einmalig bei Ersterkennung** eines Carriers angewendet (Transition nicht-isoliert → isoliert): `planned_discharge_day = erkennungstag + carrier_extension_days × severity_modifier`. Schwerere Fälle (höherer `severity_modifier`) bleiben länger. Das Datum wird **nicht** rollierend weitergeschoben — nach Ablauf greift dieselbe logistische Entlassung wie bei Susceptible.
+- **Einfluss:** Wird **einmalig bei Ersterkennung** eines Carriers angewendet (Transition nicht-isoliert → isoliert): `planned_discharge_day = erkennungstag + carrier_extension_days × severity_modifier`. Schwerere Fälle (höherer `severity_modifier`) bleiben länger. Das Datum wird **nicht** rollierend weitergeschoben, nach Ablauf greift dieselbe logistische Entlassung wie bei Susceptible.
 
 #### `base_mortality_rate`
 - **Typ:** float, [0, 1]
@@ -162,6 +162,7 @@ Patienten werden nicht exakt am geplanten Entlassungstag entlassen, sondern mit 
 - **Formel:** `mortality_rate = base_mortality_rate × severity_modifier` (nur für Carrier; für Susceptible = `base_mortality_rate`)
 - **Basis:** Abgeleitet aus Schweizer Spitalmortalität ~2.5% pro Aufenthalt ÷ 5.5-Tage-LoS (BFS Medizinische Statistik 2022; Huang & Platt 2003). Standard: `0.0045` → ~0.5% Tageswahrscheinlichkeit.
 - **Konsequenz:** Ein Patient wird via `discharge()` aus dem Spital entfernt, bevor die Entlassungslogistik greift. Carrier-Verstorbene haben keinen Entlassungs-Plot-Eintrag.
+- **Unabhängig von Aufnahmen:** Die Mortalität wird **täglich** ausgewertet, auch bei `daily_admission_rate = 0` (geschlossene Kohorte). Nur die *logistische* Entlassung ist an aktive Aufnahmen gekoppelt. Soll eine geschlossene Kohorte ganz ohne Abgänge laufen (z. B. Kalibrierung 1 für die β₀-Messung), muss zusätzlich `base_mortality_rate = 0` gesetzt werden, genau das tut `cal1_simulation_single_ward.yml`.
 
 #### `discharge_logistic_k`
 - **Typ:** float
@@ -179,13 +180,13 @@ Patienten werden nicht exakt am geplanten Entlassungstag entlassen, sondern mit 
 
 #### `daily_admission_rate`
 - **Typ:** float (Patienten/Tag)
-- **Einfluss:** Poisson-Erwartungswert für neue Patienten pro Tag über alle Spitäler. `0` deaktiviert Aufnahmen.
+- **Einfluss:** Poisson-Erwartungswert für neue Patienten pro Tag über alle Spitäler. `0` deaktiviert Aufnahmen **und** die logistische Entlassung (geschlossene Kohorte). Die tägliche Mortalität bleibt davon unberührt (siehe `base_mortality_rate`).
 - **Formel:** `n_new ~ Poisson(daily_admission_rate)`. Neue Patienten werden dem Spital mit der grössten freien Kapazität zugewiesen (gewichtet).
 
 #### `community_carrier_fraction`
 - **Typ:** float, [0, 1]
 - **Einfluss:** Anteil der neu aufgenommenen Patienten, die bereits Carrier sind (Einschleppung aus der Gemeinschaft).
-- **Verbindung:** Bestimmt den Anfangszustand neuer Patienten — `HealthState.CARRIER` mit vordefinierten Resistenzwerten.
+- **Verbindung:** Bestimmt den Anfangszustand neuer Patienten, `HealthState.CARRIER` mit vordefinierten Resistenzwerten.
 
 #### `replacement_resistant_fraction`
 - **Typ:** float, [0, 1]
@@ -208,7 +209,7 @@ Patienten werden nicht exakt am geplanten Entlassungstag entlassen, sondern mit 
 #### `daily_transfer_rate`
 - **Typ:** float, [0, 1]
 - **Einfluss:** Tägliche Wahrscheinlichkeit pro Patient, in ein anderes Spital verlegt zu werden. `0` deaktiviert Verlegungen.
-- **Zielwahl:** Gewichtet nach `(freie_kapazität / distanz)` — nahe und weniger belegte Spitäler werden bevorzugt.
+- **Zielwahl:** Gewichtet nach `(freie_kapazität / distanz)`, nahe und weniger belegte Spitäler werden bevorzugt.
 - **Hinweis:** Der Patient behält seine Abteilung (Ward/ICU), seinen Zustand und seinen Mikro-Episode-Status.
 
 ---
@@ -274,7 +275,7 @@ Der Patient gibt der Makro-Übertragungsformel zwei Grössen zurück:
 | `transmission_multiplier_for_macro()` | `sociability × relative_transmissibility` | Skaliert `base_transmission_rate` nach oben/unten |
 | `susceptibility_multiplier_for_macro()` | `1 / immune_strength` | Skaliert den Hazard nach oben/unten (schwächere Immunität = höheres Risiko) |
 
-`relative_transmissibility` wird täglich vom Mikro-Layer aktualisiert — resistentere, besser angepasste Stämme können eine höhere Transmissibilität haben.
+`relative_transmissibility` wird täglich vom Mikro-Layer aktualisiert, resistentere, besser angepasste Stämme können eine höhere Transmissibilität haben.
 
 ---
 
@@ -329,7 +330,7 @@ Die Antwort des Mikro-Layers wird via `patient.apply_micro_response()` auf den P
 }
 ```
 
-**Wichtig:** Nur die Makro-Ebene entscheidet über den S/C-Zustandswechsel. Der Mikro-Layer liefert lediglich `p_clearance` als Wahrscheinlichkeit zurück — die eigentliche C→S Entscheidung trifft `MacroSimulator` via `patient.should_clear_today()`.
+**Wichtig:** Nur die Makro-Ebene entscheidet über den S/C-Zustandswechsel. Der Mikro-Layer liefert lediglich `p_clearance` als Wahrscheinlichkeit zurück, die eigentliche C→S Entscheidung trifft `MacroSimulator` via `patient.should_clear_today()`.
 
 ---
 

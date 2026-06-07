@@ -5,47 +5,46 @@
 Die Micro-Ebene modelliert, was **innerhalb eines einzelnen Patienten** mit einer bakteriellen Population passiert. Im Gegensatz zur Makro-Ebene, die Patientenbewegungen, Transmission zwischen Patienten und Krankenhauslogik abbildet, simuliert die Micro-Ebene:
 
 - Wachstum und Absterben von Bakterien
-- Konkurrenz zwischen mehreren Staemmen
+- Konkurrenz zwischen mehreren Stämmen
 - Mutation
 - Horizontalen Gentransfer (HGT)
 - Selektion durch Antibiotika
 - Selektion durch das Immunsystem
-- Ableitung von makro-relevanten Groessen wie:
+- Ableitung von makro-relevanten Grössen wie:
   - `p_clearance`
   - `relative_transmissibility`
   - `severity_modifier`
-  - `lethality_modifier`
 
 Die drei zentralen Dateien sind:
 
 - `genome.py`: Genomdarstellung, Fitness-Helfer, Resistenzlogik
 - `engine.py`: eigentliche Within-Host-Simulation
-- `simulator.py`: Episodenverwaltung und Batch-Verarbeitung fuer viele Patienten
+- `simulator.py`: Episodenverwaltung und Batch-Verarbeitung für viele Patienten
 
 ## Grundidee des Modells
 
-Die Micro-Simulation arbeitet nicht mit einem einzelnen Bakterium, sondern mit einer **Population aus Staemmen**. Jeder Stamm hat:
+Die Micro-Simulation arbeitet nicht mit einem einzelnen Bakterium, sondern mit einer **Population aus Stämmen**. Jeder Stamm hat:
 
 - ein Genom als Vektor aus `NUM_GENES = 14` kontinuierlichen Genwerten
-- eine Populationsgroesse
+- eine Populationsgrösse
 - ein Linienalter (`lineage_ages`)
 - eine angesammelte Schadenslast (`damage_loads`)
 - einen Namen (`strain_names`)
 
 Ein Tag wird in `steps_per_day = 12` diskrete Schritte zerlegt. In jedem Schritt passiert in dieser Reihenfolge:
 
-1. **Selection Step**: Wachstum und Tod haengen von Fitness, Immunstatus, Antibiotika und Lebenszyklus-Kosten ab.
-2. **Mutation**: Neue Varianten koennen durch verrauschte Genveraenderungen entstehen.
-3. **HGT**: In jedem dritten Schritt koennen Gene zwischen Staemmen uebertragen werden.
-4. **Consolidation**: Sehr kleine Staemme werden entfernt, zu viele Staemme werden abgeschnitten.
+1. **Selection Step**: Wachstum und Tod hängen von Fitness, Immunstatus, Antibiotika und Lebenszyklus-Kosten ab.
+2. **Mutation**: Neue Varianten können durch verrauschte Genveränderungen entstehen.
+3. **HGT**: In jedem dritten Schritt können Gene zwischen Stämmen übertragen werden.
+4. **Consolidation**: Sehr kleine Stämme werden entfernt, zu viele Stämme werden abgeschnitten.
 
-Am Ende des Tages wird aus der finalen Population eine Micro-Response gebaut, die an den `Patient` zurueckgeht.
+Am Ende des Tages wird aus der finalen Population eine Micro-Response gebaut, die an den `Patient` zurückgeht.
 
 ## Architektur und Datenfluss
 
 ### 1. Makro-Layer baut den Tageskontext
 
-Der Makro-Simulator erzeugt pro Tag einen `PatientDailyContext`. Relevant dafuer sind vor allem:
+Der Makro-Simulator erzeugt pro Tag einen `PatientDailyContext`. Relevant dafür sind vor allem:
 
 - Krankenhaus und Station
 - Isolationsstatus
@@ -53,26 +52,26 @@ Der Makro-Simulator erzeugt pro Tag einen `PatientDailyContext`. Relevant dafuer
 
 Das passiert in `mss/simulation/macro/simulator.py` in `_build_context()`.
 
-### 2. `patient.py` uebersetzt Makro-Zustand in einen Micro-Request
+### 2. `patient.py` übersetzt Makro-Zustand in einen Micro-Request
 
-Die Klasse `Patient` ist die Bruecke zwischen Makro und Micro.
+Die Klasse `Patient` ist die Brücke zwischen Makro und Micro.
 
 Wichtige Methoden:
 
-- `update_context(ctx)`: uebernimmt Makro-Kontext und leitet z. B. `adherence` ab
-- `make_micro_request(...)`: baut die Eingabe fuer die Micro-Simulation
-- `apply_micro_response(resp)`: uebernimmt die Antwort der Micro-Simulation
+- `update_context(ctx)`: übernimmt Makro-Kontext und leitet z. B. `adherence` ab
+- `make_micro_request(...)`: baut die Eingabe für die Micro-Simulation
+- `apply_micro_response(resp)`: übernimmt die Antwort der Micro-Simulation
 
 Wichtig: Ein Request wird nur gebaut, wenn der Patient `HealthState.CARRIER` ist und eine `episode_id` hat.
 
 ### 3. `MicroSimulator` verarbeitet den Request
 
-`mss/simulation/micro/simulator.py` kuemmert sich um:
+`mss/simulation/micro/simulator.py` kümmert sich um:
 
 - Wiederherstellung des bisherigen Episodenzustands
 - Initialisierung einer neuen Population bei neuer Episode
 - Aufruf von `simulate_day(...)`
-- Rueckgabe einer Response
+- Rückgabe einer Response
 - Persistenz des EpisodeState zwischen Tagen
 
 ### EpisodeState und Persistenz
@@ -94,14 +93,14 @@ Das bedeutet:
 
 - Mutationen vom Vortag bleiben erhalten
 - HGT-Ereignisse bleiben erhalten
-- dominante Staemme koennen sich ueber mehrere Tage etablieren
-- Alterungs- und Schadenseffekte akkumulieren ueber mehrere Tage
+- dominante Stämme können sich über mehrere Tage etablieren
+- Alterungs- und Schadenseffekte akkumulieren über mehrere Tage
 
-Ohne diesen Zustand waere die Simulation nur eine taegliche Einzelsimulation ohne echte Within-Host-Evolution.
+Ohne diesen Zustand wäre die Simulation nur eine tägliche Einzelsimulation ohne echte Within-Host-Evolution.
 
-### 4. Rueckwirkung auf die Makro-Ebene
+### 4. Rückwirkung auf die Makro-Ebene
 
-Die Micro-Response beeinflusst die Makro-Ebene ueber `Patient.apply_micro_response()`:
+Die Micro-Response beeinflusst die Makro-Ebene über `Patient.apply_micro_response()`:
 
 - `resistant_fraction`
 - `dominant_genotype`
@@ -109,14 +108,12 @@ Die Micro-Response beeinflusst die Makro-Ebene ueber `Patient.apply_micro_respon
 - `relative_transmissibility`
 - `p_clearance`
 - `severity_modifier`
-- `lethality_modifier`
 
 Diese Werte wirken danach in der Makro-Ebene weiter:
 
 - `p_clearance` steuert `C -> S` in `Patient.should_clear_today()`
 - `relative_transmissibility` skaliert Transmission in `transmission_multiplier_for_macro()`
-- `lethality_modifier` skaliert das Todesrisiko in `daily_death_risk_multiplier()`
-- `dominant_genotype` und `resistant_fraction` werden bei Uebertragung auf neue Patienten vererbt
+- `dominant_genotype` und `resistant_fraction` werden bei Übertragung auf neue Patienten vererbt
 
 ## Verbindung zu `patient.py`
 
@@ -124,71 +121,62 @@ Diese Werte wirken danach in der Makro-Ebene weiter:
 
 ### `state`
 
-- Nur Traeger (`CARRIER`) werden an die Micro-Ebene geschickt.
+- Nur Träger (`CARRIER`) werden an die Micro-Ebene geschickt.
 - `SUSCEPTIBLE` erzeugt keinen Micro-Request.
 
 ### `episode_id`
 
 - Identifiziert die laufende Besiedelungs-/Infektionsepisode.
-- Dient in `MicroSimulator` als Schluessel fuer persistenten Zustand ueber mehrere Tage.
+- Dient in `MicroSimulator` als Schlüssel für persistenten Zustand über mehrere Tage.
 
 ### `compliance`
 
 - Wird in `update_context()` in `adherence` umgewandelt.
 - ICU-Patienten erhalten dort aktuell einen Bonus von `+0.1`, gedeckelt auf `1.0`.
-- Hoehere `adherence` verstaerkt die effektive Antibiotikawirkung.
+- Höhere `adherence` verstärkt die effektive Antibiotikawirkung.
 
 ### `immune_strength`
 
 - Geht direkt in die Immun-Selektion ein.
-- Hoehere Werte erhoehen die Immunclearance und spaeter auch `p_clearance`.
+- Höhere Werte erhöhen die Immunclearance und später auch `p_clearance`.
 
 ### `resistant_fraction`
 
 - Wird bei neuen Episoden als Anteil resistenter Startpopulation interpretiert.
-- Bestimmt, wie viel der Anfangspopulation aus resistenten Seed-Staemmen besteht.
+- Bestimmt, wie viel der Anfangspopulation aus resistenten Seed-Stämmen besteht.
 
 ### `dominant_genotype`
 
 - Gibt die resistente Startklasse vor: `"S"`, `"R1"`, `"R2"` oder `"R3"`.
-- Steuert, welches Seed-Genom bei resistenten Anfangsstaemmen erzeugt wird.
+- Steuert, welches Seed-Genom bei resistenten Anfangsstämmen erzeugt wird.
 
 ### `dominant_strain_name`
 
-- Wenn vorhanden, wird dieser Name bevorzugt fuer den dominanten Seed-Stamm weiterverwendet.
+- Wenn vorhanden, wird dieser Name bevorzugt für den dominanten Seed-Stamm weiterverwendet.
 
-### Patient-Felder ohne direkten Micro-Effekt in der aktuellen Implementierung
+### Patient-Felder mit Wirkung auf der Makro-Ebene
 
-Diese Felder werden zwar in den Request geschrieben oder in `Patient` gepflegt, beeinflussen die Engine derzeit aber **nicht direkt**:
+Diese Felder steuern Makro-Prozesse; die Within-Host-Engine wird über Immunsystem, Antibiotikaregime und Adherence parametriert:
 
-- `age_years`
-- `history_flags`
-- `sociability`
-- `is_isolated`
-- `hospital_id`
-- `severity_modifier`
-
-Davon wirken manche nur auf der Makro-Ebene:
-
-- `sociability` beeinflusst Transmission im Makro-Layer
+- `sociability` skaliert die Transmission im Makro-Layer
 - `is_isolated` beeinflusst Makro-Transmission und Entlassungslogik
+- `severity_modifier` skaliert Aufenthaltsverlängerung und Mortalität im Makro-Layer
+- `age_years`, `history_flags`, `hospital_id` beschreiben den Patientenkontext
 
 ## Verbindung zum Makro-Layer
 
-### Direkte Einfluesse von Makro auf Micro
+### Direkte Einflüsse von Makro auf Micro
 
 ### Station (`Department`)
 
-Der Request enthaelt `setting = self.department.value`, aber:
+Der Request trägt `setting = self.department.value`. Die Station wirkt auf die Micro-Dynamik indirekt:
 
-- das Feld wird aktuell in der Micro-Engine **nicht verwendet**
-- indirekt wirkt die Station trotzdem:
-  - auf ICU wird `adherence` in `Patient.update_context()` erhoeht
-  - ICU hat im Makro eine hoehere Wahrscheinlichkeit fuer Antibiotika
+- auf der ICU wird `adherence` in `Patient.update_context()` erhöht
+- die ICU hat im Makro eine höhere Antibiotika-Wahrscheinlichkeit
 
 ### Antibiotika-Politik
 
-Makro erzeugt ueber `_build_context()` taeglich ein `AntibioticRegimen`:
+Makro erzeugt über `_build_context()` täglich ein `AntibioticRegimen`:
 
 - `regimen.on`
 - `regimen.abx_class`
@@ -202,43 +190,29 @@ Diese Werte gehen direkt in die Micro-Selektion ein und bestimmen:
 
 ### Isolation, Hygiene und Diagnostik
 
-Im `PatientDailyContext` existieren:
+Die Grössen `hygiene_level`, `isolation_effectiveness`, `diagnostic_speed` und `is_isolated` aus dem `PatientDailyContext` wirken ausschliesslich auf der Makro-Ebene (Transmission und Entlassung). Die Within-Host-Dynamik hängt von Immunsystem, Antibiotikaregime und Adherence ab.
 
-- `hygiene_level`
-- `isolation_effectiveness`
-- `diagnostic_speed`
-- `is_isolated`
-
-Aber in der aktuellen Implementierung gilt:
-
-- `hygiene_level` wird **nicht** an Micro uebergeben
-- `isolation_effectiveness` wird **nicht** an Micro uebergeben
-- `diagnostic_speed` wird **nicht** an Micro weitergereicht
-- `is_isolated` wird zwar im Patient gespeichert, beeinflusst die Micro-Engine aber nicht
-
-Diese Groessen sind momentan also primaer Makro-Parameter.
-
-### Direkte Rueckkopplung von Micro auf Makro
+### Direkte Rückkopplung von Micro auf Makro
 
 ### `relative_transmissibility`
 
 - wird aus dem dominanten Stamm berechnet
-- skaliert in Makro den Beitrag eines Traegers zur Transmission
+- skaliert in Makro den Beitrag eines Trägers zur Transmission
 
 ### `p_clearance`
 
 - wird aus Gesamtpopulation, Immunsystem und Stealth berechnet
-- wird am naechsten Makro-Tag fuer die Entscheidung `C -> S` verwendet
+- wird am nächsten Makro-Tag für die Entscheidung `C -> S` verwendet
 
-### `severity_modifier` und `lethality_modifier`
+### `severity_modifier`
 
-- werden aus dem dominanten Stamm abgeleitet
-- koennen in Makro Schweregrad und Mortalitaet skalieren
+- wird aus dem dominanten Stamm abgeleitet
+- skaliert in Makro Schweregrad und Mortalität über `severity_modifier`
 
 ### `dominant_genotype` und `resistant_fraction`
 
-- werden bei Transmission auf neue Patienten uebernommen
-- Makro kann dabei zusaetzlich kleine Mutation/Drift auf Resistenz und Genotyp anwenden
+- werden bei Transmission auf neue Patienten übernommen
+- die Transmission vererbt den Quellstamm exakt; Resistenz-Drift entsteht erst within-host im Mikro-Layer (Makro wendet bei der Übertragung keine Mutation/Drift an)
 
 ## Der Request an die Micro-Ebene
 
@@ -285,18 +259,18 @@ Wichtige Default-Werte:
 
 Die Startpopulation wird dann so aufgeteilt:
 
-- Anteil `1 - resistant_fraction` auf empfindliche Staemme
-- Anteil `resistant_fraction` auf resistente Staemme
+- Anteil `1 - resistant_fraction` auf empfindliche Stämme
+- Anteil `resistant_fraction` auf resistente Stämme
 
-Die Genomwerte werden anschliessend noch leicht verrauscht, damit nicht alle Seed-Staemme exakt identisch sind.
+Die Genomwerte werden anschliessend noch leicht verrauscht, damit nicht alle Seed-Stämme exakt identisch sind.
 
-Wichtig fuer die Erklaerung:
+Wichtig für die Erklärung:
 
-- `dominant_genotype` bestimmt, **welche Art resistenter Seed-Staemme** erzeugt wird
+- `dominant_genotype` bestimmt, **welche Art resistenter Seed-Stämme** erzeugt wird
 - `resistant_fraction` bestimmt, **wie viel der Anfangspopulation** resistent ist
 - beides zusammen bestimmt also Startlage und Selektionsreserve
 
-## Welche Request-Felder werden aktuell wirklich verwendet?
+## Vom Micro-Layer genutzte Request-Felder
 
 ### Aktiv genutzt
 
@@ -313,7 +287,7 @@ Wichtig fuer die Erklaerung:
 - `initial_state.dominant_genotype`
 - `initial_state.dominant_strain_name`
 
-### Aktuell nur transportiert, aber nicht in der Engine genutzt
+### Im Request transportiert, für Erweiterungen reserviert
 
 - `schema_version`
 - `run_id`
@@ -322,11 +296,9 @@ Wichtig fuer die Erklaerung:
 - `host.age_years`
 - `host.history_flags`
 
-Das ist wichtig fuer muendliche Erklaerungen: Im Datenmodell sind diese Felder schon vorgesehen, die aktuelle Engine verarbeitet aber nur einen Teil davon.
-
 ## Genom und "Allele"
 
-### Wichtige Praezisierung
+### Wichtige Präzisierung
 
 Im Code gibt es **keine expliziten diskreten Allele im klassischen mendelschen Sinn**. Es gibt also keine Objekte wie `"Allel A"` oder `"Allel a"`, keine Diploidie und keine festen Basenfolgen.
 
@@ -334,14 +306,14 @@ Stattdessen wird jedes "Gen" als **kontinuierlicher Zahlenwert zwischen `0.0` un
 
 Du kannst dir das so merken:
 
-- `0.0` = Eigenschaft praktisch nicht ausgepraegt
-- `1.0` = Eigenschaft sehr stark ausgepraegt
+- `0.0` = Eigenschaft praktisch nicht ausgeprägt
+- `1.0` = Eigenschaft sehr stark ausgeprägt
 
-Wenn du nach "Allelen" gefragt wirst, ist die praezise Antwort fuer dieses Modell:
+Wenn du nach "Allelen" gefragt wirst, ist die präzise Antwort für dieses Modell:
 
-> Ein "Allel" ist hier keine diskrete Kategorie, sondern die aktuelle Auspraegung eines Gen-Slots als kontinuierlicher Wert im Genomvektor.
+> Ein "Allel" ist hier keine diskrete Kategorie, sondern die aktuelle Ausprägung eines Gen-Slots als kontinuierlicher Wert im Genomvektor.
 
-Mutation veraendert diesen Wert durch Gauss-Rauschen, HGT mischt Werte zwischen Donor und Empfaenger.
+Mutation verändert diesen Wert durch Gauss-Rauschen, HGT mischt Werte zwischen Donor und Empfänger.
 
 ## Gene des Genoms
 
@@ -349,20 +321,20 @@ Das Genom hat `14` Slots. Die Indizes sind in `GeneIndex` definiert.
 
 | Index | Gen | Bedeutung | Hauptwirkung |
 |---|---|---|---|
-| 0 | `GROWTH_BASE` | Basiswachstum | Hoeherer Grundwert steigert Fitness |
+| 0 | `GROWTH_BASE` | Basiswachstum | Höherer Grundwert steigert Fitness |
 | 1 | `METABOLIC_OPTIMIZATION` | Kompensation metabolischer Kosten | Senkt Resistenzkosten |
-| 2 | `EFFLUX_PUMPS` | Auspumpen von Antibiotika | Schuetzt vor mehreren ABX-Klassen |
-| 3 | `TARGET_MODIFICATION` | Veraenderung des Angriffsziels | Starker Schutz bei zielgerichteten ABX |
-| 4 | `PERMEABILITY_REDUCTION` | Geringere Zellpermeabilitaet | Senkt ABX-Eindringen |
-| 5 | `VIRULENCE` | Virulenz | Erhoeht Severity und Lethality, leicht auch Transmission |
+| 2 | `EFFLUX_PUMPS` | Auspumpen von Antibiotika | Schützt vor mehreren ABX-Klassen |
+| 3 | `TARGET_MODIFICATION` | Veränderung des Angriffsziels | Starker Schutz bei zielgerichteten ABX |
+| 4 | `PERMEABILITY_REDUCTION` | Geringere Zellpermeabilität | Senkt ABX-Eindringen |
+| 5 | `VIRULENCE` | Virulenz | Erhöht Severity (und darüber Mortalität), leicht auch Transmission |
 | 6 | `STEALTH` | Immunevasion | Reduziert Immun-Clearance und senkt `p_clearance` |
-| 7 | `ADHESION` | Anhaftung/Haftfaehigkeit | Erhoeht Transmission und Severity |
-| 8 | `MUTATION_RATE_MODIFIER` | Evolvierbarkeit | Erhoeht stammspezifische Mutationsrate |
-| 9 | `HGT_COMPETENCE` | Aufnahmefaehigkeit fuer HGT | Erhoeht HGT-Wahrscheinlichkeit |
-| 10 | `DNA_REPAIR` | Reparaturkapazitaet | Senkt Schadenslast und Alterungsdruck |
-| 11 | `DORMANCY_PROPENSITY` | Neigung zur Dormanz | Weniger Wachstum, aber mehr Ueberleben unter Stress |
-| 12 | `STRESS_RESPONSE` | Antwort auf Umweltstress | Unterstuetzt Ueberleben, Reparatur und Toleranz |
-| 13 | `DAMAGE_TOLERANCE` | Toleranz gegen Schaeden | Senkt turnover-/schadensbedingten Tod |
+| 7 | `ADHESION` | Anhaftung/Haftfähigkeit | Erhöht Transmission und Severity |
+| 8 | `MUTATION_RATE_MODIFIER` | Evolvierbarkeit | Erhöht stammspezifische Mutationsrate |
+| 9 | `HGT_COMPETENCE` | Aufnahmefähigkeit für HGT | Erhöht HGT-Wahrscheinlichkeit |
+| 10 | `DNA_REPAIR` | Reparaturkapazität | Senkt Schadenslast und Alterungsdruck |
+| 11 | `DORMANCY_PROPENSITY` | Neigung zur Dormanz | Weniger Wachstum, aber mehr Überleben unter Stress |
+| 12 | `STRESS_RESPONSE` | Antwort auf Umweltstress | Unterstützt Überleben, Reparatur und Toleranz |
+| 13 | `DAMAGE_TOLERANCE` | Toleranz gegen Schäden | Senkt turnover-/schadensbedingten Tod |
 
 ## Wildtyp und resistente Startgenome
 
@@ -372,34 +344,34 @@ Der Wildtyp startet:
 
 - mit gutem Basiswachstum
 - mit niedrigen Resistenzwerten
-- mit moderater Virulenz/Adhaesion/Stealth
+- mit moderater Virulenz/Adhäsion/Stealth
 
-Das ist ein eher empfindlicher, aber konkurrenzfaehiger Ausgangsstamm.
+Das ist ein eher empfindlicher, aber konkurrenzfähiger Ausgangsstamm.
 
 ### `create_resistant_genome(resistance_level)`
 
 Ein resistentes Genom:
 
-- erhoeht `EFFLUX_PUMPS`
-- erhoeht `TARGET_MODIFICATION`
-- erhoeht `PERMEABILITY_REDUCTION`
-- erhoeht Kompensations- und Stressgene
+- erhöht `EFFLUX_PUMPS`
+- erhöht `TARGET_MODIFICATION`
+- erhöht `PERMEABILITY_REDUCTION`
+- erhöht Kompensations- und Stressgene
 - senkt leicht `GROWTH_BASE`
 
 Die Idee dahinter:
 
-- Resistenz schuetzt vor Antibiotika
+- Resistenz schützt vor Antibiotika
 - Resistenz kostet aber typischerweise Wachstum
 - Kompensationsgene federn einen Teil dieser Kosten ab
 
-### Startgenome fuer `R1`, `R2`, `R3`
+### Startgenome für `R1`, `R2`, `R3`
 
-Bei der Initialisierung wird fuer resistente Seed-Staemme nicht nur ein generisches Resistenzlevel genutzt, sondern `_create_seed_genome_for_genotype()`:
+Bei der Initialisierung wird für resistente Seed-Stämme nicht nur ein generisches Resistenzlevel genutzt, sondern `_create_seed_genome_for_genotype()`:
 
 - `S`: Wildtyp bzw. niedrige Resistenz
 - `R1`: leichte Resistenz
-- `R2`: mittlere Resistenz mit deutlich hoeheren Stress-/Persistenzwerten
-- `R3`: starke Resistenz, groessere Kosten, aber starke Schutzmechanismen
+- `R2`: mittlere Resistenz mit deutlich höheren Stress-/Persistenzwerten
+- `R3`: starke Resistenz, grössere Kosten, aber starke Schutzmechanismen
 
 ## Genotyp-Klassifikation
 
@@ -450,7 +422,7 @@ In `ABX_PROFILES` ist festgelegt, wie gut verschiedene Resistenzmechanismen gege
 | `tetracycline` | 0.8 | 0.3 | 0.2 | 0.60 |
 | `glycopeptide` | 0.2 | 0.9 | 0.5 | 0.85 |
 
-Zusaetzlich gibt es Dosis-Multiplikatoren:
+Zusätzlich gibt es Dosis-Multiplikatoren:
 
 - `low` -> `0.6`
 - `std` -> `1.0`
@@ -462,9 +434,9 @@ Die effektive Kill-Rate ist:
 effective_kill = base_kill_rate * dose_multiplier * adherence
 ```
 
-Der Resistenzschutz wird aus den drei Resistenzgenen aufaddiert, profilabhaengig gewichtet, dann normalisiert und auf `0.95` begrenzt.
+Der Resistenzschutz wird aus den drei Resistenzgenen aufaddiert, profilabhängig gewichtet, dann normalisiert und auf `0.95` begrenzt.
 
-Die resultierende Ueberlebenswahrscheinlichkeit unter ABX ist:
+Die resultierende Überlebenswahrscheinlichkeit unter ABX ist:
 
 ```text
 survival = 1 - effective_kill * (1 - protection)
@@ -472,8 +444,8 @@ survival = 1 - effective_kill * (1 - protection)
 
 Interpretation:
 
-- hohe Adherence -> Antibiotika wirken staerker
-- hohe Dosis -> Antibiotika wirken staerker
+- hohe Adherence -> Antibiotika wirken stärker
+- hohe Dosis -> Antibiotika wirken stärker
 - passende Resistenzmechanismen -> Schutz steigt
 
 ## Fitnesslogik
@@ -501,7 +473,7 @@ Die Rohkosten sind die gewichtete Summe der Resistenzgene.
 Interpretation:
 
 - Resistenz ist nicht kostenlos
-- Kompensationsgene machen resistente Staemme wieder konkurrenzfaehiger
+- Kompensationsgene machen resistente Stämme wieder konkurrenzfähiger
 
 ### Immunsystem
 
@@ -510,10 +482,10 @@ Interpretation:
 - Basisclearance = `0.15 * immune_strength`
 - `STEALTH` reduziert die Erkennung um bis zu `70%`
 
-Hoeheres `STEALTH` bedeutet also:
+Höheres `STEALTH` bedeutet also:
 
-- mehr Ueberleben unter Immunangriff
-- spaeter auch geringere Clearance-Wahrscheinlichkeit des Patienten
+- mehr Überleben unter Immunangriff
+- später auch geringere Clearance-Wahrscheinlichkeit des Patienten
 
 ## Ablauf eines Selection Steps
 
@@ -521,7 +493,7 @@ Hoeheres `STEALTH` bedeutet also:
 
 ### 1. Fitness berechnen
 
-Fuer jeden Stamm wird die Fitness unter aktuellen Umweltbedingungen berechnet.
+Für jeden Stamm wird die Fitness unter aktuellen Umweltbedingungen berechnet.
 
 ### 2. Relative Selektion
 
@@ -532,7 +504,7 @@ relative_fitness = fitness / mean_fitness
 selection_factor = relative_fitness ** selection_strength
 ```
 
-Hoeheres `selection_strength` bedeutet:
+Höheres `selection_strength` bedeutet:
 
 - Gewinner wachsen schneller
 - Verlierer verlieren schneller Population
@@ -554,7 +526,7 @@ Dann greifen Lebenszyklusgene ein:
 - `METABOLIC_OPTIMIZATION`
 - `STEALTH`
 
-Es werden daraus drei Kapazitaeten abgeleitet:
+Es werden daraus drei Kapazitäten abgeleitet:
 
 - `repair_capacity`
 - `dormancy_capacity`
@@ -568,12 +540,12 @@ Effekt:
 
 - Wachstum sinkt
 - Replikationsdruck sinkt
-- Ueberleben unter Stress kann steigen
+- Überleben unter Stress kann steigen
 
 Das ist ein klassischer Trade-off:
 
 - langsamere Expansion
-- dafuer robustere Persistenz
+- dafür robustere Persistenz
 
 ### 5. Schadensaufbau und Reparatur
 
@@ -589,7 +561,7 @@ Schadensabbau kommt aus:
 - Dormanz-/Repair-Synergie
 - Stress-/Toleranz-Synergie
 
-Hohe `damage_loads` erhoehen spaeter den Tod.
+Hohe `damage_loads` erhöhen später den Tod.
 
 ### 6. Linienalter und Turnover
 
@@ -610,17 +582,17 @@ Die Todesrate kombiniert:
 Kleine Populationen werden nicht nur deterministisch gerechnet:
 
 - unter `stochastic_threshold` wird Poisson-Sampling verwendet
-- darueber Normalrauschen mit Standardabweichung `sqrt(expected) * stochastic_noise_scale`
+- darüber Normalrauschen mit Standardabweichung `sqrt(expected) * stochastic_noise_scale`
 
-Dadurch koennen kleine Staemme zufaellig verschwinden.
+Dadurch können kleine Stämme zufällig verschwinden.
 
 ### 9. Carrying Capacity
 
-Wenn die Gesamtpopulation groesser als `carrying_capacity` wird, werden alle Populationen proportional nach unten skaliert.
+Wenn die Gesamtpopulation grösser als `carrying_capacity` wird, werden alle Populationen proportional nach unten skaliert.
 
 ## Mutation
 
-`mutate_population(...)` erzeugt neue Staemme.
+`mutate_population(...)` erzeugt neue Stämme.
 
 ### Mutationsrate
 
@@ -639,29 +611,29 @@ stress_multiplier = 1 + abx_stress * (stress_mutation_boost - 1)
 
 Interpretation:
 
-- Antibiotika-Stress erhoeht Mutationsraten
-- Staemme mit hohem `MUTATION_RATE_MODIFIER` evolvieren schneller
+- Antibiotika-Stress erhöht Mutationsraten
+- Stämme mit hohem `MUTATION_RATE_MODIFIER` evolvieren schneller
 
 ### Art der Mutation
 
 - Anzahl Mutationen pro Schritt: Poisson
-- betroffene Gene: zufaellige Auswahl ohne Zuruecklegen
-- Aenderung pro Gen: Gauss-Verteilung mit `mutation_std`
+- betroffene Gene: zufällige Auswahl ohne Zurücklegen
+- Änderung pro Gen: Gauss-Verteilung mit `mutation_std`
 - neue Genwerte werden auf `[0.0, 1.0]` begrenzt
 
 Wenn eine Mutation stattfindet und der Stamm gross genug ist:
 
 - ein kleiner Teil der Population wird abgespalten
 - daraus entsteht ein neuer Stamm
-- Alter und Schadenslast werden teilweise "verjuengt"
+- Alter und Schadenslast werden teilweise "verjüngt"
 
 ## Horizontaler Gentransfer (HGT)
 
-`horizontal_gene_transfer(...)` laesst Staemme Gene von anderen Staemmen uebernehmen.
+`horizontal_gene_transfer(...)` lässt Stämme Gene von anderen Stämmen übernehmen.
 
 ### HGT-Wahrscheinlichkeit
 
-Sie haengt ab von:
+Sie hängt ab von:
 
 - `base_hgt_rate`
 - `HGT_COMPETENCE`
@@ -674,7 +646,7 @@ hgt_prob = base_hgt_rate * (0.5 + HGT_COMPETENCE)
 
 ### Transferierbare Gene
 
-Nicht alle Gene werden per HGT uebertragen. Transferierbar sind:
+Nicht alle Gene werden per HGT übertragen. Transferierbar sind:
 
 - `EFFLUX_PUMPS`
 - `TARGET_MODIFICATION`
@@ -689,20 +661,20 @@ Das ist biologisch sinnvoll, weil vor allem Resistenz- und Persistenzmechanismen
 ### Transfermechanik
 
 - Donor wird populationsgewichtet gezogen
-- pro transferierbarem Gen entscheidet `hgt_gene_transfer_prob`, ob es uebertragen wird
-- der Empfaengerwert wird nicht hart ersetzt, sondern mit dem Donorwert gemischt
+- pro transferierbarem Gen entscheidet `hgt_gene_transfer_prob`, ob es übertragen wird
+- der Empfängerwert wird nicht hart ersetzt, sondern mit dem Donorwert gemischt
 
 Auch hier entsteht ein neuer rekombinanter Teilstamm.
 
 ## Clearance-Wahrscheinlichkeit des Patienten
 
-`compute_clearance_probability(...)` erzeugt die taegliche Wahrscheinlichkeit, dass der Patient im Makro-Layer wieder von `CARRIER` zu `SUSCEPTIBLE` wechselt.
+`compute_clearance_probability(...)` erzeugt die tägliche Wahrscheinlichkeit, dass der Patient im Makro-Layer wieder von `CARRIER` zu `SUSCEPTIBLE` wechselt.
 
 Einflussfaktoren:
 
 - Gesamtpopulation
-- `clearance_threshold`
 - `min_population`
+- `clearance_threshold`
 - `carrying_capacity`
 - `immune_strength`
 - durchschnittliches `STEALTH` der Population
@@ -711,12 +683,12 @@ Logik:
 
 - sehr kleine Population -> hohe Clearance
 - grosse Population -> niedrige Clearance
-- starkes Immunsystem -> hoehere Clearance
+- starkes Immunsystem -> höhere Clearance
 - hohe Stealth-Werte -> niedrigere Clearance
 
 ## Response der Micro-Ebene
 
-`population_to_response(...)` erzeugt drei Bloecke:
+`population_to_response(...)` erzeugt drei Blöcke:
 
 ### `updated_state`
 
@@ -727,7 +699,6 @@ Logik:
 ### `derived_effects`
 
 - `relative_transmissibility`
-- `lethality_modifier`
 - `severity_modifier`
 - `p_clearance`
 
@@ -737,7 +708,7 @@ Logik:
 - `n_strains`
 - `dominant_strain_name`
 
-Die `population_stats` werden aktuell in `Patient.apply_micro_response()` nicht genutzt, koennen aber fuer Debugging oder spaetere Erweiterungen hilfreich sein.
+Die `population_stats` werden aktuell in `Patient.apply_micro_response()` nicht genutzt, können aber für Debugging oder spätere Erweiterungen hilfreich sein.
 
 ## Alle Parameter der Micro-Ebene und ihr Einfluss
 
@@ -745,37 +716,37 @@ Gemeint ist hier die `SimulationConfig` aus `engine.py`.
 
 | Parameter | Default | Einfluss |
 |---|---:|---|
-| `steps_per_day` | `12` | Mehr Schritte pro Tag = feinere Dynamik, mehr Gelegenheiten fuer Selektion, Mutation und HGT |
-| `max_strains` | `50` | Begrenzt, wie viele unterschiedliche Staemme gehalten werden; zu klein kann Diversitaet abschneiden |
-| `carrying_capacity` | `1e9` | Obergrenze der Gesamtpopulation; kleiner = staerkerer logistischer Druck |
-| `min_population` | `1e3` | Unterhalb davon wird Clearance deutlich wahrscheinlicher |
-| `clearance_threshold` | `1e2` | Unterhalb davon ist Clearance fast sicher |
-| `base_mutation_rate` | `0.01` | Grundwahrscheinlichkeit fuer Mutationen pro Gen und Schritt |
-| `mutation_std` | `0.05` | Staerke einzelner Mutationsschritte; groesser = mutationale Spruenge groesser |
-| `stress_mutation_boost` | `3.0` | Verstaerkt Mutation unter Antibiotikastress |
-| `base_hgt_rate` | `0.02` | Grundchance fuer HGT pro Stamm und Schritt |
-| `hgt_gene_transfer_prob` | `0.3` | Wahrscheinlichkeit, dass ein einzelnes transferierbares Gen wirklich uebernommen wird |
-| `selection_strength` | `2.0` | Verstaerkt Unterschiede zwischen fitten und unfitten Staemmen |
-| `growth_rate_per_step` | `0.3` | Oberes Wachstumslimit pro Schritt vor den Korrekturen |
-| `death_rate_per_step` | `0.1` | Grundsterberate pro Schritt |
-| `strain_prune_threshold` | `1.0` | Staemme unterhalb dieser Groesse werden entfernt |
-| `base_damage_per_step` | `0.03` | Grundschaeden unabhaengig von Replikation und Stress |
-| `replication_damage_factor` | `0.25` | Zusatzschaeden durch starke Replikation |
-| `stress_damage_factor` | `0.20` | Zusatzschaeden durch unguenstige Umwelt |
+| `steps_per_day` | `12` | Mehr Schritte pro Tag = feinere Dynamik, mehr Gelegenheiten für Selektion, Mutation und HGT |
+| `max_strains` | `40` | Begrenzt, wie viele unterschiedliche Stämme gehalten werden; zu klein kann Diversität abschneiden |
+| `carrying_capacity` | `5e8` | Obergrenze der Gesamtpopulation; kleiner = stärkerer logistischer Druck |
+| `min_population` | `100` | Extinktions-Untergrenze; darunter ist Clearance sicher |
+| `clearance_threshold` | `1000` | Unterhalb davon ist Clearance fast sicher |
+| `base_mutation_rate` | `0.012` | Grundwahrscheinlichkeit für Mutationen pro Gen und Schritt |
+| `mutation_std` | `0.025` | Stärke einzelner Mutationsschritte; grösser = mutationale Sprünge grösser |
+| `stress_mutation_boost` | `40.0` | Verstärkt Mutation unter Antibiotikastress |
+| `base_hgt_rate` | `0.03` | Grundchance für HGT pro Stamm und Schritt |
+| `hgt_gene_transfer_prob` | `0.25` | Wahrscheinlichkeit, dass ein einzelnes transferierbares Gen wirklich übernommen wird |
+| `selection_strength` | `2.5` | Verstärkt Unterschiede zwischen fitten und unfitten Stämmen |
+| `growth_rate_per_step` | `0.18` | Oberes Wachstumslimit pro Schritt vor den Korrekturen |
+| `death_rate_per_step` | `0.06` | Grundsterberate pro Schritt |
+| `strain_prune_threshold` | `200.0` | Stämme unterhalb dieser Grösse werden entfernt |
+| `base_damage_per_step` | `0.004` | Grundschäden unabhängig von Replikation und Stress |
+| `replication_damage_factor` | `0.03` | Zusatzschäden durch starke Replikation |
+| `stress_damage_factor` | `0.06` | Zusatzschäden durch ungünstige Umwelt |
 | `repair_rate_per_step` | `0.08` | Wie stark Reparaturmechanismen Schaden wieder abbauen |
-| `age_mortality_scale` | `0.015` | Einfluss des Linienalters auf Sterblichkeit |
-| `damage_mortality_scale` | `0.20` | Einfluss der Schadenslast auf Sterblichkeit |
-| `lifecycle_half_life_steps` | `36.0` | Skala, ab wann Linienalter relevant wird |
-| `max_damage_load` | `5.0` | Obergrenze/Saettigung fuer Schadenslast |
-| `dormancy_growth_penalty` | `0.25` | Wie stark Dormanz Wachstum reduziert |
+| `age_mortality_scale` | `0.001` | Einfluss des Linienalters auf Sterblichkeit |
+| `damage_mortality_scale` | `0.025` | Einfluss der Schadenslast auf Sterblichkeit |
+| `lifecycle_half_life_steps` | `200.0` | Skala, ab wann Linienalter relevant wird |
+| `max_damage_load` | `5.0` | Obergrenze/Sättigung für Schadenslast |
+| `dormancy_growth_penalty` | `0.55` | Wie stark Dormanz Wachstum reduziert |
 | `synergy_repair_dormancy_bonus` | `0.25` | Zusatznutzen, wenn Reparatur und Dormanz gemeinsam hoch sind |
 | `synergy_stress_tolerance_bonus` | `0.20` | Zusatznutzen, wenn Stressantwort und Toleranz gemeinsam hoch sind |
-| `stochastic_threshold` | `1e5` | Unterhalb davon wird exakte Poisson-Stochastik genutzt |
-| `stochastic_noise_scale` | `1.0` | Staerke des Rauschens bei grossen Populationen |
+| `stochastic_threshold` | `1e4` | Unterhalb davon wird exakte Poisson-Stochastik genutzt |
+| `stochastic_noise_scale` | `0.08` | Stärke des Rauschens bei grossen Populationen |
 
-## Welche Parameter sind fuer das Verhalten besonders wichtig?
+## Welche Parameter sind für das Verhalten besonders wichtig?
 
-Wenn du die Dynamik schnell erklaeren musst, sind diese Parameter die Schluesselhebel:
+Wenn du die Dynamik schnell erklären musst, sind diese Parameter die Schlüsselhebel:
 
 ### Resistenzentwicklung
 
@@ -797,46 +768,37 @@ Wenn du die Dynamik schnell erklaeren musst, sind diese Parameter die Schluessel
 
 ### Persistenz und Clearance
 
-- `min_population`
 - `clearance_threshold`
 - `carrying_capacity`
 - `repair_rate_per_step`
 - `damage_mortality_scale`
 - `dormancy_growth_penalty`
 
-## Was die Micro-Ebene explizit nicht macht
+## Modellierungsebene der Micro-Simulation
 
-Die aktuelle Implementierung modelliert nicht:
+Die Micro-Simulation arbeitet auf Stamm-Ebene mit einem Trait-Modell: Sie bildet Populationen von Stämmen mit kontinuierlichen Gen-Traits ab, getrieben von Selektion, Mutation und HGT. Pharmakodynamik wirkt aggregiert pro Tag über die ABX-Profile; der Wirt wird als ein homogenes Kompartiment modelliert.
 
-- einzelne Bakterienzellen
-- explizite DNA-Sequenzen
-- diskrete klassische Allelobjekte
-- Pharmakokinetik ueber den Tag
-- unterschiedliche Gewebe-/Organraeume
-- direkte Wirkung von Hygiene oder Isolation innerhalb des Wirts
-- Nutzung von `age_years` oder `history_flags` in der Engine
-
-## Ein typischer Tag eines Traeger-Patienten
+## Ein typischer Tag eines Träger-Patienten
 
 1. Makro erkennt den Patienten als `CARRIER`.
 2. Makro baut den `PatientDailyContext`.
 3. `Patient.update_context()` setzt Kontext, Regime und `adherence`.
 4. `Patient.make_micro_request()` baut den Tagesrequest.
-5. `MicroSimulator` laedt den bisherigen EpisodeState oder erzeugt eine neue Population.
-6. `simulate_day()` fuehrt 12 Schritte aus.
+5. `MicroSimulator` lädt den bisherigen EpisodeState oder erzeugt eine neue Population.
+6. `simulate_day()` führt 12 Schritte aus.
 7. `population_to_response()` berechnet dominanten Stamm und Makro-Effekte.
-8. `Patient.apply_micro_response()` schreibt die Werte in den Patient zurueck.
-9. Makro nutzt diese Werte fuer Clearance, Transmission und weitere Entscheidungen.
+8. `Patient.apply_micro_response()` schreibt die Werte in den Patient zurück.
+9. Makro nutzt diese Werte für Clearance, Transmission und weitere Entscheidungen.
 
-## Merksaetze fuer die Erklaerung
+## Merksätze für die Erklärung
 
 - Die Makro-Ebene sagt: **In welchem Patienten und unter welchen Rahmenbedingungen?**
 - Die Micro-Ebene sagt: **Welcher Stamm setzt sich innerhalb dieses Patienten durch und mit welchen Folgen?**
 - Das Genom ist hier kein Sequenzmodell, sondern ein **Trait-Vektor**.
-- "Allele" sind in diesem Modell am besten als **kontinuierliche Auspraegungen von Traits** zu verstehen.
+- "Allele" sind in diesem Modell am besten als **kontinuierliche Ausprägungen von Traits** zu verstehen.
 - `dominant_genotype` ist eine **abgeleitete Resistenzklasse**, kein eigenes Gen.
 - `resistant_fraction` beschreibt die gesamte Population, nicht nur den dominanten Stamm.
 
 ## Kurzfazit
 
-Die Micro-Ebene ist ein zustandsbehaftetes Within-Host-Modell fuer bakterielle Evolution. Sie nimmt pro Traegerpatient die aktuellen Selektionsbedingungen aus Makro und `patient.py` entgegen, entwickelt ueber 12 Schritte die Bakterienpopulation weiter und liefert danach genau die Groessen zurueck, die die Makro-Ebene fuer Transmission, Clearance und klinische Schwere braucht.
+Die Micro-Ebene ist ein zustandsbehaftetes Within-Host-Modell für bakterielle Evolution. Sie nimmt pro Trägerpatient die aktuellen Selektionsbedingungen aus Makro und `patient.py` entgegen, entwickelt über 12 Schritte die Bakterienpopulation weiter und liefert danach genau die Grössen zurück, die die Makro-Ebene für Transmission, Clearance und klinische Schwere braucht.
