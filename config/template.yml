@@ -4,6 +4,11 @@
 # It is meant as a copyable reference that documents every currently supported
 # YAML variable loaded by `mss.cli.run_coupled_simulation.load_coupled_settings`.
 #
+# NOTE: The values below are NEUTRAL, NON-CALIBRATED demo defaults for illustration.
+# They are deliberately NOT the calibrated production values; for those see
+# `config/simulation_realistic.yml` (calibration rationale in
+# `config/01_Parameterübersicht.md`).
+#
 # Recommended workflow:
 # 1. Copy this file to `config/my_scenario.yml`
 # 2. Adjust values section by section
@@ -189,6 +194,11 @@ macro:
   # Days after the planned discharge date where discharge probability reaches 50%.
   discharge_logistic_t_half: 3.0
 
+  # Daily baseline mortality probability per patient.
+  # For carriers this is scaled by `severity_modifier`.
+  # Derived from CH in-hospital mortality ~2.5% / ~5.5d mean LOS = 0.0045/day.
+  base_mortality_rate: 0.0045
+
   # -------------------------------------------------------------------------
   # Admissions
   # -------------------------------------------------------------------------
@@ -273,7 +283,7 @@ micro:
   # Upper carrying capacity of the within-host population.
   carrying_capacity: 500000000.0
 
-  # Population size below which clearance becomes more likely.
+  # Extinction floor: total population below this forces clearance.
   min_population: 100.0
 
   # Population size below which clearance is almost certain.

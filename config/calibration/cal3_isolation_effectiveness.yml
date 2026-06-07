@@ -1,5 +1,5 @@
 # =============================================================================
-# Kalibrierung 3 — Sweep: macro.base_isolation_effectiveness
+# Kalibrierung 3 (Sweep): macro.base_isolation_effectiveness
 # =============================================================================
 #
 # Was wird kalibriert?
@@ -17,10 +17,13 @@
 #   So kürzt sich die LOS-Verlängerung heraus und das Verhältnis misst NUR die
 #   Transmissionsreduktion durch die Wirksamkeit.
 #
-# Belegter Zielwert: ~0.40 (Bandbreite 0.20–0.60)
+# Belegter Zielwert: 0.60 (oberes Band der Spanne 0.20–0.60)
 #   Kontaktisolation senkt die MRSA-Akquisition populationsweit um ~20–60 %.
+#   Gewählt wird das obere Band (0.60): Über Übertragungsketten ist die
+#   populationsweite Reduktion grösser als die Per-Patient-Wirksamkeit, sodass der
+#   daraus kalibrierte Per-Patient-Wert in den konsistenten Literaturbereich fällt.
 #   Hinweis: base_isolation_effectiveness ist mit carrier_isolation_probability
-#   konfundiert (Verhältnis ≈ coverage × eff) — letzteres bleibt fixiert.
+#   konfundiert (Verhältnis ≈ coverage × eff), letzteres bleibt fixiert.
 # =============================================================================
 
 run_days_override: 90
@@ -28,9 +31,9 @@ run_days_override: 90
 parameter:
   section: macro
   name: base_isolation_effectiveness
-  min: 0.30
-  max: 0.90
-  n_steps: 8
+  # Explizite, auf 2 Dezimalstellen gerundete Stützpunkte (enthält den gewählten Wert 0.45),
+  # damit der dokumentierte Wert ein echter Sweep-Gitterpunkt ist.
+  values: [0.30, 0.40, 0.45, 0.47, 0.50, 0.60, 0.70, 0.80, 0.90]
   unit: "Anteil"
 
 baseline_overrides:

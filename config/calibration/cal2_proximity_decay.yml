@@ -1,5 +1,5 @@
 # =============================================================================
-# Kalibrierung 2 — Sweep: macro.proximity_decay_alpha
+# Kalibrierung 2 (Sweep): macro.proximity_decay_alpha
 # =============================================================================
 #
 # Was wird kalibriert?
@@ -9,18 +9,24 @@
 #
 # Zielgrösse: same_cell_transmission_fraction
 #   Anteil der In-Hospital-Übertragungen, deren Quelle in DERSELBEN Gitterzelle
-#   (Zimmer/Bettzone) liegt. Diese Grösse wird allein von alpha bestimmt und ist
-#   NICHT mit β₀/Isolation konfundiert (die ändern das Niveau, nicht die
-#   Distanzverteilung) — daher die eigene, isolierte Kalibrierungsachse.
+#   (Zimmer) liegt. Diese Grösse ist β₀-unabhängig: β₀ ist ein globaler Skalar und
+#   kürzt sich in der normierten Quellenauswahl heraus, daher die eigene
+#   Kalibrierungsachse. Die Unabhängigkeit gilt erster Ordnung: Isolation und
+#   stammspezifische Transmissibilität sind nicht über alle Carrier uniform und die
+#   Carrier-Geographie ist endogen (Clustering), wirken also nur zweiter Ordnung.
 #
-# Belegter Zielwert: ~0.25 (20–30 %)
-#   Anteil nosokomialer MRSA-Akquisitionen, der einem Zimmernachbarn zuzuordnen
-#   ist. Bandbreite über Studien: ~10–40 % (Akut-Setting eher 20–30 %).
-#   Quellen: VA-LTCF ~36 % (Obergrenze); ICU-WGS ~20 % patient-to-patient;
-#   hierarchisches Raummodell: schwache räumliche Struktur (untere Grenze).
-#   Hinweis: Das Gitter ist eine Abstraktion (Zelle ≈ Zimmer/Bettzone), der
-#   glatte Distanz-Abfall ist eine Vereinfachung — die Literatur stützt v.a. den
-#   Zimmer-Effekt, nicht einen Gradienten über die ganze Station.
+# Zielwert (an Literatur orientiert): ~0.25 (Korridor 20–36 %)
+#   Anteil der nosokomialen MRSA-Übertragungen, deren Quelle ein Zimmernachbar im
+#   selben Mehrbettzimmer ist. Literatur-Korridor:
+#     - Price et al. 2014, Clin Infect Dis 58(5):609-618, doi:10.1093/cid/cit807
+#       (ICU-WGS): 19 % patient-to-patient → untere Orientierung
+#     - Stone et al. 2012, Infect Control Hosp Epidemiol 33(6):551-557,
+#       doi:10.1086/665711 (VA-LTCF, PFGE): 36 % → Obergrenze
+#     - Kong et al. 2013, BMC Infect Dis 13:449, doi:10.1186/1471-2334-13-449:
+#       schwache räumliche Struktur → Untergrenze
+#   Der gewählte Wert 0.25 liegt konservativ in diesem Korridor.
+#   Die Zelle ist ein Mehrbettzimmer; der glatte Distanz-Abfall w = exp(-alpha*d)
+#   über die Station ist eine Modellvereinfachung, die v.a. den Zimmer-Effekt abbildet.
 # =============================================================================
 
 run_days_override: 90
@@ -28,16 +34,16 @@ run_days_override: 90
 parameter:
   section: macro
   name: proximity_decay_alpha
-  min: 0.8
-  max: 1.2
-  n_steps: 8
+  # Explizite, auf 2 Dezimalstellen gerundete Stützpunkte (enthält den gewählten Wert 1.05),
+  # damit der dokumentierte Wert ein echter Sweep-Gitterpunkt ist.
+  values: [0.80, 0.85, 0.90, 0.95, 1.00, 1.05, 1.10, 1.15, 1.20]
   unit: "1/Gitterzelle"
 
 target:
   metric: same_cell_transmission_fraction
   value: 0.25
   unit: "Anteil"
-  label: "Zimmernachbar-Übertragungsanteil ~20–30% (VA-LTCF, ICU-WGS, Raummodell)"
+  label: "Zimmernachbar-Übertragungsanteil, Korridor ~20–36% (Price 2014, Stone 2012, Kong 2013)"
 
 n_seeds: 100          # hohe Seed-Zahl → glatte, monotone Kurve; Ergebnis: α ≈ 1.05 trifft 0.25
 

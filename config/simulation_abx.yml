@@ -54,7 +54,7 @@ macro:
     replacement_dominant_genotype: "R2"
     max_occupancy_per_hospital: 50
 
-    # Grid (Feature 2 — used once Mesa grids are integrated)
+    # Grid (Feature 2; used once Mesa grids are integrated)
     dept_grid_cols: 3
     dept_grid_rows: 4
     dept_grid_icu_rows: 1
@@ -70,7 +70,7 @@ micro:
     steps_per_day: 12
     max_strains: 100
     carrying_capacity: 1000000000.0
-    min_population: 100.0
+    min_population: 100.0  # extinction floor
     clearance_threshold: 12.0
     base_mutation_rate: 0.05
     mutation_std: 0.09

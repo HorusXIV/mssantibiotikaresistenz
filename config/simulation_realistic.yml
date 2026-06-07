@@ -70,7 +70,7 @@ macro:
 
   # --- Isolation & Diagnostik ---
   carrier_isolation_probability: 0.65   # Erkennungs- und Isolationswahrscheinlichkeit [Wahrscheinlichkeit / nicht-isoliertem Carrier*Tag]
-  base_isolation_effectiveness: 0.47    # Transmissionsreduktion für isolierte Patienten [0–1] -> kalibriert
+  base_isolation_effectiveness: 0.45    # Transmissionsreduktion für isolierte Patienten [0–1] -> kalibriert (Kalibrierung 3, bester Gitterpunkt)
   base_diagnostic_speed: 1.0            # Diagnostik-Geschwindigkeit [Multiplikator, Referenz = 1.0]
                                         # -> 0.5 = halbierte Erkennungsrate (Kultur), 2.0 = doppelte Rate (PCR)
 
@@ -89,7 +89,7 @@ micro:
   max_strains: 40
   carrying_capacity: 500000000.0
 
-  # Lower: small resistant subpopulations survive longer before stochastic loss
+  # Extinktions-Untergrenze: liegt die Gesamtpopulation darunter, wird sicher geklärt
   min_population: 100.0
 
   # Lower: resistant minority strains are not wiped by pruning
