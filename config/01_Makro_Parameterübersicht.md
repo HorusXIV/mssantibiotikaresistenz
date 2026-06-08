@@ -1,4 +1,6 @@
-# Parameterübersicht
+# Makro-Parameterübersicht
+
+Die Parameter der Mikro-Ebene (Within-Host-Evolution) stehen in der eigenen Referenz `config/02_Mikro_Parameterübersicht.md`.
 
 Jeder Parameter ist einem der folgenden Typen zugeordnet:
 
@@ -7,7 +9,37 @@ Jeder Parameter ist einem der folgenden Typen zugeordnet:
 - **kalibriert** – durch Simulation so bestimmt, dass eine beobachtete Zielgrösse reproduziert wird
 - **Referenzwert** – neutraler Multiplikator (Standard 1.0). Beim Standardwert ohne eigenständigen Effekt, da mit einem kalibrierten Parameter (z.B. β₀) konfundiert; dient als Stellschraube für Sensitivitäts-Experimente
 - **nicht identifizierbar** – Sweep durchgeführt, Modell reagiert im plausiblen Bereich nicht signifikant; Wert physikalisch oder neutral motiviert
-- **offen** – noch nicht bestimmt (Mikro-Parameter)
+
+---
+
+## Mechanismen-Steuerung (Szenarien)
+
+Jeder Modellmechanismus lässt sich rein über die Config gezielt abschalten, ohne
+Code-Änderung. Das erlaubt Ablations- und Szenario-Läufe (z.B. "ohne Isolation",
+"ohne Antibiotikadruck", "nur Makro"). Die Abschaltung erfolgt entweder über den
+Master-Schalter `run.use_micro` oder über das Nullsetzen der jeweiligen Rate; die
+Engine fängt den Nullfall sauber ab (kein Sonderzweig nötig).
+
+| Mechanismus | Ebene | Schalter (Config) | Verhalten bei "aus" | Code |
+|---|---|---|---|---|
+| Mikro gesamt | – | `run.use_micro: false` | Carrier behalten Template-Defaults (`p_clearance`, `relative_transmissibility`, `severity_modifier`); keine Within-Host-Evolution | `run_coupled_simulation.py` (`macro.step(micro_simulator=None)`) |
+| Mutation | Mikro | `micro.base_mutation_rate: 0` | keine neuen Mutanten (`Poisson(0)`) | `engine.py` `mutate_population` |
+| Horizontaler Gentransfer | Mikro | `micro.base_hgt_rate: 0` | kein Gentransfer (`hgt_prob = 0`) | `engine.py` `horizontal_gene_transfer` |
+| Selektion | Mikro | `micro.selection_strength: 0` | neutrale Selektion (`selection_factor = 1`, keine differenzielle Verstärkung) | `engine.py` `selection_step` |
+| Transmission | Makro | `macro.base_transmission_rate: 0` | keine S→C-Übertragung im Spital | `simulator.py` `_do_transmission` |
+| Erkennung/Isolation | Makro | `macro.carrier_isolation_probability: 0` | Carrier werden nie erkannt/isoliert | `simulator.py` `_build_context` |
+| Isolationswirkung | Makro | `macro.base_isolation_effectiveness: 0` | Isolation findet statt, senkt aber die Transmission nicht | `simulator.py` `_do_transmission` |
+| Antibiotika | Makro | `macro.icu_abx_probability: 0` + `macro.ward_abx_probability: 0` | kein ABX-Regime, kein Selektionsdruck im Mikro | `simulator.py` `_build_context` |
+| Mortalität | Makro | `macro.base_mortality_rate: 0` | keine tägliche Sterblichkeit (Guard `> 0`) | `simulator.py` Discharge-Loop |
+| Aufnahmen | Makro | `macro.daily_admission_rate: 0` | keine Neuaufnahmen **und** keine logistische Entlassung (geschlossene Kohorte) | `simulator.py` Admissions (Guard `<= 0`) |
+| Community-Import | Makro | `macro.community_carrier_fraction: 0` | Neuaufnahmen sind alle Susceptible | `simulator.py` Admissions |
+| Verlegungen | Makro | `macro.daily_transfer_rate: 0` | keine Inter-Spital-Verlegung (Guard `<= 0`) | `simulator.py` Transfer |
+
+`seed` ist **kein** inhaltlicher Parameter, sondern eine rein technische Kontrolle für
+Reproduzierbarkeit. Ein gekoppelter Lauf (`mss-run`) nutzt einen festen Seed; die
+Robustheit gegenüber dem Zufall prüfen die Kalibrierungs- und Sweep-Werkzeuge über
+Ensembles vieler Seeds (`mss-calibrate --n-runs`, `mss-sweep` mit `n_seeds`) mit
+Perzentil-/Konfidenzbändern (siehe `docs/03_Modellverhalten_und_Methodik.md`).
 
 ---
 
@@ -165,69 +197,3 @@ Die Entlassung folgt einer logistischen Kurve nach dem geplanten Entlassungstag.
 |---|---|---|---|---|
 | `icu_abx_probability` | geschätzt | 0.62 | Tägliche Wahrscheinlichkeit, dass ein ICU-Patient Antibiotika erhält | [SwissNoso PPS 2017](https://www.swissnoso.ch/fileadmin/swissnoso/Dokumente/5_Forschung_und_Entwicklung/2_Punktpraevalenzstudie/Report_Point_Prevalence_Survey_2017_of_HAI_and_antimicrobial_use_in_Swiss_acute_care_hospitals.pdf) |
 | `ward_abx_probability` | geschätzt | 0.326 | Tägliche Wahrscheinlichkeit, dass ein Ward-Patient Antibiotika erhält | [SwissNoso Annual Report 2023](https://www.swissnoso.ch/fileadmin/swissnoso/Dokumente/5_Forschung_und_Entwicklung/8_Swissnoso_Publikationen/Swissnoso_Annual_Report_HAI_CH_2023_FULL_REPORT_EN_SINGLE.pdf) |
-
----
-
-## Mikro-Parameter
-
-Die Mikro-Simulation modelliert die bakterielle Evolution innerhalb einzelner Patienten. Ein Makro-Tag wird in `steps_per_day` feinere Zeitschritte unterteilt. Bei den Makro-Kalibrierungen ist der Mikro-Simulator deaktiviert (`use_micro = false`); Patienten behalten ihre Template-Standardwerte. Die Mikro-Parameter sind noch nicht kalibriert (`offen`).
-
-### Simulationsstruktur
-
-| Parameter | Typ | Wert | Beschreibung |
-|---|---|---|---|
-| `steps_per_day` | geschätzt | 12 | Mikro-Zeitschritte pro Simulationstag |
-| `founder_pool_size` | geschätzt | 32 | Anzahl vordefinierter Gründerstämme |
-| `founder_pool_gene_noise_std` | geschätzt | 0.02 | Rauschen bei Geninitialisierung der Gründerstämme |
-| `gene_presence_threshold` | geschätzt | 0.2 | Minimale Genexpressionsstärke für "Gen vorhanden" |
-| `max_strains` | geschätzt | 40 | Maximale gleichzeitig aktive Stämme pro Patient |
-
-### Bakterielle Populationsdynamik
-
-| Parameter | Typ | Wert | Beschreibung |
-|---|---|---|---|
-| `carrying_capacity` | offen | 5 × 10⁸ | Maximale Bakterienpopulation pro Patient |
-| `min_population` | offen | 100 | Extinktions-Untergrenze; darunter wird die Trägerschaft sicher geklärt |
-| `clearance_threshold` | offen | 1 000 | Schwellenwert für immunologische Klärung |
-| `growth_rate_per_step` | offen | 0.18 | Wachstumsrate pro Mikro-Zeitschritt |
-| `death_rate_per_step` | offen | 0.06 | Sterberate pro Mikro-Zeitschritt |
-| `strain_prune_threshold` | offen | 200 | Pruning-Untergrenze; Stämme darunter werden entfernt |
-
-### Mutation & Horizontaler Gentransfer
-
-| Parameter | Typ | Wert | Beschreibung |
-|---|---|---|---|
-| `base_mutation_rate` | offen | 0.012 | Basis-Punktmutationsrate pro Mikro-Zeitschritt |
-| `mutation_std` | offen | 0.025 | Standardabweichung der Mutationsrate |
-| `stress_mutation_boost` | offen | 40 | Multiplikator auf Mutationsrate unter Antibiotikastress (SOS-Antwort; Literaturbereich: 10–100×) |
-| `base_hgt_rate` | offen | 0.03 | Basisrate für horizontalen Gentransfer pro Zeitschritt |
-| `hgt_gene_transfer_prob` | offen | 0.25 | Wahrscheinlichkeit der Genübertragung pro HGT-Ereignis |
-| `selection_strength` | offen | 2.5 | Selektionsvorteil resistenter Stämme unter ABX-Druck |
-
-### Schaden & Sterblichkeit
-
-| Parameter | Typ | Wert | Beschreibung |
-|---|---|---|---|
-| `base_damage_per_step` | offen | 0.004 | Basale Schadensrate pro Zeitschritt |
-| `replication_damage_factor` | offen | 0.03 | Zusätzlicher Schaden durch Replikationsstress |
-| `stress_damage_factor` | offen | 0.06 | Zusätzlicher Schaden durch Antibiotikastress |
-| `repair_rate_per_step` | offen | 0.08 | Reparaturrate pro Zeitschritt |
-| `max_damage_load` | offen | 5.0 | Maximale Schadensakkumulation |
-| `age_mortality_scale` | offen | 0.001 | Skalierungsfaktor altersabhängiger Mortalität |
-| `damage_mortality_scale` | offen | 0.025 | Skalierungsfaktor schadensbedingter Mortalität |
-| `lifecycle_half_life_steps` | offen | 200 | Halbwertszeit des Bakterienlebenszyklus in Mikro-Zeitschritten |
-
-### Dormanz & Synergie
-
-| Parameter | Typ | Wert | Beschreibung |
-|---|---|---|---|
-| `dormancy_growth_penalty` | offen | 0.55 | Wachstumsreduktion während Dormanz |
-| `synergy_repair_dormancy_bonus` | offen | 0.25 | Reparaturbonus durch Dormanz-Synergie |
-| `synergy_stress_tolerance_bonus` | offen | 0.20 | Stresstoleranzbonus durch Synergie-Effekte |
-
-### Stochastik
-
-| Parameter | Typ | Wert | Beschreibung |
-|---|---|---|---|
-| `stochastic_threshold` | offen | 10 000 | Populationsgrösse; darunter stochastische statt deterministische Simulation |
-| `stochastic_noise_scale` | offen | 0.08 | Skalierung des stochastischen Rauschens bei kleinen Populationen |

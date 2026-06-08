@@ -1,6 +1,8 @@
-# Mikrosimulation: Parameterübersicht
+# Mikro-Parameterübersicht
 
 Diese Übersicht beschreibt die Mikrosimulation des Projekts. Referenz ist die produktive Konfiguration `config/simulation_realistic.yml`; die Code-Defaults in `src/mss/simulation/micro/engine.py` entsprechen diesen Werten.
+
+Den erzählenden Überblick (Datenfluss, Kopplung, Konzept) liefert `docs/02_Mikro_Overview.md`. Wie sich Mechanismen gezielt ein- und ausschalten lassen, steht in der Tabelle "Mechanismen-Steuerung" in `config/01_Makro_Parameterübersicht.md`.
 
 Jeder Parameter ist einem Typ zugeordnet:
 
@@ -274,7 +276,7 @@ Antibiotikamechanismen sind gut identifizierbar, aber die Zahlen in diesem Trait
 | Parameter | Typ | Wert | Wirkung | Einschätzung |
 |---|---|---:|---|---|
 | `carrying_capacity` | geschätzt / kalibrieren | `5e8` | Obergrenze der Within-Host-Gesamtpopulation | CFU-Studien geben Grössenordnungen; Modellskala kalibrieren |
-| `min_population` | offen | `100` | Extinktions-Untergrenze: liegt die Gesamtpopulation darunter, gilt die Within-Host-Population als erloschen und die Trägerschaft wird geklärt (`p_clearance = 1.0`) | Default gesetzt, noch nicht kalibriert |
+| `min_population` | kalibrieren | `100` | Extinktions-Untergrenze: liegt die Gesamtpopulation darunter, gilt die Within-Host-Population als erloschen und die Trägerschaft wird geklärt (`p_clearance = 1.0`) | Default gesetzt, noch nicht kalibriert |
 | `clearance_threshold` | kalibrieren | `1000` | unterhalb davon ist `p_clearance = 0.95` | effektive Schwelle, mit Carrier-Dauer kalibrieren |
 | `growth_rate_per_step` | geschätzt / kalibrieren | `0.18` | Wachstum pro Schritt vor Fitness- und Dormanzkorrektur | S. aureus-Generationszeiten geben Obergrenzen; per-step-Wert kalibrieren |
 | `death_rate_per_step` | kalibrieren | `0.06` | basale Todesrate pro Schritt | effektiver Modellparameter |
