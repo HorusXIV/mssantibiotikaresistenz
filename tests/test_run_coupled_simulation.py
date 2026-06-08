@@ -134,6 +134,48 @@ def test_write_run_meta_records_provenance(tmp_path: Path):
     assert "python_version" in meta
 
 
+def test_use_micro_defaults_true_and_parses_false(tmp_path: Path):
+    config_path = tmp_path / "config.yml"
+    _write_config(config_path)
+
+    # Omitted in _write_config, so it must default to True.
+    assert load_coupled_settings(config_path).run.use_micro is True
+
+    raw = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    raw["run"]["use_micro"] = False
+    config_path.write_text(yaml.safe_dump(raw, sort_keys=False), encoding="utf-8")
+    assert load_coupled_settings(config_path).run.use_micro is False
+
+
+def test_use_micro_false_skips_micro_coupling(tmp_path: Path):
+    config_path = tmp_path / "config.yml"
+    _write_config(config_path)
+    settings = load_coupled_settings(config_path)
+    macro = MacroSimulator(config=settings.macro, n_hospitals=settings.population.hospitals, seed=7)
+    micro = MicroSimulator(config=settings.micro, n_workers=1)
+
+    _admit_initial_population(macro, settings.population)
+
+    # Mirror main()'s use_micro=False path: no seeding, step receives no micro.
+    for _ in range(settings.run.days):
+        macro.step(micro_simulator=None, run_id=settings.run.run_id, patient_factory=None)
+
+    # No within-host episode is ever created when micro is disabled.
+    assert micro.get_active_episodes() == []
+
+    # Seeded carriers (age 70 from the carrier template) keep their template defaults
+    # because the micro layer never overwrote them.
+    seeded_carriers = [
+        p
+        for hid in ("hospital_001", "hospital_002")
+        for p in macro.get_patients(hid)
+        if p.state == HealthState.CARRIER and p.age_years == 70
+    ]
+    assert seeded_carriers
+    assert all(p.p_clearance == 0.01 for p in seeded_carriers)
+    assert all(p.relative_transmissibility == 1.9 for p in seeded_carriers)
+
+
 def test_admit_initial_population_uses_configured_templates(tmp_path: Path):
     config_path = tmp_path / "config.yml"
     _write_config(config_path)

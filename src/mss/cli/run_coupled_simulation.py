@@ -60,6 +60,7 @@ class RunSettings:
     seed: int
     run_id: str
     quiet: bool
+    use_micro: bool = True  # when False, mss-run skips the micro layer entirely
 
 
 @dataclass
@@ -319,6 +320,7 @@ def load_coupled_settings(config_path: Path = DEFAULT_CONFIG_PATH) -> CoupledSim
         seed=_require_non_negative_int(run_raw.get("seed"), "run.seed"),
         run_id=str(run_raw.get("run_id", "dev_run")),
         quiet=bool(run_raw.get("quiet", False)),
+        use_micro=bool(run_raw.get("use_micro", True)),
     )
 
     micro_workers = micro_raw.pop("workers", None)
@@ -1208,13 +1210,18 @@ def main() -> None:
         n_workers=settings.micro_workers,
     )
 
+    # When micro is disabled, no episodes are materialized and macro.step receives
+    # micro_simulator=None; carriers keep their template defaults throughout the run.
+    coupled_micro = micro if settings.run.use_micro else None
+
     _admit_initial_population(macro=macro, population=settings.population)
-    _seed_initial_micro_states(
-        macro=macro,
-        micro=micro,
-        n_hospitals=settings.population.hospitals,
-        seed=settings.run.seed,
-    )
+    if coupled_micro is not None:
+        _seed_initial_micro_states(
+            macro=macro,
+            micro=micro,
+            n_hospitals=settings.population.hospitals,
+            seed=settings.run.seed,
+        )
 
     patient_factory = _make_patient_factory(
         population=settings.population,
@@ -1228,6 +1235,7 @@ def main() -> None:
         f"hospitals={settings.population.hospitals} "
         f"susceptible={settings.population.susceptible_count} "
         f"seed_carriers={settings.population.carrier_count} "
+        f"micro={'on' if settings.run.use_micro else 'off'} "
         f"micro_steps_per_day={settings.micro.steps_per_day} "
         f"micro_workers={micro.n_workers} seed={settings.run.seed}"
     )
@@ -1299,7 +1307,7 @@ def main() -> None:
 
     for day in range(1, settings.run.days + 1):
         macro.step(
-            micro_simulator=micro,
+            micro_simulator=coupled_micro,
             run_id=settings.run.run_id,
             patient_factory=patient_factory,
         )
