@@ -1,23 +1,16 @@
-# MSS - Antibiotic Resistance Simulation
+# MSS: Antibiotikaresistenz-Simulation
 
-MSS is a multi-scale simulation framework for modeling antibiotic resistance dynamics in hospital environments. The codebase is organized around a single `src/mss` package so simulation logic, domain objects, and CLI entry points are separated from configuration, documentation, tests, and generated artifacts.
+MSS ist ein mehrskaliges Simulations-Framework zur Modellierung der Antibiotikaresistenz-Dynamik in Spitalumgebungen. Der Code ist um ein einziges `src/mss`-Paket herum organisiert, damit Simulationslogik, Domänenobjekte und CLI-Einstiegspunkte von Konfiguration, Dokumentation, Tests und generierten Artefakten getrennt sind.
 
-## Structural Assessment
+> **Hier starten:** [`docs/00_Overview.md`](docs/00_Overview.md) ist der geführte Einstieg. Es verbindet Makro, Mikro, Patient, Config und Outputs ("ein Patient, ein Tag") und listet die Diagramme auf. Dieses README ist die Repository-Karte und die Ausführungsreferenz.
 
-The previous layout worked functionally but caused avoidable friction:
+## Repository-Prinzipien
 
-- Application code lived in several top-level folders (`exchange`, `macro_simulation`, `micro_simulation`) with no single source root.
-- Runtime scripts, configuration, generated outputs, and domain modules were mixed at the repository root.
-- The filename `simulation.py` meant different things in different places, which made discovery harder.
-- Documentation described the simulation model well, but it did not serve as a reliable map of the repository itself.
+- Aller gepflegte Python-Code liegt unter `src/mss/`.
+- Ordner auf oberster Ebene sind für Konfiguration, Dokumentation, Tests, Container und generierte Artefakte reserviert.
+- Makro, Mikro, Domäne und CLI haben klar getrennte Verantwortlichkeiten.
 
-The repository now follows a clearer rule set:
-
-- All maintained Python code lives under `src/mss/`.
-- Root-level folders are reserved for configuration, documentation, tests, containers, and generated artifacts.
-- Macro, micro, domain, and CLI responsibilities are separated explicitly.
-
-## Repository Layout
+## Repository-Struktur
 
 ```text
 MSS/
@@ -29,14 +22,18 @@ MSS/
 │   │   ├── cal1_simulation_single_ward.yml
 │   │   ├── cal2_proximity_decay.yml
 │   │   └── cal3_isolation_effectiveness.yml
-│   ├── 01_Parameterübersicht.md
-│   ├── 02_Mikrosimulation_Parameterübersicht.md
+│   ├── 01_Makro_Parameterübersicht.md
+│   ├── 02_Mikro_Parameterübersicht.md
 │   ├── simulation_abx.yml
 │   ├── simulation_realistic.yml
 │   └── template.yml
 ├── containers/
 │   └── mss_image.def
 ├── docs/
+│   ├── 00_Overview.md
+│   ├── 01_Makro_Overview.md
+│   ├── 02_Mikro_Overview.md
+│   ├── 03_Modellverhalten_und_Methodik.md
 │   ├── organizational/
 │   └── system_overview/
 │       ├── Flowchart_v0.mmd
@@ -72,14 +69,12 @@ MSS/
 │       └── simulation/
 │           ├── __init__.py
 │           ├── macro/
-│           │   ├── 01_Macro_Overview.md
 │           │   ├── __init__.py
 │           │   ├── agents.py
 │           │   ├── config.py
 │           │   ├── grid.py
 │           │   └── simulator.py
 │           └── micro/
-│               ├── 01_Micro_Overview.md
 │               ├── __init__.py
 │               ├── engine.py
 │               ├── genome.py
@@ -103,248 +98,259 @@ MSS/
 └── uv.lock
 ```
 
-## Folder Guide
+## Ordner-Übersicht
 
 ### `src/mss/`
 
-The only source root for maintained application code.
+Das einzige Source-Root für den gepflegten Anwendungscode.
 
 ### `src/mss/domain/`
 
-Shared domain objects used across macro and micro layers.
+Gemeinsame Domänenobjekte, die von Makro- und Mikro-Ebene genutzt werden.
 
-- `patient.py`: canonical patient model, enums, treatment state, and macro/micro exchange contract.
+- `patient.py`: kanonisches Patientenmodell, Enums, Behandlungszustand und der Austauschvertrag zwischen Makro und Mikro.
 
 ### `src/mss/simulation/macro/`
 
-Hospital-network simulation logic.
+Logik der Spital-Netzwerk-Simulation.
 
-- `config.py`: macro-layer configuration dataclass.
-- `agents.py`: Mesa agent wrapper used by the hospital grids.
-- `grid.py`: hospital department grid and coarse hospital network grid.
-- `simulator.py`: macro simulator orchestration, admissions, transfers, transmission, discharge, and micro coupling.
+- `config.py`: Konfigurations-Dataclass der Makro-Ebene.
+- `agents.py`: Mesa-Agenten-Wrapper für die Spital-Gitter.
+- `grid.py`: Abteilungsgitter und grobes Spital-Netzwerkgitter.
+- `simulator.py`: Orchestrierung der Makro-Simulation, Aufnahmen, Verlegungen, Übertragung, Entlassung und Mikro-Kopplung.
 
 ### `src/mss/simulation/micro/`
 
-Within-host bacterial evolution logic.
+Logik der bakteriellen Within-Host-Evolution.
 
-- `genome.py`: genome representation, resistance traits, and fitness helpers.
-- `engine.py`: micro configuration plus the strain-population evolution engine.
-- `simulator.py`: batch-processing interface and episode lifecycle management.
+- `genome.py`: Genomdarstellung, Resistenz-Traits und Fitness-Helfer.
+- `engine.py`: Mikro-Konfiguration und die Stamm-Populations-Evolutions-Engine.
+- `simulator.py`: Batch-Verarbeitungs-Schnittstelle und Verwaltung des Episoden-Lebenszyklus.
 
 ### `src/mss/cli/`
 
-Executable entry points that assemble the application from lower-level modules.
+Ausführbare Einstiegspunkte, die die Anwendung aus tieferliegenden Modulen zusammensetzen.
 
-- `run_coupled_simulation.py`: loads YAML configuration, runs the coupled macro/micro simulation, and writes Parquet outputs. Also exposes `run_realistic_once()` used by the sweep calibration tool.
-- `run_single_ward_calibration.py`: analytical β₀ calibration for a single ward; derives `base_transmission_rate` from a closed-form formula and validates it with simulation. `--n-runs > 1` runs a stochastic ensemble over seeds and aggregates the results.
-- `run_parameter_sweep.py`: structured parameter sweep calibration; varies one YAML parameter over a defined grid, runs the simulation for each value, and plots the effect on a target metric.
-- `visualize_results.py`: reads generated Parquet outputs and writes diagnostic plots.
+- `run_coupled_simulation.py`: lädt die YAML-Konfiguration, führt die gekoppelte Makro/Mikro-Simulation aus und schreibt Parquet-Outputs. Stellt zudem `run_realistic_once()` bereit, das vom Sweep-Kalibrierungswerkzeug genutzt wird.
+- `run_single_ward_calibration.py`: analytische β₀-Kalibrierung für eine Einzelstation. Leitet `base_transmission_rate` aus einer geschlossenen Formel ab und validiert sie per Simulation. `--n-runs > 1` führt ein stochastisches Ensemble über Seeds aus und aggregiert die Ergebnisse.
+- `run_parameter_sweep.py`: strukturierte Parameter-Sweep-Kalibrierung. Variiert einen YAML-Parameter über ein definiertes Gitter, führt die Simulation für jeden Wert aus und plottet den Effekt auf eine Zielgrösse.
+- `visualize_results.py`: liest generierte Parquet-Outputs und schreibt Diagnose-Plots.
 
 ### `config/`
 
-Runtime configuration files. Keep these environment- or scenario-specific, not code-specific.
+Laufzeit-Konfigurationsdateien. Diese sollen umgebungs- oder szenariospezifisch sein, nicht codespezifisch.
 
-- `simulation_realistic.yml`: main realistic simulation scenario with calibrated parameter values.
-- `simulation_abx.yml`: alternative scenario tuned for antibiotic-focused runs.
-- `template.yml`: fully documented reference file listing every supported YAML variable with explanations. Copy and adapt for new scenarios.
-- `01_Parameterübersicht.md`: parameter reference table documenting all model parameters, their types (geschätzt / Kontextualisierungsparameter / kalibriert / Referenzwert / nicht identifizierbar), sources, and calibration results.
-- `02_Mikrosimulation_Parameterübersicht.md`: parameter reference for the micro (within-host) evolution layer.
-- `calibration/`: one configuration file per calibration, numbered in execution order.
-  - `cal1_simulation_single_ward.yml`: single-ward β₀ calibration (analytical).
-  - `cal2_proximity_decay.yml`: spatial proximity decay vs. same-cell (roommate) transmission fraction.
-  - `cal3_isolation_effectiveness.yml`: isolation effectiveness vs. relative acquisition reduction (counterfactual baseline).
+- `simulation_realistic.yml`: Haupt-Szenario der realistischen Simulation mit kalibrierten Parameterwerten.
+- `simulation_abx.yml`: alternatives Szenario, abgestimmt auf antibiotika-fokussierte Läufe.
+- `template.yml`: vollständig dokumentierte Referenzdatei, die jede unterstützte YAML-Variable mit Erklärungen auflistet. Zum Erstellen neuer Szenarien kopieren und anpassen.
+- `01_Makro_Parameterübersicht.md`: Parameter-Referenztabelle für die Makro-Ebene, mit Typen (geschätzt / Kontextualisierungsparameter / kalibriert / Referenzwert / nicht identifizierbar), Quellen und Kalibrierergebnissen.
+- `02_Mikro_Parameterübersicht.md`: Parameter-Referenz für die Mikro-Ebene (Within-Host-Evolution), inklusive Genmodell und Formeln.
+- `calibration/`: eine Konfigurationsdatei pro Kalibrierung, in Ausführungsreihenfolge nummeriert.
+  - `cal1_simulation_single_ward.yml`: Einzelstation-β₀-Kalibrierung (analytisch).
+  - `cal2_proximity_decay.yml`: räumlicher Distanzabfall gegenüber dem Zimmernachbar-Übertragungsanteil (gleiche Zelle).
+  - `cal3_isolation_effectiveness.yml`: Isolationswirksamkeit gegenüber der relativen Akquisitionsreduktion (Counterfactual-Baseline).
 
 ### `Organizational/`
 
-Module-level planning and assessment documents.
+Planungs- und Bewertungsdokumente auf Modulebene.
 
-- `Mini_Challenge.md`: task description for the mini-challenge component.
-- `Modulbeschreibung.md`: module requirements, learning outcomes, and assessment criteria.
+- `Mini_Challenge.md`: Aufgabenbeschreibung der Mini-Challenge-Komponente.
+- `Modulbeschreibung.md`: Modulanforderungen, Lernziele und Bewertungskriterien.
 
 ### `docs/`
 
-Human-facing project documentation, diagrams, and analytical assets.
+Projektdokumentation, Diagramme und analytische Materialien für Menschen. In dieser Reihenfolge lesen:
 
-- `docs/system_overview/`: system maps, Mermaid diagrams, and graph-building helper script.
-- `docs/organizational/`: reserved for planning or process documentation.
+- `docs/00_Overview.md`: geführter Einstieg. Wie Makro, Mikro, Patient, Config und Outputs zusammenpassen ("ein Patient, ein Tag"), plus der Diagramm-Index. Hier starten.
+- `docs/01_Makro_Overview.md`: Makro-Ebene (Spital-Netzwerk) mit Tagesablauf, Übertragung und Patient-Kopplung.
+- `docs/02_Mikro_Overview.md`: Mikro-Ebene (Within-Host) mit Stamm-Populationen, Kopplung und Evolutionsmechanik.
+- `docs/03_Modellverhalten_und_Methodik.md`: beobachtetes Modellverhalten (effektive gegenüber konfigurierten Raten, Stabilität) und die Methodik im Umgang mit nicht-plausiblen Ergebnissen.
+- `docs/system_overview/`: Mermaid-Diagramme, Systemkarten und das Hilfsskript zum Erzeugen der Graphen.
+- `docs/organizational/`: reserviert für Planungs- oder Prozessdokumentation.
 
 ### `notebooks/`
 
-Exploratory Jupyter notebooks for inspecting generated outputs. Not part of the importable package.
+Explorative Jupyter-Notebooks zur Inspektion generierter Outputs. Nicht Teil des importierbaren Pakets.
 
-- `output_explorer.ipynb`: loads the latest `outputs/<timestamp>` run and renders day-slider heatmaps and diagnostic views.
+- `output_explorer.ipynb`: lädt den neuesten `outputs/<timestamp>`-Lauf und rendert Heatmaps mit Tages-Slider sowie Diagnoseansichten.
 
 ### `tests/`
 
-Automated verification for the new `src` layout.
+Automatisierte Verifikation für die `src`-Struktur.
 
-- `conftest.py`: ensures `src/` is on the import path during test runs.
-- `test_run_coupled_simulation.py`: configuration loading and initial population setup.
-- `integration_tests/`: cross-module behavioral tests for macro, micro, and grid interactions.
-
-### `src/mss/simulation/macro/`: inline docs
-
-- `01_Macro_Overview.md`: detailed description of the macro simulation layer, transmission model, and parameter semantics.
-
-### `src/mss/simulation/micro/`: inline docs
-
-- `01_Micro_Overview.md`: description of the within-host micro simulation layer, genome model, and evolution mechanics.
+- `conftest.py`: stellt sicher, dass `src/` während der Testläufe im Importpfad liegt.
+- `test_run_coupled_simulation.py`: Laden der Konfiguration und Aufbau der Startpopulation.
+- `integration_tests/`: modulübergreifende Verhaltenstests für Makro, Mikro und Gitter-Interaktionen.
 
 ### `outputs/`
 
-Generated simulation artifacts. These are not source files. Each run creates a timestamped subdirectory:
+Generierte Simulationsartefakte. Das sind keine Quelldateien. Jeder Lauf erzeugt ein Unterverzeichnis mit Zeitstempel:
 
-- `outputs/<timestamp>_<name>/data/`: simulation result tables as Parquet files.
-- `outputs/<timestamp>_<name>/plots/`: rendered diagnostic plots.
+- `outputs/<timestamp>_<name>/data/`: Simulationsergebnis-Tabellen als Parquet-Dateien.
+- `outputs/<timestamp>_<name>/plots/`: gerenderte Diagnose-Plots.
 
 ### `logs/`
 
-Execution logs, including Slurm job output.
+Ausführungslogs, einschliesslich Slurm-Job-Ausgabe.
 
 ### `containers/`
 
-Container definitions and related runtime assets.
+Container-Definitionen und zugehörige Laufzeit-Assets.
 
-## Naming and Placement Conventions
+## Namens- und Platzierungskonventionen
 
-Use these rules for all future additions:
+Diese Regeln für alle künftigen Ergänzungen verwenden:
 
-- Put all Python application code under `src/mss/`.
-- Put cross-cutting business entities in `src/mss/domain/`.
-- Put simulation engines under `src/mss/simulation/<layer>/`.
-- Put runnable entry points in `src/mss/cli/`.
-- Put scenario YAML in `config/`, never beside code modules.
-- Put diagrams, architecture notes, and generated maps in `docs/`.
-- Put generated data only in `outputs/` or `logs/`, never under `src/` or `tests/`.
+- Allen Python-Anwendungscode unter `src/mss/` ablegen.
+- Schichtübergreifende Geschäftsentitäten in `src/mss/domain/` ablegen.
+- Simulations-Engines unter `src/mss/simulation/<layer>/` ablegen.
+- Ausführbare Einstiegspunkte in `src/mss/cli/` ablegen.
+- Szenario-YAML in `config/` ablegen, nie neben Code-Modulen.
+- Diagramme, Architekturnotizen und generierte Karten in `docs/` ablegen.
+- Generierte Daten nur in `outputs/` oder `logs/` ablegen, nie unter `src/` oder `tests/`.
 
-Filename conventions:
+Dateinamenskonventionen:
 
-- Use `config.py` for configuration-only modules.
-- Use `simulator.py` for orchestration objects that coordinate a layer.
-- Use `engine.py` for computational kernels or lower-level simulation mechanics.
-- Use singular names for domain entities such as `patient.py`.
-- Prefer descriptive test filenames that mirror the behavior under test.
+- `config.py` für reine Konfigurationsmodule verwenden.
+- `simulator.py` für Orchestrierungsobjekte verwenden, die eine Ebene koordinieren.
+- `engine.py` für Rechenkerne oder tieferliegende Simulationsmechanik verwenden.
+- Singular-Namen für Domänenentitäten wie `patient.py` verwenden.
+- Beschreibende Testdateinamen bevorzugen, die das geprüfte Verhalten widerspiegeln.
 
-Import conventions:
+Importkonventionen:
 
-- Import from `mss...`, not from relative top-level folders.
-- Keep CLI modules thin; move reusable logic into `domain/` or `simulation/`.
-- Avoid circular dependencies by making `domain/` independent of `cli/`.
+- Aus `mss...` importieren, nicht aus relativen Top-Level-Ordnern.
+- CLI-Module schlank halten und wiederverwendbare Logik nach `domain/` oder `simulation/` verschieben.
+- Zirkuläre Abhängigkeiten vermeiden, indem `domain/` unabhängig von `cli/` bleibt.
 
-## Running the Project
+## Projekt ausführen
 
-Install dependencies:
+Abhängigkeiten installieren:
 
 ```bash
 uv sync
 ```
 
-Run the coupled macro/micro simulation:
+Gekoppelte Makro/Mikro-Simulation ausführen:
 
 ```bash
 uv run mss-run --config config/simulation_realistic.yml
 ```
 
-Generate plots from existing Parquet output:
+Plots aus vorhandenem Parquet-Output erzeugen (optional):
 
 ```bash
 uv run mss-visualize --output-dir outputs/<timestamp>_<name>
 ```
 
-Run the single-ward β₀ calibration (calibration 1):
+Einzelstation-β₀-Kalibrierung ausführen (Kalibrierung 1):
 
 ```bash
 uv run mss-calibrate --config config/calibration/cal1_simulation_single_ward.yml
-# stochastic ensemble over many seeds:
+# stochastisches Ensemble über viele Seeds:
 uv run mss-calibrate --config config/calibration/cal1_simulation_single_ward.yml --n-runs 1000
 ```
 
-Run a parameter sweep calibration (calibrations 2–3):
+Parameter-Sweep-Kalibrierung ausführen (Kalibrierungen 2 und 3):
 
 ```bash
 uv run mss-sweep --sweep config/calibration/cal2_proximity_decay.yml
 uv run mss-sweep --sweep config/calibration/cal3_isolation_effectiveness.yml
 ```
 
-Run tests:
+Tests ausführen:
 
 ```bash
 uv run pytest
 ```
 
-## Guidelines for Adding New Components
+### Reproduzierbarkeit und Seeds
 
-When adding new functionality, place it by responsibility rather than by feature name alone.
+Der Wert `run.seed` ist eine rein technische Kontrolle für die Reproduzierbarkeit, kein inhaltlicher Parameter zum Tunen. Ein gekoppelter Lauf (`mss-run`) ist bei gegebenem Seed deterministisch und nutzt einen einzelnen Seed. Die Robustheit gegenüber dem Zufall prüfen die Kalibrierungs- und Sweep-Werkzeuge, die Ensembles über viele Seeds ausführen (`mss-calibrate --n-runs N`, `mss-sweep` mit `n_seeds`) und Perzentil-/Konfidenzbänder berichten. Siehe `config/01_Makro_Parameterübersicht.md` und `docs/03_Modellverhalten_und_Methodik.md`.
 
-### Add a new domain entity
+### Grosse Outputs (git-lfs)
 
-- Put it in `src/mss/domain/`.
-- Keep it free of CLI concerns and file-system concerns.
-- Export it from `src/mss/domain/__init__.py` if it is part of the package-level API.
+Das Verzeichnis `outputs/` wird über git-lfs getrackt und ist gross (mehrere GB an Lauf-Artefakten). Die Blobs sind optional herunterladbar. Um das Repository ohne sie zu klonen:
 
-### Add a new macro behavior
+```bash
+GIT_LFS_SKIP_SMUDGE=1 git clone <repo-url>
+```
 
-- Configuration fields go in `src/mss/simulation/macro/config.py`.
-- Spatial or topology logic goes in `src/mss/simulation/macro/grid.py`.
-- Daily orchestration changes go in `src/mss/simulation/macro/simulator.py`.
+Einzelne Läufe bei Bedarf nachladen:
 
-### Add a new micro behavior
+```bash
+git lfs pull --include="outputs/<timestamp>_<name>/**"
+```
 
-- Genome- or trait-level calculations go in `src/mss/simulation/micro/genome.py`.
-- Population evolution logic goes in `src/mss/simulation/micro/engine.py`.
-- Batch execution, persistence, or parallelism changes go in `src/mss/simulation/micro/simulator.py`.
+## Richtlinien zum Hinzufügen neuer Komponenten
 
-### Add a new CLI command
+Neue Funktionalität nach Verantwortung einordnen, nicht allein nach Feature-Namen.
 
-- Create a new module in `src/mss/cli/`.
-- Add an entry under `[project.scripts]` in `pyproject.toml`.
-- Keep argument parsing local to the CLI module and import reusable logic from lower layers.
+### Eine neue Domänenentität hinzufügen
 
-### Add a new scenario configuration
+- In `src/mss/domain/` ablegen.
+- Frei von CLI- und Dateisystem-Belangen halten.
+- Aus `src/mss/domain/__init__.py` exportieren, falls Teil der Paket-API.
 
-- Add a new YAML file under `config/`.
-- Name it after the scenario purpose, not after a temporary experiment.
-- Reference it from documentation or job runners if it becomes a supported workflow.
+### Ein neues Makro-Verhalten hinzufügen
 
-### Add a new test
+- Konfigurationsfelder kommen in `src/mss/simulation/macro/config.py`.
+- Räumliche oder Topologie-Logik kommt in `src/mss/simulation/macro/grid.py`.
+- Änderungen an der täglichen Orchestrierung kommen in `src/mss/simulation/macro/simulator.py`.
 
-- Unit-style tests go near the top of `tests/`.
-- Cross-layer or behavior-flow tests go in `tests/integration_tests/`.
-- Match test names to the module or behavior being verified.
+### Ein neues Mikro-Verhalten hinzufügen
 
-## Scalability Guidance
+- Genom- oder Trait-Berechnungen kommen in `src/mss/simulation/micro/genome.py`.
+- Populations-Evolutionslogik kommt in `src/mss/simulation/micro/engine.py`.
+- Batch-Ausführung, Persistenz oder Parallelität kommen in `src/mss/simulation/micro/simulator.py`.
 
-This structure is intended to scale in a controlled way:
+### Einen neuen CLI-Befehl hinzufügen
 
-- New simulation layers can be added beside `macro/` and `micro/` under `src/mss/simulation/`.
-- Additional domain concepts can grow under `src/mss/domain/` without polluting orchestration code.
-- CLI commands can grow independently without forcing domain modules to depend on process-level concerns.
-- Scenario growth is isolated to `config/` instead of duplicating logic across scripts.
+- Ein neues Modul in `src/mss/cli/` erstellen.
+- Einen Eintrag unter `[project.scripts]` in `pyproject.toml` hinzufügen.
+- Das Argument-Parsing lokal im CLI-Modul halten und wiederverwendbare Logik aus tieferen Schichten importieren.
 
-If a subpackage grows beyond roughly 5-7 files, introduce a focused subfolder only when it creates a clearer boundary, for example `src/mss/simulation/macro/policies/`.
+### Eine neue Szenario-Konfiguration hinzufügen
 
-## Maintenance Recommendations
+- Eine neue YAML-Datei unter `config/` anlegen.
+- Nach dem Zweck des Szenarios benennen, nicht nach einem temporären Experiment.
+- Aus der Dokumentation oder den Job-Runnern referenzieren, sobald sie ein unterstützter Workflow wird.
 
-To keep the structure healthy over time:
+### Einen neuen Test hinzufügen
 
-- Reject new top-level code folders unless they are clearly non-source concerns.
-- Avoid reintroducing duplicate “runner” logic in multiple files.
-- Rename ambiguous modules early if their responsibility broadens.
-- Keep generated artifacts out of `src/`, `tests/`, and `docs/`.
-- Update this README whenever a new top-level folder, package, or public entry point is added.
-- Review imports during code review; `mss...` should remain the default import root.
+- Unit-artige Tests gehören in den oberen Bereich von `tests/`.
+- Schicht- oder ablaufübergreifende Tests gehören in `tests/integration_tests/`.
+- Testnamen am geprüften Modul oder Verhalten ausrichten.
 
-## Onboarding Recommendations
+## Skalierungshinweise
 
-For new developers, the fastest path is:
+Diese Struktur ist auf kontrolliertes Wachstum ausgelegt:
 
-1. Read this README for the repository map.
-2. Read `config/01_Parameterübersicht.md` for an overview of all model parameters and their calibration status.
-3. Read `config/template.yml` for a fully documented reference of every supported YAML variable.
-4. Start with `src/mss/domain/patient.py` to understand the shared contract.
-5. Read `src/mss/simulation/macro/simulator.py` and `src/mss/simulation/micro/simulator.py` to understand orchestration boundaries.
-6. Run `uv run pytest` to validate the environment.
-7. Run `uv run mss-run --config config/simulation_realistic.yml` and inspect the generated `outputs/` directory.
+- Neue Simulationsebenen können neben `macro/` und `micro/` unter `src/mss/simulation/` ergänzt werden.
+- Weitere Domänenkonzepte können unter `src/mss/domain/` wachsen, ohne die Orchestrierung zu verunreinigen.
+- CLI-Befehle können unabhängig wachsen, ohne dass Domänenmodule von Prozess-Belangen abhängig werden.
+- Szenario-Wachstum bleibt auf `config/` beschränkt, statt Logik über Skripte zu duplizieren.
 
-During onboarding reviews, emphasize one rule: if a file does not belong under `src/mss`, it should only exist at the repository root if it is configuration, documentation, automation, or generated output.
+Wächst ein Unterpaket über etwa 5 bis 7 Dateien hinaus, nur dann ein fokussiertes Unterverzeichnis einführen, wenn es eine klarere Grenze schafft, zum Beispiel `src/mss/simulation/macro/policies/`.
+
+## Wartungsempfehlungen
+
+Um die Struktur langfristig gesund zu halten:
+
+- Neue Top-Level-Code-Ordner ablehnen, ausser sie sind klar keine Source-Belange.
+- Doppelte "Runner"-Logik in mehreren Dateien vermeiden.
+- Mehrdeutige Module früh umbenennen, wenn sich ihre Verantwortung erweitert.
+- Generierte Artefakte aus `src/`, `tests/` und `docs/` heraushalten.
+- Dieses README aktualisieren, sobald ein neuer Top-Level-Ordner, ein neues Paket oder ein neuer öffentlicher Einstiegspunkt hinzukommt.
+- Importe im Code-Review prüfen. `mss...` soll das Standard-Import-Root bleiben.
+
+## Onboarding-Empfehlungen
+
+Für neue Entwickelnde ist der schnellste Weg:
+
+1. [`docs/00_Overview.md`](docs/00_Overview.md) für die geführte Tour und den dort empfohlenen Lesepfad lesen (Überblick -> Makro -> Mikro -> Modellverhalten).
+2. Dieses README für die Repository-Karte und die Ausführungsbefehle überfliegen.
+3. `src/mss/domain/patient.py` lesen, um den gemeinsamen Makro/Mikro-Vertrag zu verstehen, danach die beiden `simulator.py`-Dateien für die Orchestrierungsgrenzen.
+4. `uv run pytest` ausführen, danach `uv run mss-run --config config/simulation_realistic.yml` und das erzeugte `outputs/`-Verzeichnis inspizieren.
+
+Bei Onboarding-Reviews gilt eine Regel: Gehört eine Datei nicht unter `src/mss`, darf sie nur dann im Repository-Root liegen, wenn sie Konfiguration, Dokumentation, Automatisierung oder generierter Output ist.
