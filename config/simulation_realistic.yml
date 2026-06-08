@@ -5,6 +5,7 @@ run:
   seed: 4
   run_id: realistic_run
   quiet: false
+  use_micro: true                 # Mikro-Layer (Within-Host-Evolution) [true/false]; false = nur Makro, Carrier behalten Template-Defaults
 
 population:
   hospitals: 6                    # Anzahl Spitäler im Netzwerk [Stück]
@@ -80,56 +81,48 @@ macro:
 
 
 micro:
-  workers: null
-  founder_pool_size: 32
-  founder_pool_seed: 1
-  founder_pool_gene_noise_std: 0.02
-  gene_presence_threshold: 0.2
-  steps_per_day: 12
-  max_strains: 40
-  carrying_capacity: 500000000.0
+  # --- Ausführung (technisch) ---
+  workers: null                       # Worker-Prozesse [Anzahl; null = CPU-Anzahl]
+  founder_pool_size: 32               # Grösse der Gründerstamm-Bibliothek [Anzahl Stämme; 0 = deaktiviert]
+  founder_pool_seed: 1                # Seed der Gründer-Erzeugung [technisch, Reproduzierbarkeit]
+  founder_pool_gene_noise_std: 0.02   # Rauschen um Archetyp-Genome [Genwert-SD, 0–1]
+  gene_presence_threshold: 0.2        # Schwelle "Gen vorhanden" in Rohlogs [Genwert, 0–1]
 
-  # Extinktions-Untergrenze: liegt die Gesamtpopulation darunter, wird sicher geklärt
-  min_population: 100.0
+  # --- Zeit & Populationsgrenzen ---
+  steps_per_day: 12                   # Mikro-Zeitschritte pro Makro-Tag [Schritte / Tag] -> technisch (Auflösung)
+  max_strains: 40                     # Maximale aktive Stämme pro Episode [Anzahl]
+  carrying_capacity: 500000000.0      # Obergrenze der Within-Host-Population [Bakterien / Patient]
+  min_population: 100.0               # Extinktions-Untergrenze [Bakterien / Patient] -> darunter sichere Klärung
+  clearance_threshold: 1000.0         # Schwelle fast sicherer Klärung [Bakterien / Patient]
 
-  # Lower: resistant minority strains are not wiped by pruning
-  clearance_threshold: 1000.0
+  # --- Mutation ---
+  base_mutation_rate: 0.012           # Basis-Mutationsrate [Mutationen / Gen*Schritt] -> 0 deaktiviert Mutation
+  mutation_std: 0.025                 # SD einer Trait-Mutation [Genwert-Delta, 0–1]
+  stress_mutation_boost: 40.0         # Mutationsboost unter ABX-Stress [Multiplikator; SOS, Lit. 10–100x]
 
-  # Higher mutation rate: resistance emerges de novo within episodes under ABX pressure.
-  # S. aureus SOS response: effective rate = base * stress_boost.
-  # Target: meaningful resistance emergence within 14-30 days of ABX exposure.
-  base_mutation_rate: 0.012
-  mutation_std: 0.025
+  # --- Horizontaler Gentransfer ---
+  base_hgt_rate: 0.03                 # Basis-HGT-Wahrscheinlichkeit [Wahrscheinlichkeit / Stamm*Schritt] -> 0 deaktiviert HGT
+  hgt_gene_transfer_prob: 0.25        # Genübertragung pro HGT-Ereignis [Wahrscheinlichkeit / transferierbares Gen]
 
-  # 40x SOS boost (literature range 10-100x; 40x gives de novo emergence on realistic timescale)
-  stress_mutation_boost: 40.0
+  # --- Selektion & Wachstum ---
+  selection_strength: 2.5             # Exponent auf relative Fitness [dimensionslos; 0 = neutrale Selektion]
+  growth_rate_per_step: 0.18          # Basis-Wachstumsrate [Anteil / Schritt]
+  death_rate_per_step: 0.06           # Basis-Sterberate [Anteil / Schritt]
+  strain_prune_threshold: 200.0       # Pruning-Untergrenze [Bakterien (absolut)]
 
-  # Moderate HGT: plasmid-mediated transfer within host is possible but not dominant
-  base_hgt_rate: 0.03
-  hgt_gene_transfer_prob: 0.25
+  # --- Schaden, Lebenszyklus & Dormanz ---
+  base_damage_per_step: 0.004         # Hintergrundschaden [Schadenseinheiten / Schritt]
+  replication_damage_factor: 0.03     # Zusatzschaden aus Replikationsdruck [Schaden / Schritt-Einheit]
+  stress_damage_factor: 0.06          # Zusatzschaden aus Umweltstress [Schaden / Schritt-Einheit]
+  repair_rate_per_step: 0.08          # Reparaturkapazität [Schadensabbau / Schritt]
+  age_mortality_scale: 0.001          # Gewicht des Linienalters auf Turnover [pro Schritt-Einheit]
+  damage_mortality_scale: 0.025       # Gewicht der Schadenslast auf Turnover [dimensionslos]
+  lifecycle_half_life_steps: 200.0    # Zeitskala des Alterungsdrucks [Schritte]
+  max_damage_load: 5.0                # Sättigung der Schadenslast [Schadenseinheiten]
+  dormancy_growth_penalty: 0.55       # Wachstumsreduktion bei Dormanz [Anteil, 0–1]
+  synergy_repair_dormancy_bonus: 0.25 # Bonus Reparatur x Dormanz [dimensionslos]
+  synergy_stress_tolerance_bonus: 0.20  # Bonus Stress x Toleranz [dimensionslos]
 
-  # Strong selection ensures resistant strains sweep within days under ABX
-  selection_strength: 2.5
-
-  growth_rate_per_step: 0.18
-  death_rate_per_step: 0.06
-
-  # Low prune threshold keeps resistant minority at 0.04% of population alive
-  strain_prune_threshold: 200.0
-
-  base_damage_per_step: 0.004
-  replication_damage_factor: 0.03
-  stress_damage_factor: 0.06
-  repair_rate_per_step: 0.08
-
-  age_mortality_scale: 0.001
-  damage_mortality_scale: 0.025
-  lifecycle_half_life_steps: 200.0
-  max_damage_load: 5.0
-
-  dormancy_growth_penalty: 0.55
-  synergy_repair_dormancy_bonus: 0.25
-  synergy_stress_tolerance_bonus: 0.20
-
-  stochastic_threshold: 10000.0
-  stochastic_noise_scale: 0.08
+  # --- Demografische Stochastik ---
+  stochastic_threshold: 10000.0       # Schwelle Poisson vs. Normalrauschen [Bakterien (absolut)]
+  stochastic_noise_scale: 0.08        # Rauschstärke oberhalb der Schwelle [dimensionslos]

@@ -7,7 +7,7 @@
 # NOTE: The values below are NEUTRAL, NON-CALIBRATED demo defaults for illustration.
 # They are deliberately NOT the calibrated production values; for those see
 # `config/simulation_realistic.yml` (calibration rationale in
-# `config/01_Parameterübersicht.md`).
+# `config/01_Makro_Parameterübersicht.md`).
 #
 # Recommended workflow:
 # 1. Copy this file to `config/my_scenario.yml`
@@ -67,6 +67,11 @@ run:
 
   # If true, suppresses per-day console output.
   quiet: false
+
+  # Master switch for the within-host micro layer.
+  # `true` couples macro and micro; `false` runs macro only and carriers keep
+  # their template defaults (p_clearance, relative_transmissibility, severity_modifier).
+  use_micro: true
 
 population:
   # Number of hospitals in the network.
@@ -253,21 +258,26 @@ micro:
 
   # Number of worker processes/threads.
   # Use `null` to fall back to CPU count.
+  # Unit: count (null = CPU count); technical.
   workers: null
 
   # Shared founder library size for initializing new micro episodes.
   # `0` disables the founder pool and falls back to direct random seeding.
+  # Unit: strain count; 0 = disabled.
   founder_pool_size: 32
 
   # Deterministic seed for founder generation.
   # Founder slots use seeds `founder_pool_seed .. founder_pool_seed + size - 1`.
+  # Unit: technical (reproducibility handle), not a content parameter.
   founder_pool_seed: 1
 
   # Gaussian noise added when building founder genomes around the archetype genotype.
+  # Unit: gene-value standard deviation, 0–1.
   founder_pool_gene_noise_std: 0.02
 
   # Threshold used in raw gene logs to decide whether a gene is considered "present"
   # in a strain for presence-count summaries.
+  # Unit: gene value, 0–1.
   gene_presence_threshold: 0.2
 
   # -------------------------------------------------------------------------
@@ -275,18 +285,23 @@ micro:
   # -------------------------------------------------------------------------
 
   # Number of micro steps simulated per macro day.
+  # Unit: steps / day; technical resolution knob.
   steps_per_day: 12
 
   # Maximum number of strains retained in one episode after consolidation.
+  # Unit: strain count.
   max_strains: 40
 
   # Upper carrying capacity of the within-host population.
+  # Unit: bacteria / patient.
   carrying_capacity: 500000000.0
 
   # Extinction floor: total population below this forces clearance.
+  # Unit: bacteria / patient.
   min_population: 100.0
 
   # Population size below which clearance is almost certain.
+  # Unit: bacteria / patient.
   clearance_threshold: 1000.0
 
   # -------------------------------------------------------------------------
@@ -294,12 +309,15 @@ micro:
   # -------------------------------------------------------------------------
 
   # Baseline mutation rate per gene per step.
+  # Unit: mutations / gene*step; 0 disables mutation.
   base_mutation_rate: 0.012
 
   # Standard deviation of one mutational perturbation.
+  # Unit: gene-value delta, 0–1.
   mutation_std: 0.025
 
   # Multiplicative mutation boost under antibiotic stress.
+  # Unit: multiplier (SOS; literature range 10–100x).
   stress_mutation_boost: 40.0
 
   # -------------------------------------------------------------------------
@@ -307,9 +325,11 @@ micro:
   # -------------------------------------------------------------------------
 
   # Baseline HGT probability per eligible strain and step.
+  # Unit: probability / strain*step; 0 disables HGT.
   base_hgt_rate: 0.03
 
   # Probability that each transferable gene is copied during one HGT event.
+  # Unit: probability / transferable gene.
   hgt_gene_transfer_prob: 0.25
 
   # -------------------------------------------------------------------------
@@ -317,15 +337,19 @@ micro:
   # -------------------------------------------------------------------------
 
   # Exponent on relative fitness. Higher values sharpen competitive selection.
+  # Unit: dimensionless exponent; 0 = neutral selection.
   selection_strength: 2.5
 
   # Baseline per-step growth rate before survival and lifecycle corrections.
+  # Unit: fraction / step.
   growth_rate_per_step: 0.18
 
   # Baseline per-step death rate.
+  # Unit: fraction / step.
   death_rate_per_step: 0.06
 
   # Strains below this absolute population are removed during consolidation.
+  # Unit: bacteria (absolute).
   strain_prune_threshold: 200.0
 
   # -------------------------------------------------------------------------
@@ -333,36 +357,47 @@ micro:
   # -------------------------------------------------------------------------
 
   # Background damage accumulated each step.
+  # Unit: damage units / step.
   base_damage_per_step: 0.004
 
   # Extra damage from replication pressure.
+  # Unit: damage / step-unit.
   replication_damage_factor: 0.03
 
   # Extra damage from environmental stress.
+  # Unit: damage / step-unit.
   stress_damage_factor: 0.06
 
   # Per-step repair capacity scaling.
+  # Unit: damage cleared / step.
   repair_rate_per_step: 0.08
 
   # How strongly lineage age increases mortality.
+  # Unit: per step-unit.
   age_mortality_scale: 0.001
 
   # How strongly damage load increases mortality.
+  # Unit: dimensionless.
   damage_mortality_scale: 0.025
 
   # Step scale at which age-related turnover becomes important.
+  # Unit: steps.
   lifecycle_half_life_steps: 200.0
 
   # Saturation cap for accumulated damage.
+  # Unit: damage units.
   max_damage_load: 5.0
 
   # Growth penalty paid when dormancy is active.
+  # Unit: fraction, 0–1.
   dormancy_growth_penalty: 0.55
 
   # Synergy bonus for the repair x dormancy combination.
+  # Unit: dimensionless.
   synergy_repair_dormancy_bonus: 0.25
 
   # Synergy bonus for the stress-response x tolerance combination.
+  # Unit: dimensionless.
   synergy_stress_tolerance_bonus: 0.20
 
   # -------------------------------------------------------------------------
@@ -370,7 +405,9 @@ micro:
   # -------------------------------------------------------------------------
 
   # Below this threshold, exact Poisson sampling is used.
+  # Unit: bacteria (absolute).
   stochastic_threshold: 10000.0
 
   # Noise scaling for large populations above the stochastic threshold.
+  # Unit: dimensionless.
   stochastic_noise_scale: 0.08

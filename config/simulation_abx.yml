@@ -62,35 +62,35 @@ macro:
     proximity_decay_alpha: 0.5
 
 micro:
-    workers: 300
-    founder_pool_size: 64
-    founder_pool_seed: 1
-    founder_pool_gene_noise_std: 0.03
-    gene_presence_threshold: 0.2
-    steps_per_day: 12
-    max_strains: 100
-    carrying_capacity: 1000000000.0
-    min_population: 100.0  # extinction floor
-    clearance_threshold: 12.0
-    base_mutation_rate: 0.05
-    mutation_std: 0.09
-    stress_mutation_boost: 7.0
-    base_hgt_rate: 0.08
-    hgt_gene_transfer_prob: 0.6
-    selection_strength: 1.45
-    growth_rate_per_step: 0.36
-    death_rate_per_step: 0.045
-    strain_prune_threshold: 0.5
-    base_damage_per_step: 0.008
-    replication_damage_factor: 0.06
-    stress_damage_factor: 0.07
-    repair_rate_per_step: 0.12
-    age_mortality_scale: 0.003
-    damage_mortality_scale: 0.04
-    lifecycle_half_life_steps: 110.0
-    max_damage_load: 7.5
-    dormancy_growth_penalty: 0.1
-    synergy_repair_dormancy_bonus: 0.38
-    synergy_stress_tolerance_bonus: 0.34
-    stochastic_threshold: 40000.0
-    stochastic_noise_scale: 0.65
+    workers: 300                        # Worker-Prozesse [Anzahl; null = CPU-Anzahl]
+    founder_pool_size: 64               # Gründerstamm-Bibliothek [Anzahl Stämme; 0 = deaktiviert]
+    founder_pool_seed: 1                # Seed der Gründer-Erzeugung [technisch]
+    founder_pool_gene_noise_std: 0.03   # Rauschen um Archetyp-Genome [Genwert-SD, 0–1]
+    gene_presence_threshold: 0.2        # Schwelle "Gen vorhanden" in Rohlogs [Genwert, 0–1]
+    steps_per_day: 12                   # Mikro-Zeitschritte pro Makro-Tag [Schritte / Tag] -> technisch
+    max_strains: 100                    # Maximale aktive Stämme pro Episode [Anzahl]
+    carrying_capacity: 1000000000.0     # Obergrenze Within-Host-Population [Bakterien / Patient]
+    min_population: 100.0               # Extinktions-Untergrenze [Bakterien / Patient]
+    clearance_threshold: 12.0           # Schwelle fast sicherer Klärung [Bakterien / Patient]
+    base_mutation_rate: 0.05            # Basis-Mutationsrate [Mutationen / Gen*Schritt] -> 0 deaktiviert Mutation
+    mutation_std: 0.09                  # SD einer Trait-Mutation [Genwert-Delta, 0–1]
+    stress_mutation_boost: 7.0          # Mutationsboost unter ABX-Stress [Multiplikator]
+    base_hgt_rate: 0.08                 # Basis-HGT-Wahrscheinlichkeit [Wahrscheinlichkeit / Stamm*Schritt] -> 0 deaktiviert HGT
+    hgt_gene_transfer_prob: 0.6         # Genübertragung pro HGT-Ereignis [Wahrscheinlichkeit / Gen]
+    selection_strength: 1.45            # Exponent auf relative Fitness [dimensionslos; 0 = neutral]
+    growth_rate_per_step: 0.36          # Basis-Wachstumsrate [Anteil / Schritt]
+    death_rate_per_step: 0.045          # Basis-Sterberate [Anteil / Schritt]
+    strain_prune_threshold: 0.5         # Pruning-Untergrenze [Bakterien (absolut)]
+    base_damage_per_step: 0.008         # Hintergrundschaden [Schadenseinheiten / Schritt]
+    replication_damage_factor: 0.06     # Zusatzschaden aus Replikationsdruck [Schaden / Schritt-Einheit]
+    stress_damage_factor: 0.07          # Zusatzschaden aus Umweltstress [Schaden / Schritt-Einheit]
+    repair_rate_per_step: 0.12          # Reparaturkapazität [Schadensabbau / Schritt]
+    age_mortality_scale: 0.003          # Gewicht des Linienalters auf Turnover [pro Schritt-Einheit]
+    damage_mortality_scale: 0.04        # Gewicht der Schadenslast auf Turnover [dimensionslos]
+    lifecycle_half_life_steps: 110.0    # Zeitskala des Alterungsdrucks [Schritte]
+    max_damage_load: 7.5                # Sättigung der Schadenslast [Schadenseinheiten]
+    dormancy_growth_penalty: 0.1        # Wachstumsreduktion bei Dormanz [Anteil, 0–1]
+    synergy_repair_dormancy_bonus: 0.38 # Bonus Reparatur x Dormanz [dimensionslos]
+    synergy_stress_tolerance_bonus: 0.34  # Bonus Stress x Toleranz [dimensionslos]
+    stochastic_threshold: 40000.0       # Schwelle Poisson vs. Normalrauschen [Bakterien (absolut)]
+    stochastic_noise_scale: 0.65        # Rauschstärke oberhalb der Schwelle [dimensionslos]
