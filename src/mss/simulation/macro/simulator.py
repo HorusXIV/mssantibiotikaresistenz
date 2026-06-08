@@ -218,16 +218,20 @@ class MacroSimulator:
         """Advance the simulation by one day.
 
         Order of operations per day:
-        1. Per hospital clearance: each carrier may revert to susceptible (C -> S).
-        2. Per hospital LOS-based discharge (logistic probability after planned date).
-           Clearance runs first so a carrier who clears today and is already past
-           their planned discharge date can leave the same day.
+        1. Per hospital, in one pass:
+           a. Clearance: each carrier may revert to susceptible (C -> S).
+           b. PatientDailyContext update + isolation detection for every patient.
+              Newly detected carriers (is_isolated set True) immediately have their
+              planned_discharge_day extended by carrier_extension_days.
+           c. Collect micro requests for active carrier episodes.
+        2. Per hospital LOS-based discharge incl. daily mortality (logistic
+           probability after the planned date). Clearance (1a) runs first so a
+           carrier who clears today and is already past their planned date can
+           leave the same day.
         3. Poisson admissions to least-occupied hospital (capped).
-        4. Per hospital PatientDailyContext update for every patient.
-           Newly detected carriers (is_isolated set True) immediately have their
-           planned_discharge_day extended by carrier_extension_days.
-        5. One optional global micro batch for all active carriers.
-        6. Per hospital transmission: susceptible patients may become carriers (S -> C).
+        4. One optional global micro batch for all active carriers.
+        5. Per hospital transmission: susceptible patients may become carriers (S -> C).
+        6. Inter-hospital transfers.
 
         Parameters
         ----------
