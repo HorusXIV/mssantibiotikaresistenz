@@ -284,8 +284,10 @@ micro:
   # Core time / population limits
   # -------------------------------------------------------------------------
 
-  # Number of micro steps simulated per macro day.
-  # Unit: steps / day; technical resolution knob.
+  # Number of micro steps simulated per macro day during the active overnight
+  # micro window. With active_window_hours=12 in the calibration workflow,
+  # the production value 12 means one hour per micro step.
+  # Unit: active micro steps / macro day.
   steps_per_day: 12
 
   # Maximum number of strains retained in one episode after consolidation.
@@ -320,6 +322,11 @@ micro:
   # Unit: multiplier (SOS; literature range 10–100x).
   stress_mutation_boost: 40.0
 
+  # Population fraction moved from a parent strain into each new mutant strain.
+  # Higher values give beneficial mutants a chance to survive pruning and drift.
+  # Unit: fraction / mutation event; capped internally at 10% for multi-hit events.
+  mutant_transfer_fraction: 0.03
+
   # -------------------------------------------------------------------------
   # Horizontal gene transfer
   # -------------------------------------------------------------------------
@@ -336,9 +343,21 @@ micro:
   # Selection and basic growth
   # -------------------------------------------------------------------------
 
-  # Exponent on relative fitness. Higher values sharpen competitive selection.
+  # Baseline exponent on relative fitness without antibiotics. Antibiotic pressure
+  # amplifies this inside selection_step.
   # Unit: dimensionless exponent; 0 = neutral selection.
   selection_strength: 2.5
+
+  # Multiplier controlling how strongly antibiotic pressure amplifies selection.
+  # effective_strength = selection_strength * (1 + abx_pressure * multiplier).
+  # Unit: dimensionless.
+  abx_selection_pressure_multiplier: 3.0
+
+  # Explicit antibiotic killing term added to baseline death. Resistance enters via
+  # abx_survival, so susceptible strains are killed while resistant strains survive.
+  # antibiotic_kill = antibiotic_kill_scale * (1 - abx_survival).
+  # Unit: fraction / step.
+  antibiotic_kill_scale: 0.08
 
   # Baseline per-step growth rate before survival and lifecycle corrections.
   # Unit: fraction / step.

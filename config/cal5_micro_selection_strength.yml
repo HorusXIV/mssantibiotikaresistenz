@@ -1,0 +1,59 @@
+# =============================================================================
+# Kalibrierung 5 (Sweep): micro.selection_strength
+# =============================================================================
+#
+# Was wird kalibriert?
+#   Der Exponent auf die relative Fitness in der Mikro-Selektion. Er wird
+#   steps_per_day (=12) Mal pro Makro-Tag angewandt. Bei hohen Werten erzeugt
+#   schon ein kleiner Fitnessvorsprung einen extremen Tagesvorteil (Sweep des
+#   fittesten Stamms in <1 Tag), wodurch der resistente Anteil ohne ABX praktisch
+#   sofort verschwindet.
+#
+# Zielgrösse: mean_resistant_fraction
+#   Mittlerer within-host resistenter Anteil über das letzte Lauf-Drittel
+#   (von run_realistic_once als meta-Metrik geliefert).
+#
+# Zielwert (an Literatur orientiert): ~0.30
+#   Begründung: Carrier treten mit resistant_fraction = 0.90 ein (nahezu klonale
+#   MRSA-Dominanz, Dall'Antonia et al. 2005). Im Spital-Steady-State mischen sich
+#   persistente MRSA-Träger (Median-Trägerdauer ~7.4–8.5 Monate; CID 32(10):1393,
+#   PubMed 17080378) mit teils dekolonisierten/sensiblen Trägern. Ein populations-
+#   gemittelter Wert deutlich über 0 und im Bereich ~0.2–0.4 ist plausibel; 0.30
+#   als konservativer Mittelpunkt. NICHT 0.90, weil der Mittelwert über alle Carrier
+#   (inkl. teilgeklärter) unter dem Einzel-Carrier-Startwert liegt.
+#
+# WICHTIG — Erwartetes Ergebnis / Interpretation:
+#   Dieser Sweep allein wird das Ziel 0.30 wahrscheinlich NICHT erreichen, selbst
+#   bei selection_strength = 0. Grund: Der fitness-inverse Death-Term in
+#   engine.py::selection_step (death = death_rate*(1/(fitness+0.1))) wirkt als
+#   zweiter, selection_strength-UNABHÄNGIGER Selektionskanal. Der dominante
+#   Fitness-Gap (S vs. R2 ~0.78 vs. ~0.56 pro Schritt) sitzt in genome.py-Konstanten.
+#   -> Wenn dieser Sweep monoton bleibt, aber das Ziel nicht erreicht, ist das das
+#      Signal, zusätzlich die code-seitige Kalibrierung cal6 durchzuführen.
+#   -> Empfehlung: zuerst cal6 (Code-Gap), dann diesen Sweep zur Feinjustierung.
+#
+# Run:
+#   uv run mss-sweep --sweep config/calibration/cal5_micro_selection_strength.yml \
+#     --config config/simulation_realistic_micro.yml --n-seeds 5
+# =============================================================================
+
+# Mikro ist teuer -> kürzerer Lauf zur Kalibrierung (Steady-State wird früh erreicht).
+run_days_override: 120
+
+parameter:
+  section: micro
+  name: selection_strength
+  values: [0.0, 0.2, 0.4, 0.6, 0.8, 1.2, 1.8, 2.5]
+  unit: "Exponent (dimensionslos)"
+
+target:
+  metric: mean_resistant_fraction
+  value: 0.30
+  unit: "Anteil"
+  label: "Populationsgemittelter resistenter Anteil; MRSA-Eintritt 0.90, Trägerdauer ~7–9 Mt (CID 32(10), PubMed 17080378)"
+
+# Mikro MUSS an sein, sonst ist die Zielgrösse konstant (Template-Default).
+use_micro: true
+
+# Moderate Seed-Zahl: Mikro-Läufe sind teuer. Für eine glattere Kurve hochsetzen.
+n_seeds: 5

@@ -1,0 +1,79 @@
+# =============================================================================
+# Kalibrierung 6 (Code-Gap): within-host Resistenz-Persistenz ohne Antibiotika
+# =============================================================================
+#
+# Was wird kalibriert?
+#   Die CODE-seitigen Konstanten, die den Fitness-Gap zwischen sensiblen (S) und
+#   resistenten (R2/R3) Stämmen bestimmen. Diese sind NICHT über die Szenario-YAML
+#   erreichbar und sind die dominante Ursache des Resistenz-Washouts:
+#
+#     (a) ResistanceCosts in src/mss/simulation/micro/genome.py
+#         (efflux_pumps=0.15, target_modification=0.12, permeability_reduction=0.08)
+#         -> netto ~0.12 Fitnesskosten für R2.
+#     (b) GROWTH_BASE der Seed-Genome in
+#         src/mss/simulation/micro/engine.py::_create_seed_genome_for_genotype
+#         (R2=0.68, R3=0.62 vs. S=0.80) -> ~0.12 Wachstumsnachteil.
+#     (c) Der fitness-inverse Death-Term in engine.py::selection_step
+#         (death = death_rate*(1/(fitness+0.1))) verstärkt (a)+(b) selektiv.
+#
+#   Zusammen geben sie R2 ohne ABX einen Netto-Wachstumsnachteil von ~5–6%/Schritt;
+#   über 12 Schritte/Tag halbiert sich der resistente Anteil ~alle 8 Tage -> Washout
+#   in <30 Tagen. Real persistiert MRSA Monate (Fitnesskosten werden in vivo durch
+#   kompensatorische Mutationen weitgehend aufgehoben; AAC 2009 10.1128/aac.01460-09,
+#   MacLean & Vogwill 2014, EMPH; Melnyk et al. 2015, Evol Appl).
+#
+# Zielgrösse: resistant_fraction-Halbwertszeit ohne ABX (Tage)
+#   Wie viele Tage, bis der within-host resistant_fraction von 0.90 auf 0.45 fällt,
+#   in einer kontrollierten Einzel-Carrier-Episode OHNE Antibiotika.
+#
+# Zielwert (an Literatur orientiert): >= 90 Tage (idealerweise Plateau, kein Abfall)
+#   Begründung: Resistenz wird in vivo ohne ABX über Monate stabil gehalten
+#   (kompensatorische Evolution). Ein within-host Modell sollte den resistenten
+#   Anteil über die typische Trägerdauer NICHT in Tagen verlieren. Konservatives
+#   Minimalziel: Halbwertszeit deutlich länger als die mittlere Spital-LOS (~5 Tage)
+#   und im Bereich von Wochen-bis-Monaten.
+#
+# Run (eigenes Skript, nutzt nur die Mikro-Engine, kein mesa/Makro nötig):
+#   uv run mss-micro-resistance-calibrate --config config/simulation_realistic_micro.yml
+#   # oder mit explizitem Gitter (inkl. config-erreichbarer Hebel):
+#   uv run mss-micro-resistance-calibrate \
+#     --config config/simulation_realistic_micro.yml \
+#     --cost-scale 1.0 0.6 0.3 0.15 --growth-gap 0.12 0.08 0.04 0.0 \
+#     --death-floor 0.1 1.0 --selection-strength 0.3 0.6
+#
+# Output: outputs/<timestamp>_MicroResistance/data/
+#   micro_resistance_grid.parquet   (eine Zeile pro Gitterpunkt)
+#   micro_resistance_trajectories.parquet (rf-Verlauf pro Gitterpunkt)
+# =============================================================================
+
+# Kontrollierte Einzel-Carrier-Episode (keine Makro-Kopplung).
+scenario:
+  resistant_fraction: 0.90      # Start: nahezu klonale MRSA-Dominanz (Dall'Antonia 2005)
+  dominant_genotype: R2         # CH-MRSA-Standardklasse (CC22/ST22, Warnke 2014)
+  initial_population: 1000000.0 # 1e6, nasale S.-aureus-Last-Grössenordnung
+  immune_strength: 0.75         # Carrier-Template
+  adherence: 0.70               # Carrier-Template
+  abx_on: false                 # KERN: ohne Antibiotikadruck (Persistenz-Test)
+  n_days: 120
+  n_seeds: 8
+
+# Gitter über die zwei code-seitigen Haupthebel.
+# cost_scale: Multiplikator auf ResistanceCosts (1.0 = aktueller Code, <1 = kompensiert).
+# growth_gap: GROWTH_BASE-Differenz S minus resistant (0.12 = aktueller Code, 0 = kein Gap).
+grid:
+  cost_scale: [1.0, 0.6, 0.3, 0.15]
+  growth_gap: [0.12, 0.08, 0.04, 0.0]
+
+target:
+  metric: rf_half_life_days
+  value: 90.0
+  comparator: ">="
+  label: "Resistenz-Persistenz Monate ohne ABX (kompensatorische Evolution; AAC 2009, EMPH 2014, Evol Appl 2015)"
+
+# Plausibilitäts-Gegencheck unter ABX: Resistenz soll unter beta_lactam NICHT sofort
+# extingieren, sondern selektiert werden (rf steigt, Population überlebt initial).
+counter_check:
+  abx_on: true
+  abx_class: beta_lactam
+  dose_level: std
+  expect: "rf steigt zunächst; Population klärt nicht in < 5 Tagen"

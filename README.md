@@ -126,6 +126,7 @@ Logik der bakteriellen Within-Host-Evolution.
 - `genome.py`: Genomdarstellung, Resistenz-Traits und Fitness-Helfer.
 - `engine.py`: Mikro-Konfiguration und die Stamm-Populations-Evolutions-Engine.
 - `simulator.py`: Batch-Verarbeitungs-Schnittstelle und Verwaltung des Episoden-Lebenszyklus.
+- `time_calibration.py`: Umrechnung schrittbezogener Mikro-Parameter auf neue reale Zeitschrittdefinitionen und kontrollierte Diagnose-Ensembles.
 
 ### `src/mss/cli/`
 
@@ -134,6 +135,7 @@ Ausführbare Einstiegspunkte, die die Anwendung aus tieferliegenden Modulen zusa
 - `run_coupled_simulation.py`: lädt die YAML-Konfiguration, führt die gekoppelte Makro/Mikro-Simulation aus und schreibt Parquet-Outputs. Stellt zudem `run_realistic_once()` bereit, das vom Sweep-Kalibrierungswerkzeug genutzt wird.
 - `run_single_ward_calibration.py`: analytische β₀-Kalibrierung für eine Einzelstation. Leitet `base_transmission_rate` aus einer geschlossenen Formel ab und validiert sie per Simulation. `--n-runs > 1` führt ein stochastisches Ensemble über Seeds aus und aggregiert die Ergebnisse.
 - `run_parameter_sweep.py`: strukturierte Parameter-Sweep-Kalibrierung. Variiert einen YAML-Parameter über ein definiertes Gitter, führt die Simulation für jeden Wert aus und plottet den Effekt auf eine Zielgrösse.
+- `run_micro_time_calibration.py`: validiert die stündliche Mikro-Zeitskala als 12 einstündige Nachtfenster-Schritte und erzeugt Diagnose-Outputs bei alternativen Auflösungen.
 - `visualize_results.py`: liest generierte Parquet-Outputs und schreibt Diagnose-Plots.
 
 ### `config/`
@@ -149,6 +151,7 @@ Laufzeit-Konfigurationsdateien. Diese sollen umgebungs- oder szenariospezifisch 
   - `cal1_simulation_single_ward.yml`: Einzelstation-β₀-Kalibrierung (analytisch).
   - `cal2_proximity_decay.yml`: räumlicher Distanzabfall gegenüber dem Zimmernachbar-Übertragungsanteil (gleiche Zelle).
   - `cal3_isolation_effectiveness.yml`: Isolationswirksamkeit gegenüber der relativen Akquisitionsreduktion (Counterfactual-Baseline).
+  - `cal4_micro_hourly_time_scale.yml`: Rezept für die Mikro-Zeitskalen-Ausrichtung auf 12 einstündige Schritte im Nachtfenster.
 
 ### `Organizational/`
 
@@ -165,6 +168,7 @@ Projektdokumentation, Diagramme und analytische Materialien für Menschen. In di
 - `docs/01_Makro_Overview.md`: Makro-Ebene (Spital-Netzwerk) mit Tagesablauf, Übertragung und Patient-Kopplung.
 - `docs/02_Mikro_Overview.md`: Mikro-Ebene (Within-Host) mit Stamm-Populationen, Kopplung und Evolutionsmechanik.
 - `docs/03_Modellverhalten_und_Methodik.md`: beobachtetes Modellverhalten (effektive gegenüber konfigurierten Raten, Stabilität) und die Methodik im Umgang mit nicht-plausiblen Ergebnissen.
+- `docs/04_Micro_Time_Calibration.md`: Quellenanker, Formeln und Validierungsworkflow für stündliche Mikro-Schritte.
 - `docs/system_overview/`: Mermaid-Diagramme, Systemkarten und das Hilfsskript zum Erzeugen der Graphen.
 - `docs/organizational/`: reserviert für Planungs- oder Prozessdokumentation.
 
@@ -256,6 +260,12 @@ Parameter-Sweep-Kalibrierung ausführen (Kalibrierungen 2 und 3):
 ```bash
 uv run mss-sweep --sweep config/calibration/cal2_proximity_decay.yml
 uv run mss-sweep --sweep config/calibration/cal3_isolation_effectiveness.yml
+```
+
+Mikro-Zeitskalen-Kalibrierung auf stündliche Schritte ausführen (Kalibrierung 4):
+
+```bash
+uv run mss-micro-time-calibrate --config config/simulation_realistic.yml --target-steps-per-day 12 --active-window-hours 12
 ```
 
 Tests ausführen:

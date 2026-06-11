@@ -17,6 +17,7 @@ realistically:
   08_micro_genotype_stream.png     — dominant-genotype composition over time
   09_micro_hospital_heatmap.png    — hospital-level mean resistance over time
   10_micro_patient_phase_space.png — patient-level resistance vs clearance (final day)
+  11_micro_genotype_persistence.png — how long patient genotype categories persist
 """
 
 from __future__ import annotations
@@ -698,6 +699,183 @@ def plot_micro_patient_phase_space(micro_patient: pd.DataFrame, plot_dir: Path) 
 
 
 # ---------------------------------------------------------------------------
+# Plot 11: Micro Genotype Persistence / Half-Life
+# ---------------------------------------------------------------------------
+
+
+def _episode_source(episode_id: str) -> str:
+    episode_id = str(episode_id)
+    if episode_id.startswith("seed_ep_"):
+        return "seed"
+    if episode_id.startswith("community_ep_"):
+        return "community"
+    if episode_id.startswith("episode_new_") or "trans" in episode_id or "acq" in episode_id:
+        return "acquired"
+    return "other"
+
+
+def _build_genotype_streaks(micro_patient: pd.DataFrame) -> pd.DataFrame:
+    required = {"day", "episode_id", "dominant_genotype"}
+    if micro_patient.empty or not required.issubset(micro_patient.columns):
+        return pd.DataFrame()
+
+    df = micro_patient.copy()
+    df = df[df["episode_id"].astype(str).str.len() > 0]
+    if "total_population" in df.columns:
+        df = df[pd.to_numeric(df["total_population"], errors="coerce").fillna(0.0) > 0.0]
+    if df.empty:
+        return pd.DataFrame()
+
+    tracked = {"S", "R1", "R2", "R3"}
+    genotype = df["dominant_genotype"].astype(str)
+    df["category"] = genotype.where(genotype.isin(tracked), "OTHER")
+    df["day"] = pd.to_numeric(df["day"], errors="coerce").astype("Int64")
+    df = df.dropna(subset=["day"]).sort_values(["episode_id", "day"])
+    max_day = int(df["day"].max())
+
+    streaks: list[dict[str, int | str | bool]] = []
+    for episode_id, sub in df.groupby("episode_id", sort=False):
+        sub = sub.drop_duplicates(subset=["day"], keep="last").sort_values("day")
+        source = _episode_source(str(episode_id))
+        start_day: int | None = None
+        end_day: int | None = None
+        category: str | None = None
+
+        for row in sub.itertuples(index=False):
+            day = int(row.day)
+            current_category = str(row.category)
+            if start_day is None:
+                start_day = day
+                end_day = day
+                category = current_category
+                continue
+
+            if current_category != category or day != int(end_day) + 1:
+                streaks.append(
+                    {
+                        "episode_id": str(episode_id),
+                        "episode_source": source,
+                        "category": str(category),
+                        "start_day": int(start_day),
+                        "end_day": int(end_day),
+                        "duration_days": int(end_day) - int(start_day) + 1,
+                        "right_censored": bool(int(end_day) == max_day),
+                    }
+                )
+                start_day = day
+                end_day = day
+                category = current_category
+            else:
+                end_day = day
+
+        if start_day is not None and end_day is not None and category is not None:
+            streaks.append(
+                {
+                    "episode_id": str(episode_id),
+                    "episode_source": source,
+                    "category": str(category),
+                    "start_day": int(start_day),
+                    "end_day": int(end_day),
+                    "duration_days": int(end_day) - int(start_day) + 1,
+                    "right_censored": bool(int(end_day) == max_day),
+                }
+            )
+
+    return pd.DataFrame(streaks)
+
+
+def plot_micro_genotype_persistence(micro_patient: pd.DataFrame, plot_dir: Path) -> None:
+    streaks = _build_genotype_streaks(micro_patient)
+    if streaks.empty:
+        print("  skipped 11_micro_genotype_persistence.png (no genotype streak data)")
+        return
+
+    genotype_order = ["S", "R1", "R2", "R3", "OTHER"]
+    color_map = {
+        "S": "#4daf4a",
+        "R1": "#ff7f00",
+        "R2": "#e41a1c",
+        "R3": "#984ea3",
+        "OTHER": "#7f7f7f",
+    }
+
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5.5))
+    fig.suptitle("Micro Genotype Persistence", fontsize=14, fontweight="bold")
+
+    ax = axes[0]
+    max_duration = int(streaks["duration_days"].max())
+    for category in genotype_order:
+        sub = streaks[streaks["category"] == category]
+        if sub.empty:
+            continue
+        durations = pd.to_numeric(sub["duration_days"], errors="coerce").dropna().to_numpy()
+        x = np.arange(1, max_duration + 1)
+        y = np.array([(durations >= day).mean() for day in x])
+        half_idx = np.where(y <= 0.5)[0]
+        half_label = f"{x[int(half_idx[0])]}d" if len(half_idx) else f">{max_duration}d"
+        ax.step(
+            x,
+            y,
+            where="post",
+            lw=2,
+            color=color_map.get(category, "#7f7f7f"),
+            label=f"{category} (n={len(sub)}, t1/2={half_label})",
+        )
+    ax.axhline(0.5, color="black", lw=1, ls="--", alpha=0.5)
+    ax.set_title("Observed category-streak persistence")
+    ax.set_xlabel("Consecutive days in same dominant genotype")
+    ax.set_ylabel("Fraction of streaks still present")
+    ax.set_ylim(0, 1.02)
+    ax.grid(alpha=0.3)
+    ax.legend(fontsize=8)
+
+    ax = axes[1]
+    source_order = ["seed", "community", "acquired", "other"]
+    heat = (
+        streaks.pivot_table(
+            index="episode_source",
+            columns="category",
+            values="duration_days",
+            aggfunc="median",
+        )
+        .reindex(index=source_order, columns=genotype_order)
+        .dropna(how="all")
+        .fillna(0.0)
+    )
+    if heat.empty:
+        ax.axis("off")
+        ax.set_title("No source/category duration data")
+    else:
+        vmax = max(1.0, float(heat.to_numpy().max()))
+        im = ax.imshow(heat.to_numpy(), aspect="auto", cmap="YlGnBu", vmin=0, vmax=vmax)
+        ax.set_title("Median streak duration by episode source")
+        ax.set_xlabel("Dominant genotype")
+        ax.set_ylabel("Episode source")
+        ax.set_xticks(range(len(heat.columns)))
+        ax.set_xticklabels(heat.columns)
+        ax.set_yticks(range(len(heat.index)))
+        ax.set_yticklabels(heat.index)
+        counts = streaks.pivot_table(
+            index="episode_source",
+            columns="category",
+            values="duration_days",
+            aggfunc="count",
+        ).reindex(index=heat.index, columns=heat.columns)
+        for i, source in enumerate(heat.index):
+            for j, category in enumerate(heat.columns):
+                median = float(heat.loc[source, category])
+                count_value = counts.loc[source, category]
+                n = int(count_value) if not pd.isna(count_value) else 0
+                if n > 0:
+                    ax.text(j, i, f"{median:.0f}d\nn={n}", ha="center", va="center", fontsize=8)
+        cbar = fig.colorbar(im, ax=ax, fraction=0.04, pad=0.02)
+        cbar.set_label("Median duration (days)")
+
+    fig.tight_layout()
+    _save(fig, plot_dir / "11_micro_genotype_persistence.png")
+
+
+# ---------------------------------------------------------------------------
 # Optional interactive explorer (micro patient points by day)
 # ---------------------------------------------------------------------------
 
@@ -847,6 +1025,7 @@ def run(
     plot_micro_genotype_stream(micro_genotype, plot_dir)
     plot_micro_hospital_heatmap(micro_hosp, plot_dir)
     plot_micro_patient_phase_space(micro_patient, plot_dir)
+    plot_micro_genotype_persistence(micro_patient, plot_dir)
 
     if quiet:
         print(f"plots_written to={plot_dir}")

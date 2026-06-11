@@ -32,6 +32,18 @@ from .genome import (
     create_wild_type_genome,
 )
 from .simulator import EpisodeState, MicroSimulator, run_micro_simulation
+from .time_calibration import (
+    MicroCalibrationScenario,
+    TimeScaleChange,
+    additive_per_step_for_new_resolution,
+    compound_fraction_per_step_for_new_resolution,
+    describe_time_scaling,
+    poisson_intensity_per_step_for_new_resolution,
+    probability_per_step_for_new_resolution,
+    rescale_micro_config_for_step_duration,
+    run_micro_time_scale_ensemble,
+    summarize_ensemble,
+)
 
 __all__ = [
     "ABX_PROFILES",
@@ -41,12 +53,16 @@ __all__ = [
     "FounderStrain",
     "GeneIndex",
     "MicroSimulator",
+    "MicroCalibrationScenario",
     "NUM_GENES",
     "ResistanceCosts",
     "SimulationConfig",
     "StrainPopulation",
+    "TimeScaleChange",
+    "additive_per_step_for_new_resolution",
     "build_founder_pool",
     "classify_genotype",
+    "compound_fraction_per_step_for_new_resolution",
     "compute_abx_survival",
     "compute_clearance_probability",
     "compute_fitness",
@@ -57,11 +73,17 @@ __all__ = [
     "compute_transmissibility",
     "create_resistant_genome",
     "create_wild_type_genome",
+    "describe_time_scaling",
     "get_dominant_strain",
     "horizontal_gene_transfer",
     "mutate_population",
     "population_to_response",
+    "poisson_intensity_per_step_for_new_resolution",
+    "probability_per_step_for_new_resolution",
+    "rescale_micro_config_for_step_duration",
     "run_micro_simulation",
+    "run_micro_time_scale_ensemble",
     "selection_step",
     "simulate_day",
+    "summarize_ensemble",
 ]

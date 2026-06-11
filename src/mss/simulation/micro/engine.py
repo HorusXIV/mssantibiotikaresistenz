@@ -18,9 +18,11 @@ from funkybob import data as funkybob_data
 
 from .genome import (
     ABX_PROFILES,
+    DOSE_MULTIPLIERS,
     NUM_GENES,
     GeneIndex,
     classify_genotype,
+    compute_abx_survival,
     compute_fitness,
     compute_resistant_fraction,
     compute_severity,
@@ -99,6 +101,7 @@ class SimulationConfig:
     base_mutation_rate: float = 0.012  # Base mutation per gene per step
     mutation_std: float = 0.025  # Gaussian std for mutations
     stress_mutation_boost: float = 40.0  # Mutation rate multiplier under ABX stress
+    mutant_transfer_fraction: float = 0.03  # Population fraction moved to a new mutant
 
     # HGT parameters
     base_hgt_rate: float = 0.03  # Base probability of HGT per step
@@ -106,10 +109,15 @@ class SimulationConfig:
 
     # Selection parameters
     selection_strength: float = 2.5  # Exponent for fitness-based selection
+    abx_selection_pressure_multiplier: float = 3.0  # ABX pressure boost for selection
+    antibiotic_kill_scale: float = 0.08  # Explicit resistance-dependent ABX kill per step
 
     # Population dynamics
     growth_rate_per_step: float = 0.18  # Max growth per step (before fitness)
     death_rate_per_step: float = 0.06  # Base death rate per step
+    death_fitness_floor: float = 0.1  # Floor in death = death_rate*(1/(fitness+floor));
+    # higher values flatten the fitness-dependence of death (weaker hidden selection
+    # channel against low-fitness resistant strains). 0.1 reproduces legacy behavior.
     strain_prune_threshold: float = 200.0  # Drop numerically negligible strains
 
     # Lifecycle / turnover dynamics
@@ -589,8 +597,8 @@ def mutate_population(
                 delta = rng.normal(0, config.mutation_std)
                 mutant[gene_idx] = np.clip(mutant[gene_idx] + delta, 0.0, 1.0)
 
-            # Transfer small fraction to mutant
-            transfer_fraction = 0.01 * n_mutations
+            # Transfer a configurable founder fraction so mutants are not born below pruning.
+            transfer_fraction = min(0.10, config.mutant_transfer_fraction * n_mutations)
             transfer_pop = populations[i] * transfer_fraction
             populations[i] -= transfer_pop
 
@@ -786,25 +794,39 @@ def selection_step(
     lineage_ages = population.lineage_ages.copy()
     damage_loads = population.damage_loads.copy()
 
-    # Compute fitness for all strains
-    fitness = compute_fitness(
+    # Baseline host fitness is separate from antibiotic killing. Antibiotics
+    # create directional selection and an explicit kill term below.
+    baseline_fitness = compute_fitness(
         genomes,
-        abx_class=abx_class,
+        abx_class="none",
         dose_level=dose_level,
         adherence=adherence,
         immune_strength=immune_strength,
     )
+    abx_survival = compute_abx_survival(
+        genomes,
+        abx_class=abx_class,
+        dose_level=dose_level,
+        adherence=adherence,
+    )
+    selection_fitness = np.clip(baseline_fitness * abx_survival, 0.001, 1.0)
 
-    # Growth based on fitness
-    # Relative fitness affects growth rate
-    mean_fitness = np.mean(fitness) if len(fitness) > 0 else 0.5
-    relative_fitness = fitness / (mean_fitness + 1e-6)
+    # Relative fitness affects growth rate. Under ABX this favors resistant tails;
+    # without ABX it reduces to baseline host fitness.
+    mean_fitness = np.mean(selection_fitness) if len(selection_fitness) > 0 else 0.5
+    relative_fitness = selection_fitness / (mean_fitness + 1e-6)
 
-    # Apply selection strength
-    selection_factor = np.power(relative_fitness, config.selection_strength)
+    # Antibiotic pressure turns small fitness differences into life-or-death selection.
+    profile = ABX_PROFILES.get(abx_class, ABX_PROFILES["none"])
+    dose_multiplier = DOSE_MULTIPLIERS.get(dose_level, 1.0)
+    abx_pressure = float(np.clip(profile.base_kill_rate * dose_multiplier * adherence, 0.0, 1.0))
+    effective_selection_strength = config.selection_strength * (
+        1.0 + abx_pressure * config.abx_selection_pressure_multiplier
+    )
+    selection_factor = np.power(relative_fitness, effective_selection_strength)
 
     # Population dynamics
-    growth = config.growth_rate_per_step * selection_factor * fitness
+    growth = config.growth_rate_per_step * selection_factor * selection_fitness
     metabolic_support = np.clip(genomes[:, GeneIndex.METABOLIC_OPTIMIZATION], 0.0, 1.0)
     repair_gene = np.clip(genomes[:, GeneIndex.DNA_REPAIR], 0.0, 1.0)
     dormancy_gene = np.clip(genomes[:, GeneIndex.DORMANCY_PROPENSITY], 0.0, 1.0)
@@ -836,7 +858,7 @@ def selection_step(
         1.5,
     )
 
-    environmental_stress = 1.0 - fitness
+    environmental_stress = 1.0 - selection_fitness
     active_dormancy = dormancy_capacity * (0.2 + 0.8 * environmental_stress)
 
     growth *= np.clip(1.0 - config.dormancy_growth_penalty * active_dormancy, 0.2, 1.0)
@@ -870,11 +892,15 @@ def selection_step(
         1.0,
     )
 
-    death = config.death_rate_per_step * (1.0 / (fitness + 0.1)) + turnover_pressure
+    baseline_death = config.death_rate_per_step * (
+        1.0 / (baseline_fitness + config.death_fitness_floor)
+    )
+    antibiotic_kill = config.antibiotic_kill_scale * (1.0 - abx_survival)
+    death = baseline_death + antibiotic_kill + turnover_pressure
 
-    # Net growth
+    # Net growth uses exponential compounding so rates behave like continuous hazards.
     net_growth = growth - death
-    populations = np.maximum(populations * (1.0 + net_growth), 0.0)
+    populations = populations * np.exp(np.clip(net_growth, -50.0, 50.0))
     populations = apply_demographic_stochasticity(populations, config, rng)
 
     # Apply carrying capacity (logistic)

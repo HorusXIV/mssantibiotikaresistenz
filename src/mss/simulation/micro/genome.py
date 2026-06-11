@@ -7,10 +7,11 @@ Gene values are normalized floats in [0.0, 1.0].
 
 from __future__ import annotations
 
-import numpy as np
 from dataclasses import dataclass
-from typing import Dict
 from enum import Enum
+from typing import Dict
+
+import numpy as np
 
 
 class GeneIndex(int, Enum):
@@ -72,12 +73,22 @@ class ABXProfile:
 # Predefined antibiotic profiles (illustrative model values; efficacy/kill in 0-1).
 ABX_PROFILES: Dict[str, ABXProfile] = {
     "none": ABXProfile("none", 0.0, 0.0, 0.0, 0.0),
-    "beta_lactam": ABXProfile("beta_lactam", 0.3, 0.8, 0.4, 0.75),
-    "fluoroquinolone": ABXProfile("fluoroquinolone", 0.6, 0.7, 0.3, 0.80),
-    "aminoglycoside": ABXProfile("aminoglycoside", 0.4, 0.5, 0.6, 0.70),
-    "macrolide": ABXProfile("macrolide", 0.7, 0.4, 0.3, 0.65),
-    "tetracycline": ABXProfile("tetracycline", 0.8, 0.3, 0.2, 0.60),
-    "glycopeptide": ABXProfile("glycopeptide", 0.2, 0.9, 0.5, 0.85),
+    # Beta-lactams struggle against efflux but are destroyed by modification
+    # (or bypass via PBP2a). Permeability changes hit them hard.
+    "beta_lactam": ABXProfile("beta_lactam", 0.1, 0.9, 0.6, 0.75),
+    # Fluoroquinolones are largely unaffected by porins, but target mod
+    # (gyrase mutations) is huge. Efflux is moderate.
+    "fluoroquinolone": ABXProfile("fluoroquinolone", 0.5, 0.8, 0.1, 0.80),
+    # Aminoglycosides are big targets for modifying enzymes and permeability
+    # changes, but not classic efflux pumps.
+    "aminoglycoside": ABXProfile("aminoglycoside", 0.2, 0.7, 0.7, 0.70),
+    # Macrolides are heavily effluxed and subject to ribosomal modification.
+    "macrolide": ABXProfile("macrolide", 0.7, 0.7, 0.2, 0.65),
+    # Tetracyclines are the poster child for efflux pumps.
+    "tetracycline": ABXProfile("tetracycline", 0.9, 0.2, 0.2, 0.60),
+    # Glycopeptides are too large to be pumped out (Efflux = 0),
+    # but modification (D-ala-D-lac) makes them completely useless.
+    "glycopeptide": ABXProfile("glycopeptide", 0.0, 0.95, 0.4, 0.85),
 }
 
 DOSE_MULTIPLIERS = {
@@ -191,17 +202,19 @@ def compute_abx_survival(
     permeability = genomes[:, GeneIndex.PERMEABILITY_REDUCTION]
 
     # Combined resistance effect (multiplicative protection)
-    protection = (
+    weighted_resistance = (
         efflux * profile.efflux_efficacy
         + target_mod * profile.target_mod_efficacy
         + permeability * profile.permeability_efficacy
     )
-    # Normalize and cap at 0.95
-    protection = np.clip(protection / 1.5, 0.0, 0.95)
+    protection = weighted_resistance / 1
+    # Normalize and cap at 0.99
+    protection = np.clip(protection, 0.0, 0.99)
 
-    # Survival = 1 - kill_rate * (1 - protection)
-    survival = 1.0 - effective_kill * (1.0 - protection)
-    survival = np.clip(survival, 0.01, 1.0)
+    # Survival = 1 - kill_rate * (1 - protection) ** 2
+    susceptibility = (1.0 - protection) ** 2
+    abx_survival = 1.0 - effective_kill * susceptibility
+    survival = np.clip(abx_survival, 0.01, 1.0)
 
     return survival[0] if single else survival
 

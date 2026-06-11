@@ -1,0 +1,105 @@
+# cal_micro_sensitivity.yml
+#
+# Minimale Konfiguration fuer die Mikro-Sensitivitaetsanalyse.
+# Macro- und Populationsblock sind auf das Minimum reduziert – sie werden
+# vom Sensitivitaetsskript nicht genutzt (simulate_day laeuft direkt).
+# Die Mikro-Werte entsprechen simulation_realistic_micro.yml und dienen
+# als feste Basislinie; nur der jeweils untersuchte Parameter wird variiert.
+
+run:
+  days: 30
+  seed: 42
+  run_id: micro_sensitivity
+  quiet: true
+  use_micro: true
+
+population:
+  hospitals: 1
+  susceptible_count: 10
+  carrier_count: 1
+  initial_department: ward
+  susceptible_template:
+    compliance: 0.80
+    immune_strength: 1.0
+    sociability: 1.0
+  carrier_template:
+    compliance: 0.70
+    immune_strength: 0.75
+    resistant_fraction: 0.90
+    dominant_genotype: R2
+    relative_transmissibility: 1
+    p_clearance: 0.0039
+    severity_modifier: 1.2
+
+macro:
+  dept_grid_cols: 2
+  dept_grid_rows: 1
+  dept_grid_icu_rows: 1
+  network_grid_cols: 1
+  daily_contact_attempts: 14.0
+  base_hygiene: 0.75
+  base_transmission_rate: 0.07
+  los_mean_ward: 5.0
+  los_mean_icu: 2.8
+  los_sigma: 0.6
+  icu_abx_probability: 0.62
+  ward_abx_probability: 0.326
+  daily_admission_rate: 5.0
+  community_carrier_fraction: 0.017
+  max_occupancy_per_hospital: 20
+  daily_transfer_rate: 0.004
+  carrier_extension_days: 12.0
+  base_mortality_rate: 0.0045
+  discharge_logistic_k: 1.0
+  discharge_logistic_t_half: 3.0
+  replacement_resistant_fraction: 0.90
+  replacement_dominant_genotype: "R2"
+  carrier_isolation_probability: 0.65
+  base_isolation_effectiveness: 0.45
+  base_diagnostic_speed: 1.0
+  proximity_decay_alpha: 1.05
+
+# ===========================================================================
+# MIKRO-BLOCK: Basislinie fuer die Sensitivitaetsanalyse
+# (Werte aus simulation_realistic_micro.yml)
+# ===========================================================================
+micro:
+  workers: null
+  founder_pool_size: 0
+  founder_pool_seed: 1
+  founder_pool_gene_noise_std: 0.02
+  gene_presence_threshold: 0.2
+
+  steps_per_day: 12
+  max_strains: 40
+  carrying_capacity: 500000000.0
+  min_population: 100.0
+  clearance_threshold: 1000.0
+
+  base_mutation_rate: 0.006
+  mutation_std: 0.02
+  stress_mutation_boost: 30.0
+
+  base_hgt_rate: 0.02
+  hgt_gene_transfer_prob: 0.25
+
+  selection_strength: 0.6
+  death_fitness_floor: 1.0
+  growth_rate_per_step: 1.5
+  death_rate_per_step: 0.01
+  strain_prune_threshold: 200.0
+
+  base_damage_per_step: 0.004
+  replication_damage_factor: 0.03
+  stress_damage_factor: 0.06
+  repair_rate_per_step: 0.08
+  age_mortality_scale: 0.001
+  damage_mortality_scale: 0.025
+  lifecycle_half_life_steps: 200.0
+  max_damage_load: 5.0
+  dormancy_growth_penalty: 0.55
+  synergy_repair_dormancy_bonus: 0.25
+  synergy_stress_tolerance_bonus: 0.20
+
+  stochastic_threshold: 10000.0
+  stochastic_noise_scale: 0.08

@@ -33,6 +33,8 @@ mss-run = "mss.cli.run_coupled_simulation:main"
 mss-visualize = "mss.cli.visualize_results:main"
 mss-calibrate = "mss.cli.run_single_ward_calibration:main"
 mss-sweep = "mss.cli.run_parameter_sweep:main"
+mss-micro-time-calibrate = "mss.cli.run_micro_time_calibration:main"
+mss-micro-resistance-calibrate = "mss.cli.run_micro_resistance_calibration:main"
 
 [dependency-groups]
 dev = [

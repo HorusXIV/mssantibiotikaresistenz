@@ -271,3 +271,5 @@ outputs/csv/*
 outputs/plots/*
 !outputs/plots/.gitkeep
 containers/**/*.sif
+
+.agents/*

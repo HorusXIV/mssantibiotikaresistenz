@@ -89,7 +89,7 @@ micro:
   gene_presence_threshold: 0.2        # Schwelle "Gen vorhanden" in Rohlogs [Genwert, 0–1]
 
   # --- Zeit & Populationsgrenzen ---
-  steps_per_day: 12                   # Mikro-Zeitschritte pro Makro-Tag [Schritte / Tag] -> technisch (Auflösung)
+  steps_per_day: 12                   # Mikro-Zeitschritte im nächtlichen 12h-Aktivfenster [Schritte / Makro-Tag] -> 1h/Schritt
   max_strains: 40                     # Maximale aktive Stämme pro Episode [Anzahl]
   carrying_capacity: 500000000.0      # Obergrenze der Within-Host-Population [Bakterien / Patient]
   min_population: 100.0               # Extinktions-Untergrenze [Bakterien / Patient] -> darunter sichere Klärung
@@ -99,13 +99,16 @@ micro:
   base_mutation_rate: 0.012           # Basis-Mutationsrate [Mutationen / Gen*Schritt] -> 0 deaktiviert Mutation
   mutation_std: 0.025                 # SD einer Trait-Mutation [Genwert-Delta, 0–1]
   stress_mutation_boost: 40.0         # Mutationsboost unter ABX-Stress [Multiplikator; SOS, Lit. 10–100x]
+  mutant_transfer_fraction: 0.03      # Populationsanteil pro Mutation, der in den neuen Mutantenstamm überführt wird [Anteil/Mutation]
 
   # --- Horizontaler Gentransfer ---
   base_hgt_rate: 0.03                 # Basis-HGT-Wahrscheinlichkeit [Wahrscheinlichkeit / Stamm*Schritt] -> 0 deaktiviert HGT
   hgt_gene_transfer_prob: 0.25        # Genübertragung pro HGT-Ereignis [Wahrscheinlichkeit / transferierbares Gen]
 
   # --- Selektion & Wachstum ---
-  selection_strength: 2.5             # Exponent auf relative Fitness [dimensionslos; 0 = neutrale Selektion]
+  selection_strength: 2.5             # Basis-Exponent auf relative Fitness ohne ABX [dimensionslos; 0 = neutrale Selektion]
+  abx_selection_pressure_multiplier: 3.0  # verstärkt selection_strength unter ABX-Druck [dimensionslos]
+  antibiotic_kill_scale: 0.08       # explizite ABX-Killrate pro Schritt, skaliert mit 1 - abx_survival [Anteil/Schritt]
   growth_rate_per_step: 0.18          # Basis-Wachstumsrate [Anteil / Schritt]
   death_rate_per_step: 0.06           # Basis-Sterberate [Anteil / Schritt]
   strain_prune_threshold: 200.0       # Pruning-Untergrenze [Bakterien (absolut)]

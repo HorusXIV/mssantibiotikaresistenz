@@ -1,0 +1,41 @@
+# Calibration 4: micro time-scale alignment.
+#
+# Goal:
+# Validate the production micro definition: 12 one-hour updates during a
+# 12-hour overnight active window. If a different active-window resolution is
+# tested later, step-dependent rates must be rescaled.
+#
+# Run:
+#   uv run mss-micro-time-calibrate --config config/simulation_realistic.yml \
+#     --target-steps-per-day 12 --active-window-hours 12 --n-days 30 --n-seeds 5
+#
+# Output:
+#   outputs/<timestamp>_MicroTime_12_steps_12h/data/
+#     candidate_micro_12_steps.yml
+#     micro_time_scaling.parquet
+#     micro_time_ensemble.parquet
+#     micro_time_summary.parquet
+
+target_steps_per_day: 12
+reference_steps_per_day: 12
+active_window_hours: 12
+n_days: 30
+n_seeds: 5
+
+scenario:
+  resistant_fraction: 0.90
+  dominant_genotype: R2
+  abx_on: false
+  abx_class: beta_lactam
+  dose_level: std
+  adherence: 0.70
+  immune_strength: 0.75
+  initial_population: 1000000.0
+
+validation_metrics:
+  - total_population
+  - resistant_fraction
+  - p_clearance
+  - n_strains
+  - relative_transmissibility
+  - severity_modifier

@@ -126,9 +126,9 @@ Die Genotyp-Klasse ist abgeleitet aus dem Mittelwert von `EFFLUX_PUMPS`, `TARGET
 ### Fitness
 
 ```text
-fitness = (growth_base - net_resistance_costs)
-          * abx_survival
-          * immune_survival
+baseline_fitness = (growth_base - net_resistance_costs)
+                   * immune_survival
+selection_fitness = baseline_fitness * abx_survival
 ```
 
 Resistenzkosten:
@@ -158,15 +158,17 @@ immune_survival = 1 - base_clearance * (1 - evasion)
 
 ```text
 relative_fitness = fitness / mean_fitness
-selection_factor = relative_fitness ** selection_strength
-growth = growth_rate_per_step * selection_factor * fitness
+effective_selection_strength = selection_strength * (1 + abx_pressure * abx_selection_pressure_multiplier)
+selection_factor = relative_fitness ** effective_selection_strength
+growth = growth_rate_per_step * selection_factor * selection_fitness
+antibiotic_kill = antibiotic_kill_scale * (1 - abx_survival)
 ```
 
 Dormanz reduziert Wachstum, kann aber Replikationsdruck, Schaden und Turnover senken. Schaden entsteht aus Basisverschleiss, Replikationsdruck und Umweltstress; Reparatur hängt von Reparatur-, Dormanz- und Stressgenen ab.
 
 ```text
 net_growth = growth - death
-population_next = population * (1 + net_growth)
+population_next = population * exp(net_growth)
 ```
 
 Danach wird demografische Stochastik angewandt. Wenn die Gesamtpopulation über `carrying_capacity` liegt, werden alle Stämme proportional herunterskaliert.
@@ -180,7 +182,7 @@ strain_rate = effective_rate * (0.5 + mutation_rate_modifier)
 n_mutations ~ Poisson(strain_rate * NUM_GENES)
 ```
 
-Bei Mutation entsteht ein neuer Stamm. Pro mutiertem Gen wird ein normalverteilter Wert mit Standardabweichung `mutation_std` addiert und auf `[0, 1]` begrenzt.
+Bei Mutation entsteht ein neuer Stamm. Pro mutiertem Gen wird ein normalverteilter Wert mit Standardabweichung `mutation_std` addiert und auf `[0, 1]` begrenzt. Der neue Stamm erhält `min(0.10, mutant_transfer_fraction * n_mutations)` der Elternpopulation, damit vorteilhafte Mutanten nicht sofort durch Pruning oder Stochastik verschwinden.
 
 ### Horizontaler Gentransfer
 
@@ -280,7 +282,9 @@ Antibiotikamechanismen sind gut identifizierbar, aber die Zahlen in diesem Trait
 | `clearance_threshold` | kalibrieren | `1000` | unterhalb davon ist `p_clearance = 0.95` | effektive Schwelle, mit Carrier-Dauer kalibrieren |
 | `growth_rate_per_step` | geschätzt / kalibrieren | `0.18` | Wachstum pro Schritt vor Fitness- und Dormanzkorrektur | S. aureus-Generationszeiten geben Obergrenzen; per-step-Wert kalibrieren |
 | `death_rate_per_step` | kalibrieren | `0.06` | basale Todesrate pro Schritt | effektiver Modellparameter |
-| `selection_strength` | kalibrieren | `2.5` | Exponent auf relative Fitness | steuert, wie schnell Gewinner-Stämme sweepen |
+| `selection_strength` | kalibrieren | `2.5` | Basis-Exponent auf relative Fitness ohne Antibiotikadruck | hält unbehandelte Carrier näher an schwacher Drift |
+| `abx_selection_pressure_multiplier` | kalibrieren | `3.0` | verstärkt den Selektions-Exponent unter Antibiotikadruck | koppelt starke Richtungsselektion an ABX statt an globale Fitnesskosten |
+| `antibiotic_kill_scale` | kalibrieren | `0.08` | explizite Killrate pro Schritt für `antibiotic_kill = scale * (1 - abx_survival)` | lässt Antibiotika töten, aber mit starker Resistenzabhängigkeit statt globalem Fitness-Kollaps |
 
 ### Mutation und HGT
 
@@ -289,6 +293,7 @@ Antibiotikamechanismen sind gut identifizierbar, aber die Zahlen in diesem Trait
 | `base_mutation_rate` | geschätzt / kalibrieren | `0.012` | Basismutation pro Gen und Schritt im Trait-Modell | echte S. aureus-Mutationsraten sind ableitbar; Mapping auf Trait-Schritte muss kalibriert werden |
 | `mutation_std` | kalibrieren | `0.025` | Grösse einer Trait-Veränderung | reine Modellskala |
 | `stress_mutation_boost` | geschätzt / kalibrieren | `40.0` | Mutationsboost unter Antibiotikastress | SOS-/Stressmutagenese ist belegt; Faktor im Modell kalibrieren |
+| `mutant_transfer_fraction` | kalibrieren | `0.03` | Populationsanteil pro Mutation, der vom Elternstamm in den neuen Mutanten verschoben wird | gibt neuen Mutanten genug Startmasse, um Pruning und Stochastik zu überleben |
 | `base_hgt_rate` | geschätzt / kalibrieren | `0.03` | Basiswahrscheinlichkeit eines HGT-Ereignisses pro eligiblem Stamm und Schritt | HGT bei S. aureus ist belegt; effektive Within-Host-Rate kalibrieren |
 | `hgt_gene_transfer_prob` | kalibrieren | `0.25` | Wahrscheinlichkeit pro transferierbarem Gen innerhalb eines HGT-Ereignisses | Trait-Mischparameter, nicht direkt messbar |
 
@@ -344,9 +349,9 @@ Diese Parameter sollten nicht direkt aus Literatur übernommen werden:
 
 | Parametergruppe | Parameter | Grund |
 |---|---|---|
-| Trait-Mutation | `base_mutation_rate`, `mutation_std`, `stress_mutation_boost` | echte Mutationen pro Base/Generation müssen auf 14 kontinuierliche Trait-Slots und 12 Schritte/Tag übersetzt werden |
+| Trait-Mutation | `base_mutation_rate`, `mutation_std`, `stress_mutation_boost`, `mutant_transfer_fraction` | echte Mutationen pro Base/Generation müssen auf 14 kontinuierliche Trait-Slots und 12 Schritte/Tag übersetzt werden |
 | HGT | `base_hgt_rate`, `hgt_gene_transfer_prob` | reale HGT-Raten sind kontext-, Stamm-, Plasmid- und Nischen-abhängig; das Modell nutzt eine effektive Ereignisrate |
-| Selektion | `selection_strength`, `growth_rate_per_step`, `death_rate_per_step` | bestimmt Sweep-Geschwindigkeit und Populationsstabilität im Modell |
+| Selektion/Kill | `selection_strength`, `abx_selection_pressure_multiplier`, `antibiotic_kill_scale`, `growth_rate_per_step`, `death_rate_per_step` | bestimmt Sweep-Geschwindigkeit und Populationsstabilität im Modell |
 | Population/Clearance | `carrying_capacity`, `min_population`, `clearance_threshold` | CFU-Werte sind messbar, aber die Modellpopulation ist eine normalisierte Binnenpopulation mit eigener Clearance-Logik |
 | Schaden/Alterung | `base_damage_per_step`, `replication_damage_factor`, `stress_damage_factor`, `repair_rate_per_step`, `age_mortality_scale`, `damage_mortality_scale`, `lifecycle_half_life_steps`, `max_damage_load` | latente Variablen ohne direkte klinische Messgrösse |
 | Dormanz-Synergien | `dormancy_growth_penalty`, `synergy_repair_dormancy_bonus`, `synergy_stress_tolerance_bonus` | Persister-Dormanz ist qualitativ belegt, aber die Modellinteraktionen sind frei gewählt |
@@ -369,7 +374,7 @@ Die Mikrokalibrierung sollte nicht jeden Parameter einzeln gegen eine einzelne Z
 
 3. **Resistenzentwicklung unter ABX**
    - Ziel: `mean_resistant_fraction`, `p50/p90_resistant_fraction`, Zeit bis `R2/R3`-Dominanz.
-   - Parameter: `base_mutation_rate`, `mutation_std`, `stress_mutation_boost`, `selection_strength`, ABX-Profile.
+   - Parameter: `base_mutation_rate`, `mutation_std`, `stress_mutation_boost`, `mutant_transfer_fraction`, `selection_strength`, `abx_selection_pressure_multiplier`, `antibiotic_kill_scale`, ABX-Profile.
 
 4. **HGT/Diversität**
    - Ziel: `mean_n_strains`, `genotype_entropy`, Rohlogs `micro_strain_daily` und `micro_episode_gene_daily`.
