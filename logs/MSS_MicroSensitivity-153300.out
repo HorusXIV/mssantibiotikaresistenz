@@ -1,0 +1,148 @@
+/etc/profile.d/lmod.sh: line 96: /usr/share/lmod/lmod/init/sh: No such file or directory
+   Building mss @ file:///workspace
+Downloading plotly (9.4MiB)
+ Downloading plotly
+      Built mss @ file:///workspace
+Prepared 3 packages in 385ms
+Uninstalled 1 package in 49ms
+Installed 3 packages in 14.36s
+ ~ mss==0.2.0 (from file:///workspace)
+ + narwhals==2.22.0
+ + plotly==6.8.0
+========================================================================
+Micro-parameter sensitivity analysis (Calibration 7)
+  Config:     config/cal_micro_sensitivity.yml
+  Parameters: 24
+  Scenarios:  ['no_abx', 'beta_lactam']
+  Days/run:   255   Seeds/run: 16
+  ~3840 episode runs × 255 days
+========================================================================
+
+[selection_strength]
+  scenario=no_abx ... done (28560 rows)
+  scenario=beta_lactam ... done (28560 rows)
+
+[death_fitness_floor]
+  scenario=no_abx ... done (28560 rows)
+  scenario=beta_lactam ... done (28560 rows)
+
+[growth_rate_per_step]
+  scenario=no_abx ... done (28560 rows)
+  scenario=beta_lactam ... done (28560 rows)
+
+[death_rate_per_step]
+  scenario=no_abx ... done (28560 rows)
+  scenario=beta_lactam ... done (28560 rows)
+
+[strain_prune_threshold]
+  scenario=no_abx ... done (28560 rows)
+  scenario=beta_lactam ... done (28560 rows)
+
+[base_mutation_rate]
+  scenario=no_abx ... done (28560 rows)
+  scenario=beta_lactam ... done (28560 rows)
+
+[mutation_std]
+  scenario=no_abx ... done (28560 rows)
+  scenario=beta_lactam ... done (28560 rows)
+
+[stress_mutation_boost]
+  scenario=no_abx ... done (28560 rows)
+  scenario=beta_lactam ... done (28560 rows)
+
+[base_hgt_rate]
+  scenario=no_abx ... done (28560 rows)
+  scenario=beta_lactam ... done (28560 rows)
+
+[hgt_gene_transfer_prob]
+  scenario=no_abx ... done (28560 rows)
+  scenario=beta_lactam ... done (28560 rows)
+
+[base_damage_per_step]
+  scenario=no_abx ... done (28560 rows)
+  scenario=beta_lactam ... done (28560 rows)
+
+[replication_damage_factor]
+  scenario=no_abx ... done (28560 rows)
+  scenario=beta_lactam ... done (28560 rows)
+
+[stress_damage_factor]
+  scenario=no_abx ... done (28560 rows)
+  scenario=beta_lactam ... done (28560 rows)
+
+[repair_rate_per_step]
+  scenario=no_abx ... done (28560 rows)
+  scenario=beta_lactam ... done (28560 rows)
+
+[age_mortality_scale]
+  scenario=no_abx ... done (28560 rows)
+  scenario=beta_lactam ... done (28560 rows)
+
+[damage_mortality_scale]
+  scenario=no_abx ... done (28560 rows)
+  scenario=beta_lactam ... done (28560 rows)
+
+[lifecycle_half_life_steps]
+  scenario=no_abx ... done (28560 rows)
+  scenario=beta_lactam ... done (28560 rows)
+
+[max_damage_load]
+  scenario=no_abx ... done (28560 rows)
+  scenario=beta_lactam ... done (28560 rows)
+
+[dormancy_growth_penalty]
+  scenario=no_abx ... done (28560 rows)
+  scenario=beta_lactam ... done (28560 rows)
+
+[synergy_repair_dormancy_bonus]
+  scenario=no_abx ... done (28560 rows)
+  scenario=beta_lactam ... done (28560 rows)
+
+[synergy_stress_tolerance_bonus]
+  scenario=no_abx ... done (28560 rows)
+  scenario=beta_lactam ... done (28560 rows)
+
+[carrying_capacity]
+  scenario=no_abx ... done (28560 rows)
+  scenario=beta_lactam ... done (28560 rows)
+
+[min_population]
+  scenario=no_abx ... done (28560 rows)
+  scenario=beta_lactam ... done (28560 rows)
+
+[clearance_threshold]
+  scenario=no_abx ... done (28560 rows)
+  scenario=beta_lactam ... done (28560 rows)
+
+Saved trajectories -> /workspace/outputs/20260611_125619_MicroSensitivity/data/sensitivity_trajectories.parquet
+Saved summary      -> /workspace/outputs/20260611_125619_MicroSensitivity/data/sensitivity_summary.parquet
+
+Generating figures...
+  Saved: sensitivity_selection_strength.png
+  Saved: sensitivity_death_fitness_floor.png
+  Saved: sensitivity_growth_rate_per_step.png
+  Saved: sensitivity_death_rate_per_step.png
+  Saved: sensitivity_strain_prune_threshold.png
+  Saved: sensitivity_base_mutation_rate.png
+  Saved: sensitivity_mutation_std.png
+  Saved: sensitivity_stress_mutation_boost.png
+  Saved: sensitivity_base_hgt_rate.png
+  Saved: sensitivity_hgt_gene_transfer_prob.png
+  Saved: sensitivity_base_damage_per_step.png
+  Saved: sensitivity_replication_damage_factor.png
+  Saved: sensitivity_stress_damage_factor.png
+  Saved: sensitivity_repair_rate_per_step.png
+  Saved: sensitivity_age_mortality_scale.png
+  Saved: sensitivity_damage_mortality_scale.png
+  Saved: sensitivity_lifecycle_half_life_steps.png
+  Saved: sensitivity_max_damage_load.png
+  Saved: sensitivity_dormancy_growth_penalty.png
+  Saved: sensitivity_synergy_repair_dormancy_bonus.png
+  Saved: sensitivity_synergy_stress_tolerance_bonus.png
+  Saved: sensitivity_carrying_capacity.png
+  Saved: sensitivity_min_population.png
+  Saved: sensitivity_clearance_threshold.png
+  Saved: sensitivity_overview.png
+========================================================================
+All outputs in: /workspace/outputs/20260611_125619_MicroSensitivity
+========================================================================
