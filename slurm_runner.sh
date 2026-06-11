@@ -2,7 +2,7 @@
 #SBATCH -M calc-cpu
 #SBATCH -p cpu-daily
 #SBATCH -t 24:00:00
-#SBATCH --job-name=MSS_Simulation
+#SBATCH --job-name=MSS_MicroSensitivity
 #SBATCH --mem=128G
 #SBATCH --cpus-per-task=350
 #SBATCH --output=logs/%x-%j.out
@@ -23,5 +23,6 @@ singularity exec \
   bash -lc "\
     cd ${WORKDIR} && \
     uv sync --frozen && \
-    uv run mss-run --config config/simulation_abx.yml \
+    uv run python -m mss.cli.run_micro_sensitivity \
+      --config config/cal_micro_sensitivity.yml \
   "
