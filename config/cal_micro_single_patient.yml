@@ -1,0 +1,73 @@
+# cal_micro_single_patient.yml
+#
+# Konfiguration fuer die Einzelpatienten-Mikrosimulation.
+# Simuliert einen einzigen Carrier-Patienten ueber die volle Episodendauer
+# und visualisiert die within-host Populationsdynamik detailliert.
+#
+# Nur zwei Bloecke relevant:
+#   episode:  Patientenkontext und ABX-Schedule
+#   micro:    Alle Engine-Parameter (Basislinie aus simulation_realistic_micro.yml)
+
+# ===========================================================================
+# EPISODEN-KONFIGURATION
+# ===========================================================================
+episode:
+  n_days: 3000 # Simulationsdauer in Tagen
+  seed: 7
+  resistant_fraction: 0.0 # Startanteil resistenter Bakterien (R2-Klon)
+  dominant_genotype: R1
+  initial_population: 1.0e6 # Startgroesse der Within-Host-Population (CFU-Modellskala)
+  immune_strength: 0.75 # Wert aus carrier_template
+
+  abx_schedule:
+    - start_day: 30
+      end_day: 2900
+      abx_class: tetracycline
+      dose_level: medium
+      adherence: 0.75
+# ===========================================================================
+# MIKRO-BLOCK: Basislinie (aus simulation_realistic_micro.yml)
+# ===========================================================================
+micro:
+  workers: null
+  founder_pool_size: 0
+  founder_pool_seed: 1
+  founder_pool_gene_noise_std: 0.02
+  gene_presence_threshold: 0.2
+
+  steps_per_day: 12
+  max_strains: 40
+  carrying_capacity: 500000000.0
+  min_population: 100.0
+  clearance_threshold: 1000.0
+
+  base_mutation_rate: 0.006
+  mutation_std: 0.025
+  stress_mutation_boost: 30.0
+  mutant_transfer_fraction: 0.03
+
+  base_hgt_rate: 0.02
+  hgt_gene_transfer_prob: 0.25
+
+  selection_strength: 0.6
+  abx_selection_pressure_multiplier: 3.0
+  antibiotic_kill_scale: 0.08
+  death_fitness_floor: 0.3
+  growth_rate_per_step: 0.12
+  death_rate_per_step: 0.03
+  strain_prune_threshold: 200.0
+
+  base_damage_per_step: 0.004
+  replication_damage_factor: 0.03
+  stress_damage_factor: 0.06
+  repair_rate_per_step: 0.08
+  age_mortality_scale: 0.001
+  damage_mortality_scale: 0.025
+  lifecycle_half_life_steps: 200.0
+  max_damage_load: 5.0
+  dormancy_growth_penalty: 0.55
+  synergy_repair_dormancy_bonus: 0.25
+  synergy_stress_tolerance_bonus: 0.20
+
+  stochastic_threshold: 10000.0
+  stochastic_noise_scale: 0.08
