@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from tests.micro_config_helpers import micro_config
+from tests import micro_config
 
 from mss.simulation.micro import (
     MicroCalibrationScenario,

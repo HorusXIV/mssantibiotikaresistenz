@@ -12,7 +12,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from tests.micro_config_helpers import micro_config
+from tests import micro_config
 
 from mss.domain import (
     AntibioticRegimen,
