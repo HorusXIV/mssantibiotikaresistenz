@@ -120,13 +120,16 @@ micro:
   # stress_mutation_boost: (Cirz 2007, Ubeda 2006).
   # Literatur-Korridor 10–100x; 30x liegt konservativ in der Mitte.
   stress_mutation_boost: 30.0 # geschätzt
+  mutant_transfer_fraction: 0.03 # kalibriert | Anteil pro Mutation für neuen Mutantenstamm
 
   # --- Horizontaler Gentransfer ---
   base_hgt_rate: 0.02 # geschätzt | Darphorn, T. S., Sintanneland, B. B. K., Grootemaat, A. E., Van Der Wel, N. N., Brul, S., & Ter Kuile, B. H. (2022). Transfer dynamics of multi-resistance plasmids in Escherichia coli isolated from meat. PLoS ONE, 17(7), e0270205. https://doi.org/10.1371/journal.pone.0270205
   hgt_gene_transfer_prob: 0.25 # kalibrieren |
 
   # --- Selektion & Wachstum ---
-  selection_strength: 0.6 # kalibriert
+  selection_strength: 0.6
+  abx_selection_pressure_multiplier: 3.0
+  antibiotic_kill_scale: 0.08 # kalibriert
   death_fitness_floor: 1.0 # kalibriert
   growth_rate_per_step: 1.5 # geschätzt | Wachstum: \(N_{next} = N \cdot e^{\text{growth} - \text{death}}\)
   death_rate_per_step: 0.01 # geschätzt

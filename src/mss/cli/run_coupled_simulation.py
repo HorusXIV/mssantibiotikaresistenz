@@ -28,6 +28,7 @@ from mss.simulation.macro import MacroSimulator
 from mss.simulation.macro import SimulationConfig as MacroConfig
 from mss.simulation.micro import GeneIndex, MicroSimulator, classify_genotype
 from mss.simulation.micro import SimulationConfig as MicroConfig
+from mss.simulation.micro import build_micro_config
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_CONFIG_PATH = PROJECT_ROOT / "config" / "simulation_realistic.yml"
@@ -352,7 +353,7 @@ def load_coupled_settings(config_path: Path = DEFAULT_CONFIG_PATH) -> CoupledSim
     )
 
     macro = MacroConfig(**macro_raw)
-    micro = MicroConfig(**micro_raw)
+    micro = build_micro_config(micro_raw, source="micro")
 
     return CoupledSimulationSettings(
         config_path=config_path,
@@ -1005,7 +1006,7 @@ def _build_settings_from_raw(raw: dict[str, Any], seed: int) -> CoupledSimulatio
         run=run,
         population=population,
         macro=MacroConfig(**macro_raw),
-        micro=MicroConfig(**micro_raw),
+        micro=build_micro_config(micro_raw, source="micro"),
         micro_workers=micro_workers,
     )
 

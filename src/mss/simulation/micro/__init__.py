@@ -1,8 +1,7 @@
 """Micro-level within-host simulation."""
 
+from .config import SimulationConfig, build_micro_config, parse_micro_runtime_config
 from .engine import (
-    FounderStrain,
-    SimulationConfig,
     StrainPopulation,
     build_founder_pool,
     compute_clearance_probability,
@@ -13,6 +12,7 @@ from .engine import (
     selection_step,
     simulate_day,
 )
+from .models import FounderStrain
 from .genome import (
     ABX_PROFILES,
     DOSE_MULTIPLIERS,
@@ -31,7 +31,8 @@ from .genome import (
     create_resistant_genome,
     create_wild_type_genome,
 )
-from .simulator import EpisodeState, MicroSimulator, run_micro_simulation
+from .state import EpisodeState
+from .simulator import MicroSimulator, run_micro_simulation
 from .time_calibration import (
     MicroCalibrationScenario,
     TimeScaleChange,
@@ -57,6 +58,7 @@ __all__ = [
     "NUM_GENES",
     "ResistanceCosts",
     "SimulationConfig",
+    "build_micro_config",
     "StrainPopulation",
     "TimeScaleChange",
     "additive_per_step_for_new_resolution",
@@ -77,6 +79,7 @@ __all__ = [
     "get_dominant_strain",
     "horizontal_gene_transfer",
     "mutate_population",
+    "parse_micro_runtime_config",
     "population_to_response",
     "poisson_intensity_per_step_for_new_resolution",
     "probability_per_step_for_new_resolution",

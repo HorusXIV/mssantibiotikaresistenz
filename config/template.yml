@@ -367,6 +367,10 @@ micro:
   # Unit: fraction / step.
   death_rate_per_step: 0.06
 
+  # Fitness floor in death_rate / (baseline_fitness + floor).
+  # Unit: dimensionless; higher values weaken death fitness dependence.
+  death_fitness_floor: 0.1
+
   # Strains below this absolute population are removed during consolidation.
   # Unit: bacteria (absolute).
   strain_prune_threshold: 200.0

@@ -15,7 +15,24 @@ import numpy as np
 
 
 class GeneIndex(int, Enum):
-    """Indices for genome array access."""
+    """Index positions for the fixed-length micro genome vector.
+
+    Attributes:
+        GROWTH_BASE: Baseline growth potential.
+        METABOLIC_OPTIMIZATION: Compensatory metabolism and resistance-cost buffering.
+        EFFLUX_PUMPS: Efflux-mediated resistance trait.
+        TARGET_MODIFICATION: Target-modification resistance trait.
+        PERMEABILITY_REDUCTION: Permeability-mediated resistance trait.
+        VIRULENCE: Virulence trait used for severity effects.
+        STEALTH: Immune evasion trait.
+        ADHESION: Adhesion trait used for transmissibility.
+        MUTATION_RATE_MODIFIER: Evolvability trait that alters mutation intensity.
+        HGT_COMPETENCE: Competence trait that alters horizontal transfer probability.
+        DNA_REPAIR: Repair capacity trait.
+        DORMANCY_PROPENSITY: Dormancy/persistence trait.
+        STRESS_RESPONSE: Environmental stress response trait.
+        DAMAGE_TOLERANCE: Tolerance to accumulated cellular damage.
+    """
 
     # Metabolism
     GROWTH_BASE = 0
@@ -43,14 +60,24 @@ NUM_GENES = len(GeneIndex)
 
 @dataclass
 class ResistanceCosts:
-    """Base fitness costs for resistance genes."""
+    """Base fitness costs applied to resistance traits.
+
+    Attributes:
+        efflux_pumps: Fitness cost per unit of efflux-pump expression.
+        target_modification: Fitness cost per unit of target-modification expression.
+        permeability_reduction: Fitness cost per unit of permeability-reduction expression.
+    """
 
     efflux_pumps: float = 0.15
     target_modification: float = 0.12
     permeability_reduction: float = 0.08
 
     def as_array(self) -> np.ndarray:
-        """Return costs as array aligned with GeneIndex."""
+        """Return costs aligned to the genome vector.
+
+        Returns:
+            Array of length ``NUM_GENES`` with nonzero entries for resistance genes.
+        """
         costs = np.zeros(NUM_GENES, dtype=np.float32)
         costs[GeneIndex.EFFLUX_PUMPS] = self.efflux_pumps
         costs[GeneIndex.TARGET_MODIFICATION] = self.target_modification
@@ -60,7 +87,15 @@ class ResistanceCosts:
 
 @dataclass
 class ABXProfile:
-    """Antibiotic class effectiveness against resistance mechanisms."""
+    """Antibiotic effectiveness profile against resistance mechanisms.
+
+    Attributes:
+        name: Antibiotic class name.
+        efflux_efficacy: Protection weight contributed by efflux pumps.
+        target_mod_efficacy: Protection weight contributed by target modification.
+        permeability_efficacy: Protection weight contributed by permeability reduction.
+        base_kill_rate: Baseline kill pressure at standard dose and full adherence.
+    """
 
     name: str
     # How much each resistance mechanism protects (0-1 multiplier on survival)
@@ -99,7 +134,11 @@ DOSE_MULTIPLIERS = {
 
 
 def create_wild_type_genome() -> np.ndarray:
-    """Create a susceptible wild-type genome."""
+    """Create the baseline susceptible genome.
+
+    Returns:
+        Genome vector with low resistance traits and baseline susceptible physiology.
+    """
     genome = np.zeros(NUM_GENES, dtype=np.float32)
     genome[GeneIndex.GROWTH_BASE] = 0.8  # Good baseline growth
     genome[GeneIndex.METABOLIC_OPTIMIZATION] = 0.1
@@ -120,7 +159,14 @@ def create_wild_type_genome() -> np.ndarray:
 
 
 def create_resistant_genome(resistance_level: float = 0.5) -> np.ndarray:
-    """Create a partially resistant genome."""
+    """Create a partially resistant genome template.
+
+    Args:
+        resistance_level: Scalar in ``[0, 1]`` controlling resistance trait magnitude.
+
+    Returns:
+        Genome vector with elevated resistance and compensatory traits.
+    """
     genome = create_wild_type_genome()
     genome[GeneIndex.EFFLUX_PUMPS] = resistance_level * 0.8
     genome[GeneIndex.TARGET_MODIFICATION] = resistance_level * 0.6
@@ -135,15 +181,15 @@ def create_resistant_genome(resistance_level: float = 0.5) -> np.ndarray:
 
 
 def compute_resistance_costs(genomes: np.ndarray, costs: ResistanceCosts = None) -> np.ndarray:
-    """
-    Compute net fitness cost from resistance genes.
+    """Compute net fitness cost from resistance genes.
 
     Args:
-        genomes: Shape (n_strains, NUM_GENES) or (NUM_GENES,)
-        costs: ResistanceCosts parameters
+        genomes: Genome matrix with shape ``(n_strains, NUM_GENES)`` or one genome
+            with shape ``(NUM_GENES,)``.
+        costs: Optional resistance-cost parameters. If omitted, default costs are used.
 
     Returns:
-        Net costs array of shape (n_strains,) or scalar
+        Net resistance cost per strain, or a scalar when a single genome is supplied.
     """
     if costs is None:
         costs = ResistanceCosts()
@@ -169,17 +215,17 @@ def compute_resistance_costs(genomes: np.ndarray, costs: ResistanceCosts = None)
 def compute_abx_survival(
     genomes: np.ndarray, abx_class: str, dose_level: str, adherence: float
 ) -> np.ndarray:
-    """
-    Compute survival factor under antibiotic pressure.
+    """Compute antibiotic survival factors for one or more genomes.
 
     Args:
-        genomes: Shape (n_strains, NUM_GENES) or (NUM_GENES,)
-        abx_class: Antibiotic class name
-        dose_level: "low", "std", or "high"
-        adherence: Patient adherence 0-1
+        genomes: Genome matrix with shape ``(n_strains, NUM_GENES)`` or one genome
+            with shape ``(NUM_GENES,)``.
+        abx_class: Antibiotic class name. Unknown classes fall back to ``none``.
+        dose_level: Dose label used to look up a dose multiplier.
+        adherence: Effective adherence multiplier in ``[0, 1]``.
 
     Returns:
-        Survival factor array (0-1), shape (n_strains,) or scalar
+        Survival factor in ``[0.01, 1.0]`` per strain, or a scalar for one genome.
     """
     profile = ABX_PROFILES.get(abx_class, ABX_PROFILES["none"])
 
@@ -220,16 +266,16 @@ def compute_abx_survival(
 
 
 def compute_immune_survival(genomes: np.ndarray, immune_strength: float) -> np.ndarray:
-    """
-    Compute survival factor against immune system.
+    """Compute immune-survival factors for one or more genomes.
 
     Args:
-        genomes: Shape (n_strains, NUM_GENES) or (NUM_GENES,)
-        immune_strength: Patient immune strength multiplier (lower = weaker
-            immune competence; immunocompromised patients carry a low value)
+        genomes: Genome matrix with shape ``(n_strains, NUM_GENES)`` or one genome
+            with shape ``(NUM_GENES,)``.
+        immune_strength: Host immune-strength multiplier; lower values represent weaker
+            immune competence.
 
     Returns:
-        Survival factor array (0-1)
+        Survival factor in ``[0.05, 1.0]`` per strain, or a scalar for one genome.
     """
     single = genomes.ndim == 1
     if single:
@@ -256,21 +302,22 @@ def compute_fitness(
     immune_strength: float = 1.0,
     costs: ResistanceCosts = None,
 ) -> np.ndarray:
-    """
-    Compute overall fitness for bacterial genomes.
+    """Compute overall strain fitness from growth, cost, ABX, and immunity.
 
-    Fitness = (growth_base - net_costs) * ABX_survival * Immune_survival
+    Fitness is modeled as ``(growth_base - net_costs) * abx_survival * immune_survival``
+    and clipped to the interval ``[0.001, 1.0]``.
 
     Args:
-        genomes: Shape (n_strains, NUM_GENES) or (NUM_GENES,)
-        abx_class: Antibiotic class
-        dose_level: Dose level
-        adherence: Patient adherence
-        immune_strength: Patient immune strength
-        costs: Resistance cost parameters
+        genomes: Genome matrix with shape ``(n_strains, NUM_GENES)`` or one genome
+            with shape ``(NUM_GENES,)``.
+        abx_class: Antibiotic class used for survival calculation.
+        dose_level: Dose label used for antibiotic pressure.
+        adherence: Effective adherence multiplier.
+        immune_strength: Host immune-strength multiplier.
+        costs: Optional resistance-cost parameters.
 
     Returns:
-        Fitness array, shape (n_strains,) or scalar
+        Fitness per strain, or a scalar when a single genome is supplied.
     """
     single = genomes.ndim == 1
     if single:
@@ -294,14 +341,14 @@ def compute_fitness(
 
 
 def compute_transmissibility(genomes: np.ndarray) -> np.ndarray:
-    """
-    Compute relative transmissibility based on adhesion and virulence.
+    """Compute relative transmissibility from adhesion and virulence traits.
 
     Args:
-        genomes: Shape (n_strains, NUM_GENES) or (NUM_GENES,)
+        genomes: Genome matrix with shape ``(n_strains, NUM_GENES)`` or one genome
+            with shape ``(NUM_GENES,)``.
 
     Returns:
-        Transmissibility multiplier (centered around 1.0)
+        Transmissibility multiplier per strain, or a scalar for one genome.
     """
     single = genomes.ndim == 1
     if single:
@@ -317,14 +364,14 @@ def compute_transmissibility(genomes: np.ndarray) -> np.ndarray:
 
 
 def compute_severity(genomes: np.ndarray) -> np.ndarray:
-    """
-    Compute severity modifier based on virulence and adhesion.
+    """Compute severity modifiers from virulence and adhesion traits.
 
     Args:
-        genomes: Shape (n_strains, NUM_GENES) or (NUM_GENES,)
+        genomes: Genome matrix with shape ``(n_strains, NUM_GENES)`` or one genome
+            with shape ``(NUM_GENES,)``.
 
     Returns:
-        Severity multiplier (centered around 1.0)
+        Severity multiplier per strain, or a scalar for one genome.
     """
     single = genomes.ndim == 1
     if single:
@@ -339,10 +386,13 @@ def compute_severity(genomes: np.ndarray) -> np.ndarray:
 
 
 def classify_genotype(genome: np.ndarray) -> str:
-    """
-    Classify a genome into a genotype category.
+    """Classify a genome into a resistance category.
 
-    Returns: "S" (susceptible), "R1" (low resistance), "R2" (medium), "R3" (high)
+    Args:
+        genome: Genome vector with shape ``(NUM_GENES,)``.
+
+    Returns:
+        One of ``S``, ``R1``, ``R2``, or ``R3`` based on mean resistance-gene score.
     """
     resistance_score = (
         genome[GeneIndex.EFFLUX_PUMPS]
@@ -362,15 +412,14 @@ def classify_genotype(genome: np.ndarray) -> str:
 
 
 def compute_resistant_fraction(genomes: np.ndarray, populations: np.ndarray) -> float:
-    """
-    Compute fraction of population that is resistant.
+    """Compute the population-weighted resistant fraction.
 
     Args:
-        genomes: Shape (n_strains, NUM_GENES)
-        populations: Shape (n_strains,) - population sizes
+        genomes: Genome matrix with shape ``(n_strains, NUM_GENES)``.
+        populations: Population size for each strain.
 
     Returns:
-        Fraction of total population with resistance score >= 0.3
+        Fraction of total population whose mean resistance score is at least ``0.3``.
     """
     resistance_scores = (
         genomes[:, GeneIndex.EFFLUX_PUMPS]

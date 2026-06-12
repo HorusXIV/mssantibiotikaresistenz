@@ -161,6 +161,8 @@ relative_fitness = fitness / mean_fitness
 effective_selection_strength = selection_strength * (1 + abx_pressure * abx_selection_pressure_multiplier)
 selection_factor = relative_fitness ** effective_selection_strength
 growth = growth_rate_per_step * selection_factor * selection_fitness
+density_factor = 1 - total_population / carrying_capacity
+growth = growth * density_factor
 antibiotic_kill = antibiotic_kill_scale * (1 - abx_survival)
 ```
 
@@ -171,7 +173,7 @@ net_growth = growth - death
 population_next = population * exp(net_growth)
 ```
 
-Danach wird demografische Stochastik angewandt. Wenn die Gesamtpopulation über `carrying_capacity` liegt, werden alle Stämme proportional herunterskaliert.
+`carrying_capacity` wirkt nun als logistischer Dichtefaktor im Wachstumsterm: nahe der Kapazität wird Wachstum gebremst, oberhalb der Kapazität wird der Wachstumsbeitrag negativ. Danach wird demografische Stochastik angewandt; es gibt keine proportionale Hard-Cap-Reskalierung mehr.
 
 ### Mutation
 

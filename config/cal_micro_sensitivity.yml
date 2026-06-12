@@ -79,11 +79,14 @@ micro:
   base_mutation_rate: 0.006
   mutation_std: 0.02
   stress_mutation_boost: 30.0
+  mutant_transfer_fraction: 0.03
 
   base_hgt_rate: 0.02
   hgt_gene_transfer_prob: 0.25
 
   selection_strength: 0.6
+  abx_selection_pressure_multiplier: 3.0
+  antibiotic_kill_scale: 0.08
   death_fitness_floor: 1.0
   growth_rate_per_step: 1.5
   death_rate_per_step: 0.01

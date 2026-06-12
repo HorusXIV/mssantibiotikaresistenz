@@ -3,9 +3,10 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+from tests.micro_config_helpers import micro_config
+
 from mss.simulation.micro import (
     MicroCalibrationScenario,
-    SimulationConfig,
     TimeScaleChange,
     compound_fraction_per_step_for_new_resolution,
     poisson_intensity_per_step_for_new_resolution,
@@ -51,7 +52,7 @@ def test_compound_fraction_rescaling_preserves_daily_factor():
 
 
 def test_rescale_micro_config_to_alternative_resolution_changes_step_sensitive_values():
-    config = SimulationConfig(steps_per_day=12)
+    config = micro_config(steps_per_day=12)
     rescaled = rescale_micro_config_for_step_duration(config, target_steps_per_day=24)
 
     assert rescaled.steps_per_day == 24
@@ -62,7 +63,7 @@ def test_rescale_micro_config_to_alternative_resolution_changes_step_sensitive_v
 
 
 def test_micro_time_scale_ensemble_summary_has_flat_metric_columns():
-    config = SimulationConfig(
+    config = micro_config(
         steps_per_day=2,
         max_strains=10,
         base_mutation_rate=0.0,

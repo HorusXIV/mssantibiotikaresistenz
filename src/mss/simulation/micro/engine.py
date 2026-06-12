@@ -16,6 +16,8 @@ import numpy as np
 from funkybob import UniqueRandomNameGenerator
 from funkybob import data as funkybob_data
 
+from .config import SimulationConfig
+from .models import FounderStrain
 from .genome import (
     ABX_PROFILES,
     DOSE_MULTIPLIERS,
@@ -37,6 +39,16 @@ def _next_unique_strain_name(
     rng: np.random.Generator,
     preferred_name: str | None = None,
 ) -> str:
+    """Generate a unique two-word strain name.
+
+    Args:
+        existing_names: Names already assigned in the current population.
+        rng: Random number generator used to seed the name generator.
+        preferred_name: Optional name to use when it is not already taken.
+
+    Returns:
+        Unique strain name and records it in ``existing_names``.
+    """
     if preferred_name and preferred_name not in existing_names:
         existing_names.add(preferred_name)
         return preferred_name
@@ -62,6 +74,17 @@ def _extend_strain_names(
     rng: np.random.Generator,
     preferred_names: list[str] | None = None,
 ) -> list[str]:
+    """Append unique strain names to an existing name list.
+
+    Args:
+        names: Existing strain names.
+        count: Number of names to append.
+        rng: Random number generator used to create names.
+        preferred_names: Optional preferred names for the appended positions.
+
+    Returns:
+        New list containing the original and appended names.
+    """
     updated = list(names)
     existing = set(updated)
     preferred_names = preferred_names or []
@@ -72,86 +95,42 @@ def _extend_strain_names(
 
 
 def _format_strain_id(namespace: str, serial: int) -> str:
+    """Format a stable strain identifier.
+
+    Args:
+        namespace: Episode or population namespace.
+        serial: Monotonic strain serial within the namespace.
+
+    Returns:
+        Stable strain identifier string.
+    """
     return f"{namespace}:strain_{serial:06d}"
 
 
 def _take_next_strain_id(namespace: str, next_serial: int) -> tuple[str, int]:
+    """Allocate the next strain identifier and increment the serial.
+
+    Args:
+        namespace: Episode or population namespace.
+        next_serial: Next available strain serial.
+
+    Returns:
+        Tuple of the allocated identifier and the following serial.
+    """
     return _format_strain_id(namespace, next_serial), next_serial + 1
 
 
 def _seed_founder_id(namespace: str, slot_index: int) -> str:
-    return f"{namespace}:founder_{slot_index:04d}"
+    """Format a fallback founder identifier for generated initial strains.
 
+    Args:
+        namespace: Episode or population namespace.
+        slot_index: Initial strain slot index.
 
-@dataclass
-class SimulationConfig:
-    """Configuration for micro-simulation.
-
-    Defaults mirror the canonical ``config/simulation_realistic.yml`` micro block,
-    so an unconfigured ``SimulationConfig()`` reproduces the production dynamics.
+    Returns:
+        Stable founder identifier string.
     """
-
-    steps_per_day: int = 12
-    max_strains: int = 40  # Max distinct strains to track
-    carrying_capacity: float = 5e8  # Max population size
-    min_population: float = 100.0  # extinction floor: total population below this clears
-    clearance_threshold: float = 1000.0  # Population for clearance
-
-    # Mutation parameters
-    base_mutation_rate: float = 0.012  # Base mutation per gene per step
-    mutation_std: float = 0.025  # Gaussian std for mutations
-    stress_mutation_boost: float = 40.0  # Mutation rate multiplier under ABX stress
-    mutant_transfer_fraction: float = 0.03  # Population fraction moved to a new mutant
-
-    # HGT parameters
-    base_hgt_rate: float = 0.03  # Base probability of HGT per step
-    hgt_gene_transfer_prob: float = 0.25  # Prob of transferring each gene
-
-    # Selection parameters
-    selection_strength: float = 2.5  # Exponent for fitness-based selection
-    abx_selection_pressure_multiplier: float = 3.0  # ABX pressure boost for selection
-    antibiotic_kill_scale: float = 0.08  # Explicit resistance-dependent ABX kill per step
-
-    # Population dynamics
-    growth_rate_per_step: float = 0.18  # Max growth per step (before fitness)
-    death_rate_per_step: float = 0.06  # Base death rate per step
-    death_fitness_floor: float = 0.1  # Floor in death = death_rate*(1/(fitness+floor));
-    # higher values flatten the fitness-dependence of death (weaker hidden selection
-    # channel against low-fitness resistant strains). 0.1 reproduces legacy behavior.
-    strain_prune_threshold: float = 200.0  # Drop numerically negligible strains
-
-    # Lifecycle / turnover dynamics
-    base_damage_per_step: float = 0.004  # Background wear per step
-    replication_damage_factor: float = 0.03  # Extra wear from fast turnover
-    stress_damage_factor: float = 0.06  # Extra wear under environmental stress
-    repair_rate_per_step: float = 0.08  # Damage repair / maintenance capacity
-    age_mortality_scale: float = 0.001  # How strongly lineage age raises death risk
-    damage_mortality_scale: float = 0.025  # How strongly accumulated damage raises death risk
-    lifecycle_half_life_steps: float = 200.0  # Age scale for senescence-like pressure
-    max_damage_load: float = 5.0  # Saturation point for damage effects
-    dormancy_growth_penalty: float = 0.55  # Persistence trades growth for survival
-    synergy_repair_dormancy_bonus: float = 0.25  # Quiescent repair synergy
-    synergy_stress_tolerance_bonus: float = 0.20  # Stress hardening synergy
-
-    # Demographic stochasticity
-    stochastic_threshold: float = 1e4  # Exact Poisson dynamics below this size
-    stochastic_noise_scale: float = 0.08  # Scales demographic noise above threshold
-
-    # Founder-pool / logging helpers
-    founder_pool_size: int = 0  # 0 disables the shared founder library
-    founder_pool_seed: int = 1  # First deterministic seed for founder generation
-    founder_pool_gene_noise_std: float = 0.02  # Founder diversification around archetypes
-    gene_presence_threshold: float = 0.2  # Threshold for gene "presence" in logs
-
-
-@dataclass(frozen=True)
-class FounderStrain:
-    """One globally reusable founder strain for episode initialization."""
-
-    founder_id: str
-    founder_name: str
-    genotype: str
-    genome: np.ndarray
+    return f"{namespace}:founder_{slot_index:04d}"
 
 
 def _generate_founder_genome(
@@ -159,6 +138,16 @@ def _generate_founder_genome(
     rng: np.random.Generator,
     noise_std: float,
 ) -> np.ndarray:
+    """Generate a founder genome that remains in the requested genotype class.
+
+    Args:
+        genotype: Target genotype class, such as ``S``, ``R1``, ``R2``, or ``R3``.
+        rng: Random number generator used for genome noise.
+        noise_std: Standard deviation of founder gene noise.
+
+    Returns:
+        Genome vector classified as the requested genotype when possible.
+    """
     base = (
         create_wild_type_genome() if genotype == "S" else _create_seed_genome_for_genotype(genotype)
     )
@@ -178,7 +167,14 @@ def _generate_founder_genome(
 
 
 def build_founder_pool(config: SimulationConfig) -> list[FounderStrain]:
-    """Create a deterministic founder library from the active micro config."""
+    """Create a deterministic founder library from the active micro config.
+
+    Args:
+        config: Complete micro simulation configuration.
+
+    Returns:
+        List of founder strains. Returns an empty list when founder pooling is disabled.
+    """
     size = max(0, int(config.founder_pool_size))
     if size == 0:
         return []
@@ -221,6 +217,18 @@ def _select_founders_for_genotype(
     rng: np.random.Generator,
     preferred_name: str | None = None,
 ) -> list[FounderStrain]:
+    """Select founder strains matching a genotype for initial population seeding.
+
+    Args:
+        founders: Candidate founder library.
+        genotype: Required genotype class.
+        count: Number of founders to select.
+        rng: Random number generator used for sampling.
+        preferred_name: Optional founder name to prioritize.
+
+    Returns:
+        Selected founders, sampling with replacement only when the eligible pool is small.
+    """
     if count <= 0:
         return []
 
@@ -262,10 +270,20 @@ def _select_founders_for_genotype(
 
 @dataclass
 class StrainPopulation:
-    """
-    Represents bacterial population as discrete strains with population counts.
+    """Discrete within-host bacterial population represented as strain arrays.
 
-    Uses vectorized NumPy arrays for efficient computation.
+    Attributes:
+        genomes: Genome matrix with shape ``(n_strains, NUM_GENES)``.
+        populations: Population size for each strain.
+        lineage_ages: Cumulative lineage age per strain.
+        damage_loads: Accumulated stress or damage load per strain.
+        strain_names: Human-readable strain names.
+        strain_ids: Stable strain identifiers.
+        parent_ids: Parent strain identifiers for mutant or recombinant strains.
+        donor_ids: Donor strain identifiers for HGT-derived strains.
+        founder_ids: Founder identifiers inherited by each strain lineage.
+        next_strain_serial: Next serial used when allocating strain identifiers.
+        strain_namespace: Namespace prefix used for generated strain identifiers.
     """
 
     genomes: np.ndarray  # Shape (n_strains, NUM_GENES)
@@ -281,6 +299,7 @@ class StrainPopulation:
     strain_namespace: str = "population"
 
     def __post_init__(self):
+        """Normalize optional arrays and validate strain-aligned fields."""
         assert self.genomes.ndim == 2
         assert self.genomes.shape[1] == NUM_GENES
         assert len(self.populations) == len(self.genomes)
@@ -325,13 +344,28 @@ class StrainPopulation:
 
     @property
     def n_strains(self) -> int:
+        """Return the number of active strains.
+
+        Returns:
+            Number of population entries.
+        """
         return len(self.populations)
 
     @property
     def total_population(self) -> float:
+        """Return the total within-host bacterial population.
+
+        Returns:
+            Sum of all strain populations.
+        """
         return float(np.sum(self.populations))
 
     def clone(self) -> StrainPopulation:
+        """Create a deep copy of the strain population.
+
+        Returns:
+            Independent population object with copied arrays and metadata lists.
+        """
         return StrainPopulation(
             genomes=self.genomes.copy(),
             populations=self.populations.copy(),
@@ -360,12 +394,26 @@ class StrainPopulation:
         strain_namespace: str = "population",
         seed_genome: np.ndarray | None = None,
     ) -> StrainPopulation:
-        """Create initial population with optional resistance.
+        """Create an initial strain population for a new episode.
 
-        When seed_genome is provided (transmitted strain transfer), all strains
-        are initialised as variations around that genome: the dominant slot gets
-        an exact copy, every other slot gets seed_genome + N(0, 0.02).
-        When seed_genome is None the standard founder-pool path is used.
+        When ``seed_genome`` is provided, all strains are initialized as variations
+        around that transmitted genome. Otherwise, strains are drawn from the founder
+        pool when available or generated from susceptible/resistant templates.
+
+        Args:
+            resistant_fraction: Initial fraction assigned to resistant strains.
+            dominant_genotype: Target dominant genotype class.
+            initial_population: Total initial bacterial population size.
+            n_susceptible_strains: Number of susceptible initial strains.
+            n_resistant_strains: Number of resistant initial strains.
+            rng: Random number generator. A default generator is created when omitted.
+            dominant_strain_name: Optional preferred name for the dominant initial strain.
+            founder_pool: Optional reusable founder strain library.
+            strain_namespace: Namespace used for generated strain identifiers.
+            seed_genome: Optional transmitted genome used to seed the population.
+
+        Returns:
+            Initialized strain population with strain IDs and lineage metadata.
         """
         if rng is None:
             rng = np.random.default_rng()
@@ -504,7 +552,15 @@ class StrainPopulation:
 
 
 def _create_seed_genome_for_genotype(dominant_genotype: str) -> np.ndarray:
-    """Create a resistant seed genome that actually lands in the requested class."""
+    """Create a seed genome that classifies as the requested genotype.
+
+    Args:
+        dominant_genotype: Target genotype class.
+
+    Returns:
+        Genome vector for the requested genotype, falling back to low resistance for
+        unknown resistant labels.
+    """
     genome = create_wild_type_genome()
 
     if dominant_genotype == "R3":
@@ -539,17 +595,17 @@ def mutate_population(
     abx_stress: float,
     rng: np.random.Generator,
 ) -> StrainPopulation:
-    """
-    Apply mutations to population, potentially creating new strains.
+    """Apply mutation events and create mutant strains.
 
     Args:
-        population: Current population
-        config: Simulation config
-        abx_stress: Antibiotic stress level (0-1), increases mutation rate
-        rng: Random generator
+        population: Current strain population.
+        config: Complete micro simulation configuration.
+        abx_stress: Antibiotic stress level in ``[0, 1]`` used to boost mutation rate.
+        rng: Random number generator used for event sampling and mutation effects.
 
     Returns:
-        Updated population (may have new strains)
+        Updated population, possibly containing new mutant strains and adjusted parent
+        populations.
     """
     genomes = population.genomes.copy()
     populations = population.populations.copy()
@@ -642,10 +698,15 @@ def mutate_population(
 def horizontal_gene_transfer(
     population: StrainPopulation, config: SimulationConfig, rng: np.random.Generator
 ) -> StrainPopulation:
-    """
-    Simulate horizontal gene transfer between strains.
+    """Simulate horizontal gene transfer between strains.
 
-    Primarily transfers resistance and persistence genes.
+    Args:
+        population: Current strain population.
+        config: Complete micro simulation configuration.
+        rng: Random number generator used for donor selection and gene blending.
+
+    Returns:
+        Updated population, possibly containing recombinant strains.
     """
     if population.n_strains < 2:
         return population
@@ -756,7 +817,16 @@ def apply_demographic_stochasticity(
     config: SimulationConfig,
     rng: np.random.Generator,
 ) -> np.ndarray:
-    """Realize finite-population noise so small strains can die out by chance."""
+    """Apply finite-population demographic noise to strain sizes.
+
+    Args:
+        populations: Expected strain populations after deterministic update.
+        config: Complete micro simulation configuration.
+        rng: Random number generator used for Poisson or normal sampling.
+
+    Returns:
+        Realized non-negative strain populations.
+    """
     realized = np.zeros_like(populations, dtype=np.float64)
 
     for i, expected in enumerate(populations):
@@ -781,10 +851,20 @@ def selection_step(
     immune_strength: float,
     rng: np.random.Generator,
 ) -> StrainPopulation:
-    """
-    Apply selection based on fitness.
+    """Advance one selection/growth/death step.
 
-    Grows/shrinks strain populations based on relative fitness.
+    Args:
+        population: Current strain population.
+        config: Complete micro simulation configuration.
+        abx_class: Active antibiotic class, or ``none``.
+        dose_level: Active antibiotic dose label.
+        adherence: Effective adherence multiplier.
+        immune_strength: Host immune-strength multiplier.
+        rng: Random number generator used for demographic stochasticity.
+
+    Returns:
+        Population after density-regulated growth, explicit ABX kill, lifecycle turnover,
+        and demographic stochasticity.
     """
     if population.n_strains == 0:
         return population
@@ -863,6 +943,13 @@ def selection_step(
 
     growth *= np.clip(1.0 - config.dormancy_growth_penalty * active_dormancy, 0.2, 1.0)
 
+    # Logistic density regulation: carrying_capacity slows growth as the
+    # within-host population fills the niche and reverses growth above capacity.
+    total_population = float(np.sum(populations))
+    if config.carrying_capacity > 0.0:
+        density_factor = 1.0 - (total_population / config.carrying_capacity)
+        growth *= np.clip(density_factor, -5.0, 1.0)
+
     replication_pressure = np.maximum(growth, 0.0) * (1.0 - 0.7 * active_dormancy)
     damage_gain = (
         config.base_damage_per_step
@@ -903,11 +990,6 @@ def selection_step(
     populations = populations * np.exp(np.clip(net_growth, -50.0, 50.0))
     populations = apply_demographic_stochasticity(populations, config, rng)
 
-    # Apply carrying capacity (logistic)
-    total = np.sum(populations)
-    if total > config.carrying_capacity:
-        populations *= config.carrying_capacity / total
-
     return StrainPopulation(
         genomes=genomes,
         populations=populations,
@@ -924,8 +1006,15 @@ def selection_step(
 
 
 def consolidate_strains(population: StrainPopulation, config: SimulationConfig) -> StrainPopulation:
-    """
-    Remove very small strains and merge similar ones to limit strain count.
+    """Prune small strains and enforce the maximum tracked strain count.
+
+    Args:
+        population: Current strain population.
+        config: Complete micro simulation configuration.
+
+    Returns:
+        Population containing only strains above the prune threshold and, when needed,
+        the largest ``max_strains`` strains.
     """
     # Remove strains below threshold
     mask = population.populations > config.strain_prune_threshold
@@ -989,27 +1078,23 @@ def simulate_day(
     dose_level: str,
     adherence: float,
     immune_strength: float,
-    config: SimulationConfig = None,
+    config: SimulationConfig,
     seed: int = None,
 ) -> Tuple[StrainPopulation, Dict[str, Any]]:
-    """
-    Run 12 simulation steps for one day.
+    """Run one macro day of within-host micro dynamics.
 
     Args:
-        population: Starting population
-        abx_class: Antibiotic class being administered
-        dose_level: "low", "std", or "high"
-        adherence: Patient adherence (0-1)
-        immune_strength: Patient immune strength
-        config: Simulation configuration
-        seed: Random seed for reproducibility
+        population: Starting strain population.
+        abx_class: Antibiotic class administered during the day, or ``none``.
+        dose_level: Antibiotic dose label.
+        adherence: Effective adherence multiplier.
+        immune_strength: Host immune-strength multiplier.
+        config: Complete micro simulation configuration.
+        seed: Optional random seed for reproducible within-day dynamics.
 
     Returns:
-        Tuple of (final_population, step_history)
+        Tuple containing the final population and a step-history dictionary.
     """
-    if config is None:
-        config = SimulationConfig()
-
     rng = np.random.default_rng(seed)
 
     # Compute ABX stress level
@@ -1049,16 +1134,18 @@ def simulate_day(
 def compute_clearance_probability(
     population: StrainPopulation,
     immune_strength: float,
-    config: SimulationConfig = None,
+    config: SimulationConfig,
 ) -> float:
-    """
-    Compute probability of bacterial clearance (C -> S transition).
+    """Compute daily bacterial clearance probability from micro state.
 
-    Based on population size and immune factors.
-    """
-    if config is None:
-        config = SimulationConfig()
+    Args:
+        population: Current strain population.
+        immune_strength: Host immune-strength multiplier.
+        config: Complete micro simulation configuration.
 
+    Returns:
+        Probability that the carrier clears the episode on this macro day.
+    """
     total_pop = population.total_population
 
     if total_pop <= 0:
@@ -1092,7 +1179,15 @@ def compute_clearance_probability(
 
 
 def get_dominant_strain(population: StrainPopulation) -> Tuple[np.ndarray, str, str]:
-    """Get the genome, genotype, and name of the dominant strain."""
+    """Get the dominant strain summary.
+
+    Args:
+        population: Current strain population.
+
+    Returns:
+        Tuple of dominant genome, genotype class, and strain name. Empty populations return
+        a susceptible wild-type genome with an empty strain name.
+    """
     if population.n_strains == 0:
         genome = create_wild_type_genome()
         return genome, "S", ""
@@ -1108,16 +1203,18 @@ def get_dominant_strain(population: StrainPopulation) -> Tuple[np.ndarray, str, 
 def population_to_response(
     population: StrainPopulation,
     immune_strength: float,
-    config: SimulationConfig = None,
+    config: SimulationConfig,
 ) -> Dict[str, Any]:
-    """
-    Convert final population state to micro response format.
+    """Convert a final micro population into a macro-compatible response.
 
-    Returns dict compatible with Patient.apply_micro_response()
-    """
-    if config is None:
-        config = SimulationConfig()
+    Args:
+        population: Final strain population for the simulated day.
+        immune_strength: Host immune-strength multiplier used for clearance probability.
+        config: Complete micro simulation configuration.
 
+    Returns:
+        Response dictionary compatible with ``Patient.apply_micro_response``.
+    """
     dominant_genome, dominant_genotype, dominant_strain_name = get_dominant_strain(population)
     resistant_fraction = compute_resistant_fraction(population.genomes, population.populations)
 

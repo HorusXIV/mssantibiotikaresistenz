@@ -111,6 +111,7 @@ micro:
   antibiotic_kill_scale: 0.08       # explizite ABX-Killrate pro Schritt, skaliert mit 1 - abx_survival [Anteil/Schritt]
   growth_rate_per_step: 0.18          # Basis-Wachstumsrate [Anteil / Schritt]
   death_rate_per_step: 0.06           # Basis-Sterberate [Anteil / Schritt]
+  death_fitness_floor: 0.1          # Fitness-Floor im Sterbeterm [dimensionslos]
   strain_prune_threshold: 200.0       # Pruning-Untergrenze [Bakterien (absolut)]
 
   # --- Schaden, Lebenszyklus & Dormanz ---

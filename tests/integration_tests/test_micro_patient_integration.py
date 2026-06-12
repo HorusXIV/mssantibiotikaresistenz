@@ -12,6 +12,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+from tests.micro_config_helpers import micro_config
+
 from mss.domain import (
     AntibioticRegimen,
     Department,
@@ -22,7 +24,6 @@ from mss.domain import (
 from mss.simulation.micro import (
     GeneIndex,
     MicroSimulator,
-    SimulationConfig,
     StrainPopulation,
     build_founder_pool,
     create_wild_type_genome,
@@ -73,7 +74,7 @@ def susceptible_patient() -> Patient:
 @pytest.fixture
 def micro_simulator() -> MicroSimulator:
     """Create a micro simulator with default config."""
-    sim = MicroSimulator(config=SimulationConfig())
+    sim = MicroSimulator(config=micro_config())
     yield sim
     sim.close()
 
@@ -330,7 +331,7 @@ class TestEndToEndIntegration:
         )
 
     def test_founder_pool_is_deterministic(self):
-        config = SimulationConfig(
+        config = micro_config(
             founder_pool_size=8,
             founder_pool_seed=11,
             founder_pool_gene_noise_std=0.015,
@@ -350,7 +351,7 @@ class TestEndToEndIntegration:
             assert np.allclose(founder_a.genome, founder_b.genome)
 
     def test_initial_population_can_draw_from_founder_pool(self):
-        config = SimulationConfig(founder_pool_size=12, founder_pool_seed=1)
+        config = micro_config(founder_pool_size=12, founder_pool_seed=1)
         population = StrainPopulation.create_initial(
             resistant_fraction=0.4,
             dominant_genotype="R2",
@@ -636,8 +637,8 @@ class TestBatchProcessing:
                 patient.make_micro_request(run_id="run_001", day=1, dt_days=1, seed=42 + i)
             )
 
-        seq = MicroSimulator(config=SimulationConfig(), n_workers=2)
-        par = MicroSimulator(config=SimulationConfig(), n_workers=2)
+        seq = MicroSimulator(config=micro_config(), n_workers=2)
+        par = MicroSimulator(config=micro_config(), n_workers=2)
         try:
             seq_responses = seq.process_batch(requests, parallel=False)
             par_responses = par.process_batch(requests, parallel=True)
@@ -795,7 +796,7 @@ class TestReproducibility:
 
             request = patient.make_micro_request(run_id="run_001", day=1, dt_days=1, seed=seed)
             # Use a fresh simulator to avoid state pollution
-            sim = MicroSimulator(config=SimulationConfig())
+            sim = MicroSimulator(config=micro_config())
             return sim.process_request(request)
 
         result1 = run_simulation(seed=12345)
@@ -835,7 +836,7 @@ class TestReproducibility:
             patient.update_context(ctx)
 
             request = patient.make_micro_request(run_id="run_001", day=1, dt_days=1, seed=seed)
-            sim = MicroSimulator(config=SimulationConfig())
+            sim = MicroSimulator(config=micro_config())
             return sim.process_request(request)
 
         results = [run_simulation(seed=i) for i in range(10)]
@@ -855,7 +856,7 @@ class TestLifecycleDynamics:
     """Tests lineage aging, genetic buffering, and stochastic extinction."""
 
     def test_episode_state_tracks_lifecycle_fields(self, carrier_patient: Patient):
-        sim = MicroSimulator(config=SimulationConfig())
+        sim = MicroSimulator(config=micro_config())
 
         request = carrier_patient.make_micro_request(run_id="run_001", day=1, dt_days=1, seed=42)
         sim.process_request(request)
@@ -869,7 +870,7 @@ class TestLifecycleDynamics:
 
     def test_mutations_record_parent_strain_ids(self, carrier_patient: Patient):
         sim = MicroSimulator(
-            config=SimulationConfig(
+            config=micro_config(
                 founder_pool_size=10,
                 base_mutation_rate=1.0,
                 mutation_std=0.01,
@@ -909,7 +910,7 @@ class TestLifecycleDynamics:
             dose_level="std",
             adherence=1.0,
             immune_strength=0.8,
-            config=SimulationConfig(
+            config=micro_config(
                 base_mutation_rate=0.0,
                 base_hgt_rate=0.0,
                 stochastic_threshold=0.0,
@@ -962,7 +963,7 @@ class TestLifecycleDynamics:
             dose_level="std",
             adherence=1.0,
             immune_strength=0.8,
-            config=SimulationConfig(
+            config=micro_config(
                 base_mutation_rate=0.0,
                 base_hgt_rate=0.0,
                 stochastic_threshold=0.0,
@@ -997,7 +998,7 @@ class TestLifecycleDynamics:
             dose_level="high",
             adherence=1.0,
             immune_strength=2.0,
-            config=SimulationConfig(base_mutation_rate=0.0, base_hgt_rate=0.0),
+            config=micro_config(base_mutation_rate=0.0, base_hgt_rate=0.0),
             seed=123,
         )
 

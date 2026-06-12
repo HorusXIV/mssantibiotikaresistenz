@@ -8,127 +8,19 @@ from __future__ import annotations
 
 import multiprocessing as mp
 from concurrent.futures import Executor, ProcessPoolExecutor, ThreadPoolExecutor
-from dataclasses import dataclass
 from math import ceil
 from typing import Any, Dict, Iterable, List, Optional
 
 import numpy as np
 
+from .config import SimulationConfig
 from .engine import (
-    SimulationConfig,
     StrainPopulation,
     build_founder_pool,
     population_to_response,
     simulate_day,
 )
-from .genome import NUM_GENES
-
-
-@dataclass
-class EpisodeState:
-    """Persistent state for a patient episode (carried between days)."""
-
-    episode_id: str
-    patient_id: str
-    population: StrainPopulation
-    day: int = 0
-
-    def to_dict(self) -> Dict[str, Any]:
-        """Serialize for storage."""
-        return {
-            "episode_id": self.episode_id,
-            "patient_id": self.patient_id,
-            "day": self.day,
-            "genomes": self.population.genomes.tolist(),
-            "populations": self.population.populations.tolist(),
-            "lineage_ages": self.population.lineage_ages.tolist(),
-            "damage_loads": self.population.damage_loads.tolist(),
-            "strain_names": self.population.strain_names,
-            "strain_ids": self.population.strain_ids,
-            "parent_ids": self.population.parent_ids,
-            "donor_ids": self.population.donor_ids,
-            "founder_ids": self.population.founder_ids,
-            "next_strain_serial": self.population.next_strain_serial,
-            "strain_namespace": self.population.strain_namespace,
-        }
-
-    def to_payload(self) -> Dict[str, Any]:
-        """Serialize into a compact in-memory payload for worker processes."""
-        return {
-            "episode_id": self.episode_id,
-            "patient_id": self.patient_id,
-            "day": self.day,
-            "genomes": self.population.genomes.copy(),
-            "populations": self.population.populations.copy(),
-            "lineage_ages": self.population.lineage_ages.copy(),
-            "damage_loads": self.population.damage_loads.copy(),
-            "strain_names": self.population.strain_names.copy(),
-            "strain_ids": self.population.strain_ids.copy(),
-            "parent_ids": self.population.parent_ids.copy(),
-            "donor_ids": self.population.donor_ids.copy(),
-            "founder_ids": self.population.founder_ids.copy(),
-            "next_strain_serial": self.population.next_strain_serial,
-            "strain_namespace": self.population.strain_namespace,
-        }
-
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> EpisodeState:
-        """Deserialize from storage."""
-        genomes = np.array(data["genomes"], dtype=np.float32)
-        if genomes.size == 0:
-            genomes = genomes.reshape(0, NUM_GENES)
-        populations = np.array(data["populations"], dtype=np.float64)
-        lineage_ages = np.array(data.get("lineage_ages", []), dtype=np.float64)
-        damage_loads = np.array(data.get("damage_loads", []), dtype=np.float64)
-        strain_names = [str(name) for name in data.get("strain_names", [])]
-        strain_ids = [str(value) for value in data.get("strain_ids", [])]
-        parent_ids = [str(value) for value in data.get("parent_ids", [])]
-        donor_ids = [str(value) for value in data.get("donor_ids", [])]
-        founder_ids = [str(value) for value in data.get("founder_ids", [])]
-        return cls(
-            episode_id=data["episode_id"],
-            patient_id=data["patient_id"],
-            population=StrainPopulation(
-                genomes=genomes,
-                populations=populations,
-                lineage_ages=lineage_ages if len(lineage_ages) else None,
-                damage_loads=damage_loads if len(damage_loads) else None,
-                strain_names=strain_names if strain_names else None,
-                strain_ids=strain_ids if strain_ids else None,
-                parent_ids=parent_ids if parent_ids else None,
-                donor_ids=donor_ids if donor_ids else None,
-                founder_ids=founder_ids if founder_ids else None,
-                next_strain_serial=int(data.get("next_strain_serial", 0)),
-                strain_namespace=str(data.get("strain_namespace", data["episode_id"])),
-            ),
-            day=data.get("day", 0),
-        )
-
-    @classmethod
-    def from_payload(cls, data: Dict[str, Any]) -> EpisodeState:
-        """Deserialize from an in-memory worker payload."""
-        genomes = np.array(data["genomes"], dtype=np.float32, copy=True)
-        if genomes.size == 0:
-            genomes = genomes.reshape(0, NUM_GENES)
-
-        return cls(
-            episode_id=data["episode_id"],
-            patient_id=data["patient_id"],
-            population=StrainPopulation(
-                genomes=genomes,
-                populations=np.array(data["populations"], dtype=np.float64, copy=True),
-                lineage_ages=np.array(data["lineage_ages"], dtype=np.float64, copy=True),
-                damage_loads=np.array(data["damage_loads"], dtype=np.float64, copy=True),
-                strain_names=[str(name) for name in data.get("strain_names", [])] or None,
-                strain_ids=[str(value) for value in data.get("strain_ids", [])] or None,
-                parent_ids=[str(value) for value in data.get("parent_ids", [])] or None,
-                donor_ids=[str(value) for value in data.get("donor_ids", [])] or None,
-                founder_ids=[str(value) for value in data.get("founder_ids", [])] or None,
-                next_strain_serial=int(data.get("next_strain_serial", 0)),
-                strain_namespace=str(data.get("strain_namespace", data["episode_id"])),
-            ),
-            day=data.get("day", 0),
-        )
+from .state import EpisodeState
 
 
 def _create_initial_population(
@@ -141,6 +33,20 @@ def _create_initial_population(
     seed: int | None,
     seed_genome: np.ndarray | None = None,
 ) -> StrainPopulation:
+    """Create the starting strain population for a micro episode.
+
+    Args:
+        episode_id: Episode identifier used as the strain namespace.
+        dominant_genotype: Target dominant genotype for initialization.
+        dominant_strain_name: Optional preferred name for the dominant strain.
+        resistant_fraction: Initial resistant population fraction.
+        config: Complete micro simulation configuration.
+        seed: Optional random seed for initialization.
+        seed_genome: Optional transmitted genome to seed the population.
+
+    Returns:
+        Initialized strain population.
+    """
     rng = np.random.default_rng(seed)
     founder_pool = build_founder_pool(config) if seed_genome is None else []
     return StrainPopulation.create_initial(
@@ -155,18 +61,24 @@ def _create_initial_population(
 
 
 def _process_single_request(args: tuple) -> Dict[str, Any]:
-    """
-    Process a single micro request (for parallel execution).
+    """Process one micro request in a worker-compatible form.
 
     Args:
-        args: Tuple of (request_dict, episode_state_dict, config_dict)
+        args: Tuple containing the request dictionary, optional episode-state payload,
+            and serialized micro configuration.
 
     Returns:
-        Response dict compatible with Patient.apply_micro_response()
+        Response dictionary compatible with ``Patient.apply_micro_response``. The private
+        ``_state`` key contains the updated episode payload for the owning simulator.
+
+    Raises:
+        ValueError: If the worker configuration payload is missing.
     """
     request, state_dict, config_dict = args
 
-    config = SimulationConfig(**config_dict) if config_dict else SimulationConfig()
+    if not config_dict:
+        raise ValueError("Worker micro config payload is required.")
+    config = SimulationConfig(**config_dict)
 
     # Reconstruct or create population
     if state_dict is not None:
@@ -231,32 +143,42 @@ def _process_single_request(args: tuple) -> Dict[str, Any]:
 
 
 def _process_request_chunk(chunk: List[tuple]) -> List[Dict[str, Any]]:
-    """Process one chunk of requests inside a worker process."""
+    """Process one chunk of worker request tuples.
+
+    Args:
+        chunk: Request tuples accepted by ``_process_single_request``.
+
+    Returns:
+        Response dictionaries in chunk order.
+    """
     return [_process_single_request(args) for args in chunk]
 
 
 class MicroSimulator:
-    """
-    High-level interface for micro-simulation.
+    """Stateful batch interface for within-host micro simulation.
 
-    Manages episode states and supports batch processing.
+    The simulator owns active episode states, serializes requests for worker execution,
+    and stores updated state payloads after each processed request.
     """
 
-    def __init__(self, config: SimulationConfig = None, n_workers: int = None):
-        """
-        Initialize simulator.
+    def __init__(self, config: SimulationConfig, n_workers: int = None):
+        """Initialize the micro simulator.
 
         Args:
-            config: Simulation configuration
-            n_workers: Number of parallel workers (None = CPU count)
+            config: Complete micro simulation configuration.
+            n_workers: Number of parallel workers. If omitted, CPU count is used.
         """
-        self.config = config or SimulationConfig()
+        self.config = config
         self.n_workers = n_workers or mp.cpu_count()
         self._episode_states: Dict[str, EpisodeState] = {}
         self._executor: Executor | None = None
 
     def _config_payload(self) -> Dict[str, Any]:
-        """Serialize the active simulation config for worker dispatch."""
+        """Serialize the active simulation config for worker dispatch.
+
+        Returns:
+            Dictionary containing all ``SimulationConfig`` fields.
+        """
         return {
             "steps_per_day": self.config.steps_per_day,
             "max_strains": self.config.max_strains,
@@ -296,7 +218,11 @@ class MicroSimulator:
         }
 
     def _get_executor(self) -> Executor:
-        """Lazily create a long-lived worker pool for embarrassingly parallel batches."""
+        """Lazily create the worker executor.
+
+        Returns:
+            Process pool when available, otherwise a thread pool fallback.
+        """
         if self._executor is None:
             try:
                 self._executor = ProcessPoolExecutor(max_workers=self.n_workers)
@@ -306,7 +232,17 @@ class MicroSimulator:
         return self._executor
 
     def _build_args_list(self, requests: List[Dict[str, Any]]) -> List[tuple]:
-        """Attach current episode state and config to each request."""
+        """Attach current episode state and config to each request.
+
+        Args:
+            requests: Micro request dictionaries from macro patients.
+
+        Returns:
+            Worker argument tuples in request order.
+
+        Raises:
+            ValueError: If the same episode ID appears more than once in one batch.
+        """
         config_payload = self._config_payload()
         args_list = []
 
@@ -329,7 +265,14 @@ class MicroSimulator:
         return args_list
 
     def _chunk_args(self, args_list: List[tuple]) -> List[List[tuple]]:
-        """Group requests to amortize inter-process dispatch overhead."""
+        """Group worker arguments into chunks.
+
+        Args:
+            args_list: Worker argument tuples.
+
+        Returns:
+            List of argument chunks sized for the configured worker count.
+        """
         if len(args_list) <= 1:
             return [args_list]
 
@@ -338,7 +281,14 @@ class MicroSimulator:
         return [args_list[i : i + chunk_size] for i in range(0, len(args_list), chunk_size)]
 
     def _store_responses(self, responses: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """Update internal episode state and strip private worker payloads."""
+        """Update episode state from responses and remove private payloads.
+
+        Args:
+            responses: Response dictionaries produced by worker processing.
+
+        Returns:
+            Cleaned responses without the private ``_state`` key.
+        """
         cleaned = []
         for resp in responses:
             episode_id = resp.get("episode_id")
@@ -349,14 +299,13 @@ class MicroSimulator:
         return cleaned
 
     def process_request(self, request: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Process a single micro request.
+        """Process a single micro request.
 
         Args:
-            request: Dict from Patient.make_micro_request()
+            request: Dictionary produced by ``Patient.make_micro_request``.
 
         Returns:
-            Response dict for Patient.apply_micro_response()
+            Response dictionary for ``Patient.apply_micro_response``.
         """
         response = _process_single_request(self._build_args_list([request])[0])
         return self._store_responses([response])[0]
@@ -364,15 +313,14 @@ class MicroSimulator:
     def process_batch(
         self, requests: List[Dict[str, Any]], parallel: bool = True
     ) -> List[Dict[str, Any]]:
-        """
-        Process multiple requests, optionally in parallel.
+        """Process multiple micro requests.
 
         Args:
-            requests: List of request dicts
-            parallel: Whether to use parallel processing
+            requests: Request dictionaries from macro patients.
+            parallel: Whether to use the worker executor when more than one request is present.
 
         Returns:
-            List of response dicts (same order as requests)
+            Response dictionaries in the same order as ``requests``.
         """
         if not requests:
             return []
@@ -390,7 +338,11 @@ class MicroSimulator:
         return self._store_responses(responses)
 
     def clear_episode(self, episode_id: str) -> None:
-        """Remove episode state (e.g., when patient clears infection)."""
+        """Remove persisted state for an episode.
+
+        Args:
+            episode_id: Episode identifier to remove.
+        """
         self._episode_states.pop(episode_id, None)
 
     def initialize_episode(
@@ -405,7 +357,21 @@ class MicroSimulator:
         day: int = 0,
         seed: int | None = None,
     ) -> EpisodeState:
-        """Create and persist the initial micro population for an episode without simulating a day."""
+        """Create and persist an initial episode state without simulating a day.
+
+        Args:
+            episode_id: Episode identifier to initialize.
+            patient_id: Patient identifier associated with the episode.
+            resistant_fraction: Initial resistant population fraction.
+            dominant_genotype: Target dominant genotype for initialization.
+            dominant_strain_name: Optional preferred dominant strain name.
+            seed_genome: Optional transmitted genome to seed the episode.
+            day: Initial macro day stored in the episode state.
+            seed: Optional random seed for initialization.
+
+        Returns:
+            Existing or newly created episode state.
+        """
         existing = self._episode_states.get(episode_id)
         if existing is not None:
             return existing
@@ -429,20 +395,36 @@ class MicroSimulator:
         return state
 
     def get_episode_state(self, episode_id: str) -> Optional[EpisodeState]:
-        """Get current state for an episode."""
+        """Return the current state for an episode.
+
+        Args:
+            episode_id: Episode identifier to look up.
+
+        Returns:
+            Episode state if active, otherwise ``None``.
+        """
         return self._episode_states.get(episode_id)
 
     def get_active_episodes(self) -> List[str]:
-        """Get list of active episode IDs."""
+        """Return active episode identifiers.
+
+        Returns:
+            List of episode IDs currently tracked by this simulator.
+        """
         return list(self._episode_states.keys())
 
     def close(self) -> None:
-        """Shut down background worker processes."""
+        """Shut down the background worker executor if it exists.
+
+        Returns:
+            None.
+        """
         if self._executor is not None:
             self._executor.shutdown(wait=True)
             self._executor = None
 
     def __del__(self):
+        """Best-effort cleanup for worker resources during garbage collection."""
         try:
             self.close()
         except Exception:
@@ -451,22 +433,18 @@ class MicroSimulator:
 
 # Convenience function for standalone use
 def run_micro_simulation(
-    patient_request: Dict[str, Any], config: SimulationConfig = None
+    patient_request: Dict[str, Any], config: SimulationConfig
 ) -> Dict[str, Any]:
-    """
-    Run a single micro simulation from a patient request.
-
-    Stateless - does not persist episode state.
+    """Run one stateless micro simulation from a patient request.
 
     Args:
-        patient_request: Dict from Patient.make_micro_request()
-        config: Optional simulation config
+        patient_request: Dictionary produced by ``Patient.make_micro_request``.
+        config: Complete micro simulation configuration.
 
     Returns:
-        Response dict for Patient.apply_micro_response()
+        Response dictionary for ``Patient.apply_micro_response``. No episode state is
+        retained between calls.
     """
-    config = config or SimulationConfig()
-
     # Create initial population
     initial = patient_request.get("initial_state", {})
     resistant_fraction = initial.get("resistant_fraction", 0.0)

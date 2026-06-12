@@ -75,11 +75,15 @@ micro:
     base_mutation_rate: 0.05            # Basis-Mutationsrate [Mutationen / Gen*Schritt] -> 0 deaktiviert Mutation
     mutation_std: 0.09                  # SD einer Trait-Mutation [Genwert-Delta, 0–1]
     stress_mutation_boost: 7.0          # Mutationsboost unter ABX-Stress [Multiplikator]
+    mutant_transfer_fraction: 0.03      # Populationsanteil pro Mutation für neue Mutantenstämme
     base_hgt_rate: 0.08                 # Basis-HGT-Wahrscheinlichkeit [Wahrscheinlichkeit / Stamm*Schritt] -> 0 deaktiviert HGT
     hgt_gene_transfer_prob: 0.6         # Genübertragung pro HGT-Ereignis [Wahrscheinlichkeit / Gen]
     selection_strength: 1.45            # Exponent auf relative Fitness [dimensionslos; 0 = neutral]
+    abx_selection_pressure_multiplier: 3.0  # Verstärkung der Selektion unter ABX-Druck
+    antibiotic_kill_scale: 0.08         # Explizite ABX-Killrate pro Schritt
     growth_rate_per_step: 0.36          # Basis-Wachstumsrate [Anteil / Schritt]
     death_rate_per_step: 0.045          # Basis-Sterberate [Anteil / Schritt]
+    death_fitness_floor: 0.1            # Fitness-Floor im Sterbeterm
     strain_prune_threshold: 0.5         # Pruning-Untergrenze [Bakterien (absolut)]
     base_damage_per_step: 0.008         # Hintergrundschaden [Schadenseinheiten / Schritt]
     replication_damage_factor: 0.06     # Zusatzschaden aus Replikationsdruck [Schaden / Schritt-Einheit]
