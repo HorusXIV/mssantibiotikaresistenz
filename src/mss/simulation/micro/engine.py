@@ -17,7 +17,6 @@ from funkybob import UniqueRandomNameGenerator
 from funkybob import data as funkybob_data
 
 from .config import SimulationConfig
-from .models import FounderStrain
 from .genome import (
     ABX_PROFILES,
     DOSE_MULTIPLIERS,
@@ -32,6 +31,7 @@ from .genome import (
     create_resistant_genome,
     create_wild_type_genome,
 )
+from .models import FounderStrain
 
 
 def _next_unique_strain_name(
@@ -571,7 +571,7 @@ def _create_seed_genome_for_genotype(dominant_genotype: str) -> np.ndarray:
         genome[GeneIndex.STRESS_RESPONSE] = 0.65
         genome[GeneIndex.DAMAGE_TOLERANCE] = 0.55
         genome[GeneIndex.DORMANCY_PROPENSITY] = 0.35
-        genome[GeneIndex.GROWTH_BASE] = 0.62
+        genome[GeneIndex.GROWTH_BASE] = 0.75
         return genome
 
     if dominant_genotype == "R2":
@@ -582,11 +582,13 @@ def _create_seed_genome_for_genotype(dominant_genotype: str) -> np.ndarray:
         genome[GeneIndex.STRESS_RESPONSE] = 0.45
         genome[GeneIndex.DAMAGE_TOLERANCE] = 0.35
         genome[GeneIndex.DORMANCY_PROPENSITY] = 0.22
-        genome[GeneIndex.GROWTH_BASE] = 0.68
+        genome[GeneIndex.GROWTH_BASE] = 0.78
         return genome
 
     resistance_level = 0.35 if dominant_genotype == "R1" else 0.30
-    return create_resistant_genome(resistance_level)
+    res_genome = create_resistant_genome(resistance_level)
+    res_genome[GeneIndex.GROWTH_BASE] = 0.79
+    return res_genome
 
 
 def mutate_population(
@@ -1157,10 +1159,12 @@ def compute_clearance_probability(
     if total_pop < config.clearance_threshold:
         return 0.95  # very likely to clear
 
-    # Logistic regime: 0.006 prefactor tuned so daily clearance matches the
+    # Logistic regime: 0.012 prefactor tuned so daily clearance matches the
     # macro-level p_clearance ~= 0.0039/day (~1/255 days mean MRSA carriage).
+    # We increase the prefactor and add a small base probability to avoid
+    # indefinite carriage at capacity.
     ratio = total_pop / config.carrying_capacity
-    base_prob = 0.006 * (1.0 - ratio)
+    base_prob = 0.004 + 0.012 * (1.0 - ratio)
 
     # Immune modulation
     immune_mult = immune_strength
@@ -1175,7 +1179,7 @@ def compute_clearance_probability(
         stealth_effect = 1.0
 
     p_clear = base_prob * immune_mult * stealth_effect
-    return float(np.clip(p_clear, 0.001, 0.95))
+    return float(np.clip(p_clear, 0.003, 0.95))
 
 
 def get_dominant_strain(population: StrainPopulation) -> Tuple[np.ndarray, str, str]:

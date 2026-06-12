@@ -38,6 +38,7 @@ class EpisodeConfig:
         initial_population: Initial within-host bacterial population size.
         immune_strength: Host immune-strength multiplier.
         abx_schedule: Antibiotic exposure periods to apply during the episode.
+        allow_spontaneous_clearance: Whether to roll for spontaneous clearance each day.
     """
 
     n_days: int
@@ -47,6 +48,7 @@ class EpisodeConfig:
     initial_population: float
     immune_strength: float
     abx_schedule: list[ABXPeriod]
+    allow_spontaneous_clearance: bool = True
 
 
 @dataclass

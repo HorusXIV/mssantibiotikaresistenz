@@ -10,7 +10,8 @@ Outputs (outputs/<timestamp>_MicroSinglePatient/):
   overview.png           -- total population, resistant fraction, diversity, p_clearance
   gene_expression.png    -- 14-gene heatmap: population-weighted mean trait over time
   genotype_composition.png -- stacked S/R1/R2/R3 fractions + total-pop overlay
-  strain_landscape.png   -- top-N dominant strains as stacked fractions (coexistence)
+  strain_landscape.png   -- block-max dominant strains as stacked fractions
+  strain_landscape_total_population.png -- same lineages as absolute population
   lifecycle.png          -- mean damage load and mean lineage age
 
 Usage:
@@ -31,6 +32,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import yaml
+
 from mss.simulation.micro.single_patient import ABXPeriod, DayRecord, EpisodeConfig
 
 matplotlib.use("Agg")
@@ -131,6 +133,7 @@ def _load_config(path: Path) -> tuple[SimulationConfig, EpisodeConfig]:
             "initial_population",
             "immune_strength",
             "abx_schedule",
+            "allow_spontaneous_clearance",
         },
     )
     schedule = []
@@ -159,6 +162,7 @@ def _load_config(path: Path) -> tuple[SimulationConfig, EpisodeConfig]:
         initial_population=float(ep_raw["initial_population"]),
         immune_strength=float(ep_raw["immune_strength"]),
         abx_schedule=schedule,
+        allow_spontaneous_clearance=bool(ep_raw.get("allow_spontaneous_clearance", True)),
     )
     return micro_config, episode_config
 
@@ -239,7 +243,7 @@ def run_episode(
         else:
             frac = {k: 0.0 for k in genotype_pop}
 
-        cleared = total_pop < micro_config.min_population
+        p_clear = float(compute_clearance_probability(pop, ep_config.immune_strength, micro_config))
 
         records.append(
             DayRecord(
@@ -248,9 +252,7 @@ def run_episode(
                 resistant_fraction=float(compute_resistant_fraction(pop.genomes, pop.populations)),
                 n_strains=n,
                 shannon_entropy=_shannon_entropy(pop.populations),
-                p_clearance=float(
-                    compute_clearance_probability(pop, ep_config.immune_strength, micro_config)
-                ),
+                p_clearance=p_clear,
                 abx_class=abx_class,
                 mean_genes=mean_genes,
                 mean_damage=mean_damage,
@@ -260,12 +262,21 @@ def run_episode(
                 frac_R2=frac.get("R2", 0.0),
                 frac_R3=frac.get("R3", 0.0),
                 strain_snapshot=strain_snapshot,
-                cleared=cleared,
+                cleared=False,
             )
         )
 
+        cleared_spontaneous = (
+            rng.random() < p_clear if ep_config.allow_spontaneous_clearance else False
+        )
+        cleared = total_pop < micro_config.min_population or cleared_spontaneous
+
         if cleared:
-            print(f"  Cleared on day {day}  (total_pop={total_pop:.1f})")
+            if cleared_spontaneous and total_pop >= micro_config.min_population:
+                print(f"  Cleared spontaneously on day {day} (p_clearance={p_clear:.4f})")
+            else:
+                print(f"  Cleared on day {day}  (total_pop={total_pop:.1f})")
+            records[-1].cleared = True
             break
 
     return records
@@ -502,74 +513,106 @@ def _fig_strain_landscape(
     records: list[DayRecord],
     ep: EpisodeConfig,
     out_dir: Path,
-    top_n: int = 20,
+    block_size_days: int = 100,
 ) -> None:
     days = _days(records)
+    total_pop = np.array([r.total_population for r in records], dtype=np.float64)
 
-    # Identify the top-N strains by their peak population fraction
-    strain_max_frac: dict[str, float] = {}
+    selected_strains: list[str] = []
+    selected_set: set[str] = set()
     strain_peak_geno: dict[str, str] = {}
-    for r in records:
-        if r.total_population <= 0:
-            continue
-        for name, pop, geno in r.strain_snapshot:
-            frac = pop / r.total_population
-            if frac > strain_max_frac.get(name, 0.0):
-                strain_max_frac[name] = frac
-                strain_peak_geno[name] = geno
+    block_edges: list[int] = []
 
-    top_strains = sorted(strain_max_frac, key=strain_max_frac.__getitem__, reverse=True)[:top_n]
+    # Block maxima: select the single largest-fraction lineage in each time block.
+    for block_start in range(int(days[0]), int(days[-1]) + 1, block_size_days):
+        block_end = block_start + block_size_days
+        block_edges.append(block_start)
+        best_name = ""
+        best_frac = -1.0
+        best_geno = "S"
+        for r in records:
+            if not block_start <= r.day < block_end or r.total_population <= 0:
+                continue
+            for name, pop, geno in r.strain_snapshot:
+                frac = pop / r.total_population
+                if frac > best_frac:
+                    best_name = name
+                    best_frac = frac
+                    best_geno = geno
+        if best_name:
+            strain_peak_geno[best_name] = best_geno
+            if best_name not in selected_set:
+                selected_set.add(best_name)
+                selected_strains.append(best_name)
 
-    # Build fraction matrix: (n_top, n_days)
-    name_idx = {name: i for i, name in enumerate(top_strains)}
-    fracs = np.zeros((len(top_strains), len(days)))
+    name_idx = {name: i for i, name in enumerate(selected_strains)}
+    fracs = np.zeros((len(selected_strains), len(days)), dtype=np.float64)
+    abs_pops = np.zeros((len(selected_strains), len(days)), dtype=np.float64)
     for di, r in enumerate(records):
         if r.total_population <= 0:
             continue
         for name, pop, _ in r.strain_snapshot:
             if name in name_idx:
-                fracs[name_idx[name], di] = pop / r.total_population
+                idx = name_idx[name]
+                abs_pops[idx, di] = pop
+                fracs[idx, di] = pop / r.total_population
 
     other_frac = np.clip(1.0 - fracs.sum(axis=0), 0.0, 1.0)
+    other_pop = np.clip(total_pop - abs_pops.sum(axis=0), 0.0, None)
 
-    # Assign colors within each genotype class, cycling the palette
     class_count: dict[str, int] = {}
     colors: list[str] = []
-    for name in top_strains:
+    for name in selected_strains:
         geno = strain_peak_geno.get(name, "S")
         palette = _STRAIN_PALETTES.get(geno, _STRAIN_PALETTES["S"])
         idx = class_count.get(geno, 0) % len(palette)
         colors.append(palette[idx])
         class_count[geno] = class_count.get(geno, 0) + 1
 
-    fig, ax = plt.subplots(figsize=(14, 6))
-    ax.stackplot(
-        days,
-        *fracs,
-        other_frac,
-        colors=colors + ["#cccccc"],
-        alpha=0.88,
-    )
-    _shade_abx(ax, ep.abx_schedule, ep.n_days)
-    ax.set_ylim(0, 1)
-    ax.set_ylabel("Population fraction")
-    ax.set_xlabel("Day")
-    ax.set_title(
-        f"Strain landscape — top {min(top_n, len(top_strains))} dominant lineages",
-        fontweight="bold",
-    )
-
     legend_handles = [
-        mpatches.Patch(facecolor=GENO_COLORS[g], label=f"{g} lineages", alpha=0.88)
+        mpatches.Patch(facecolor=GENO_COLORS[g], label=f"{g} block-max lineages", alpha=0.88)
         for g in ["S", "R1", "R2", "R3"]
-    ] + [mpatches.Patch(facecolor="#cccccc", label="other", alpha=0.88)]
-    ax.legend(handles=legend_handles, loc="upper right", fontsize=9, framealpha=0.85)
+    ] + [mpatches.Patch(facecolor="#cccccc", label="other active strains", alpha=0.88)]
 
-    fig.tight_layout()
-    path = out_dir / "strain_landscape.png"
-    fig.savefig(path, dpi=130, bbox_inches="tight")
-    plt.close(fig)
-    print(f"  {path.name}")
+    def _draw_landscape(
+        values: np.ndarray, other: np.ndarray, ylabel: str, title: str, filename: str
+    ):
+        fig, ax = plt.subplots(figsize=(14, 6))
+        ax.stackplot(
+            days,
+            *values,
+            other,
+            colors=colors + ["#cccccc"],
+            alpha=0.88,
+        )
+        for edge in block_edges[1:]:
+            ax.axvline(edge - 0.5, color="white", linewidth=0.7, alpha=0.7, zorder=3)
+        _shade_abx(ax, ep.abx_schedule, ep.n_days)
+        ax.set_ylabel(ylabel)
+        ax.set_xlabel("Day")
+        ax.set_title(title, fontweight="bold")
+        ax.legend(handles=legend_handles, loc="upper right", fontsize=9, framealpha=0.85)
+        fig.tight_layout()
+        path = out_dir / filename
+        fig.savefig(path, dpi=130, bbox_inches="tight")
+        plt.close(fig)
+        print(f"  {path.name}")
+
+    _draw_landscape(
+        fracs,
+        other_frac,
+        "Population fraction",
+        f"Strain landscape — block maxima, {block_size_days}-day blocks "
+        f"({len(selected_strains)} unique lineages)",
+        "strain_landscape.png",
+    )
+    _draw_landscape(
+        abs_pops,
+        other_pop,
+        "Population size",
+        f"Strain landscape — absolute population, {block_size_days}-day block maxima",
+        "strain_landscape_total_population.png",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -688,7 +731,7 @@ def main() -> None:
     _fig_overview(records, ep_config, output_dir)
     _fig_gene_expression(records, ep_config, output_dir)
     _fig_genotype_composition(records, ep_config, output_dir)
-    _fig_strain_landscape(records, ep_config, output_dir)
+    _fig_strain_landscape(records, ep_config, output_dir, block_size_days=10)
     _fig_lifecycle(records, ep_config, output_dir)
 
     print("=" * 65)

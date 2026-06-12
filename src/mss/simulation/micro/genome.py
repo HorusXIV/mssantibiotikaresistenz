@@ -68,9 +68,9 @@ class ResistanceCosts:
         permeability_reduction: Fitness cost per unit of permeability-reduction expression.
     """
 
-    efflux_pumps: float = 0.15
-    target_modification: float = 0.12
-    permeability_reduction: float = 0.08
+    efflux_pumps: float = 0.05
+    target_modification: float = 0.04
+    permeability_reduction: float = 0.03
 
     def as_array(self) -> np.ndarray:
         """Return costs aligned to the genome vector.
