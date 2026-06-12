@@ -49,11 +49,11 @@ population:
 
   carrier_template:
     compliance: 0.70
-    immune_strength: 0.75
+    immune_strength: 0.70 # kalibriert
     resistant_fraction: 0.90
     dominant_genotype: R1
     relative_transmissibility: 1
-    p_clearance: 0.0039
+    p_clearance: 0.005 # kalibriert | (konsistent mit Engine-Floor 0.003 + Logistik)
     severity_modifier: 1.2
 
 # ===========================================================================
@@ -96,7 +96,7 @@ macro:
   proximity_decay_alpha: 1.05
 
 # ===========================================================================
-# MIKRO-BLOCK: an Literatur/Surveillance verankert (geänderte Werte annotiert)
+# MIKRO-BLOCK: an Literatur/Surveillance verankert
 # ===========================================================================
 micro:
   # --- Ausführung (technisch) ---
@@ -109,46 +109,46 @@ micro:
   # --- Zeit & Populationsgrenzen ---
   # steps_per_day = 12: ein Schritt = 1 reale Stunde im nächtlichen 12h-Aktivfenster.
   steps_per_day: 12 # technisch/geschätzt | ; Zeitanker 1h/Schritt
-  max_strains: 40 # technisch |
-  carrying_capacity: 500000000.0 # geschätzt | 5e8: nasale S.-aureus-Last bis ~1e6–1e8 CFU/Swab; Modellskala
-  min_population: 100.0 # technisch / kalibrieren |
-  clearance_threshold: 1000.0 # technisch / kalibrieren |
+  max_strains: 50 # technisch |
+  carrying_capacity: 500000000.0 # geschätzt/kalibriert
+  min_population: 200.0 # technisch / kalibriert
+  clearance_threshold: 2000.0 # technisch / kalibriert
 
   # --- Mutation ---
-  base_mutation_rate: 0.006 # geschätzt/kalibrieren | GEÄNDERT 0.012->0.006 (niedrige within-host Diversität)
-  mutation_std: 0.02 # kalibrieren |
+  base_mutation_rate: 0.015 # geschätzt/kalibriert |  (ermöglicht Evolution ohne Seed)
+  mutation_std: 0.05 # kalibriert
   # stress_mutation_boost: (Cirz 2007, Ubeda 2006).
   # Literatur-Korridor 10–100x; 30x liegt konservativ in der Mitte.
-  stress_mutation_boost: 30.0 # geschätzt
-  mutant_transfer_fraction: 0.03 # kalibriert | Anteil pro Mutation für neuen Mutantenstamm
+  stress_mutation_boost: 50.0 # geschätzt/kalibriert
+  mutant_transfer_fraction: 0.05 # kalibriert
 
   # --- Horizontaler Gentransfer ---
-  base_hgt_rate: 0.02 # geschätzt | Darphorn, T. S., Sintanneland, B. B. K., Grootemaat, A. E., Van Der Wel, N. N., Brul, S., & Ter Kuile, B. H. (2022). Transfer dynamics of multi-resistance plasmids in Escherichia coli isolated from meat. PLoS ONE, 17(7), e0270205. https://doi.org/10.1371/journal.pone.0270205
-  hgt_gene_transfer_prob: 0.25 # kalibrieren |
+  base_hgt_rate: 0.04 # geschätzt/kalibrier
+  hgt_gene_transfer_prob: 0.3 # kalibriert
 
   # --- Selektion & Wachstum ---
-  selection_strength: 0.6
-  abx_selection_pressure_multiplier: 3.0
-  antibiotic_kill_scale: 0.08 # kalibriert
+  selection_strength: 1.8 # kalibriert
+  abx_selection_pressure_multiplier: 5.0 # kalibriert
+  antibiotic_kill_scale: 0.15 # kalibriert
   death_fitness_floor: 1.0 # kalibriert
-  growth_rate_per_step: 1.5 # geschätzt | Wachstum: \(N_{next} = N \cdot e^{\text{growth} - \text{death}}\)
-  death_rate_per_step: 0.01 # geschätzt
-  strain_prune_threshold: 200.0 # technisch/kalibriert
+  growth_rate_per_step: 0.22 # geschätzt/kalibriert | (konsistent mit 12 Schritten/Tag)
+  death_rate_per_step: 0.04 # geschätzt/kalibriert
+  strain_prune_threshold: 300.0 # technisch/kalibriert
 
   # --- Schaden, Lebenszyklus & Dormanz ---
-  base_damage_per_step: 0.004 # kalibriert
-  replication_damage_factor: 0.03 # kalibriert
-  stress_damage_factor: 0.06 # kalibriert
-  repair_rate_per_step: 0.08 # kalibriert
-  age_mortality_scale: 0.001 # kalibrieren |
-  damage_mortality_scale: 0.025 # kalibrieren |
-  lifecycle_half_life_steps: 200.0 # kalibriert
-  max_damage_load: 5.0 # technisch/kalibrieren |
+  base_damage_per_step: 0.005 # kalibriert
+  replication_damage_factor: 0.04 # kalibriert
+  stress_damage_factor: 0.08 # kalibriert
+  repair_rate_per_step: 0.07 # kalibriert
+  age_mortality_scale: 0.002 # kalibriert
+  damage_mortality_scale: 0.03 # kalibriert
+  lifecycle_half_life_steps: 150.0 # kalibriert
+  max_damage_load: 4.0 # technisch/kalibriert
   # Persister/Dormanz ist qualitativ belegt (PMC8865412); Koeffizient bleibt Modellannahme.
-  dormancy_growth_penalty: 0.55 # geschätzt/kalibrieren |
-  synergy_repair_dormancy_bonus: 0.25 # kalibrieren |
-  synergy_stress_tolerance_bonus: 0.20 # kalibrieren |
+  dormancy_growth_penalty: 0.6 # geschätzt/kalibriert
+  synergy_repair_dormancy_bonus: 0.3 # kalibriert
+  synergy_stress_tolerance_bonus: 0.25 # kalibriert
 
   # --- Demografische Stochastik ---
-  stochastic_threshold: 10000.0 # technisch/kalibriert
-  stochastic_noise_scale: 0.08 # technisch/kalibriert
+  stochastic_threshold: 20000.0 # technisch/kalibriert
+  stochastic_noise_scale: 0.1 # technisch/kalibriert
