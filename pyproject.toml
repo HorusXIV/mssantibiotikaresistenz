@@ -35,6 +35,8 @@ mss-calibrate = "mss.cli.run_single_ward_calibration:main"
 mss-sweep = "mss.cli.run_parameter_sweep:main"
 mss-micro-time-calibrate = "mss.cli.run_micro_time_calibration:main"
 mss-micro-resistance-calibrate = "mss.cli.run_micro_resistance_calibration:main"
+mss-long-term = "mss.cli.run_long_term_convergence:main"
+mss-ensemble = "mss.cli.run_ensemble_convergence:main"
 
 [dependency-groups]
 dev = [

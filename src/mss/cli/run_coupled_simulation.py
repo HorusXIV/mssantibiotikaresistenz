@@ -26,9 +26,8 @@ from mss.cli import visualize_results
 from mss.domain import Department, HealthState, Patient
 from mss.simulation.macro import MacroSimulator
 from mss.simulation.macro import SimulationConfig as MacroConfig
-from mss.simulation.micro import GeneIndex, MicroSimulator, classify_genotype
+from mss.simulation.micro import GeneIndex, MicroSimulator, build_micro_config, classify_genotype
 from mss.simulation.micro import SimulationConfig as MicroConfig
-from mss.simulation.micro import build_micro_config
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_CONFIG_PATH = PROJECT_ROOT / "config" / "simulation_realistic.yml"
@@ -1185,21 +1184,29 @@ def _write_run_meta(
     return path
 
 
-def main() -> None:
-    """Load the config, run the coupled simulation, and write outputs and plots."""
-    args = _parse_args()
-    config_path = args.config if args.config is not None else DEFAULT_CONFIG_PATH
+def run(
+    settings: CoupledSimulationSettings,
+    output_dir: Path | None = None,
+) -> Path:
+    """Run the coupled simulation with the given settings and write outputs.
 
+    Args:
+        settings: The complete simulation setup.
+        output_dir: If provided, use this directory for outputs. If None, a
+            timestamped directory is created in DEFAULT_OUTPUT_DIR.
+
+    Returns:
+        The path to the run directory.
+    """
     run_ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    run_dir = DEFAULT_OUTPUT_DIR / run_ts
+    run_dir = output_dir or (DEFAULT_OUTPUT_DIR / run_ts)
     data_dir = run_dir / "data"
     plot_dir = run_dir / "plots"
     data_dir.mkdir(parents=True, exist_ok=True)
 
-    settings = load_coupled_settings(config_path)
-
     run_meta_path = _write_run_meta(data_dir, settings, run_ts)
-    print(f"run_meta {run_meta_path}")
+    if not settings.run.quiet:
+        print(f"run_meta {run_meta_path}")
 
     macro = MacroSimulator(
         config=settings.macro,
@@ -1230,16 +1237,17 @@ def main() -> None:
         seed=settings.run.seed,
     )
 
-    print(
-        "run_start "
-        f"config={settings.config_path} days={settings.run.days} "
-        f"hospitals={settings.population.hospitals} "
-        f"susceptible={settings.population.susceptible_count} "
-        f"seed_carriers={settings.population.carrier_count} "
-        f"micro={'on' if settings.run.use_micro else 'off'} "
-        f"micro_steps_per_day={settings.micro.steps_per_day} "
-        f"micro_workers={micro.n_workers} seed={settings.run.seed}"
-    )
+    if not settings.run.quiet:
+        print(
+            "run_start "
+            f"config={settings.config_path} days={settings.run.days} "
+            f"hospitals={settings.population.hospitals} "
+            f"susceptible={settings.population.susceptible_count} "
+            f"seed_carriers={settings.population.carrier_count} "
+            f"micro={'on' if settings.run.use_micro else 'off'} "
+            f"micro_steps_per_day={settings.micro.steps_per_day} "
+            f"micro_workers={micro.n_workers} seed={settings.run.seed}"
+        )
 
     final_summary = None
     macro_daily_path = data_dir / "macro_daily.parquet"
@@ -1390,20 +1398,6 @@ def main() -> None:
                 f"avg_resistant_fraction={summary.avg_resistant_fraction:.4f}"
             )
 
-    if final_summary is None:
-        macro_daily_writer.close()
-        macro_daily_by_hospital_writer.close()
-        macro_cell_daily_writer.close()
-        micro_daily_writer.close()
-        micro_daily_by_hospital_writer.close()
-        micro_patient_daily_writer.close()
-        micro_daily_genotype_writer.close()
-        micro_hospital_population_writer.close()
-        micro_strain_daily_writer.close()
-        micro_episode_gene_daily_writer.close()
-        transfer_daily_writer.close()
-        return
-
     macro_daily_writer.close()
     macro_daily_by_hospital_writer.close()
     macro_cell_daily_writer.close()
@@ -1416,31 +1410,45 @@ def main() -> None:
     micro_episode_gene_daily_writer.close()
     transfer_daily_writer.close()
 
-    print(
-        "run_end "
-        f"day={final_summary.day} susceptible={final_summary.susceptible} "
-        f"carriers={final_summary.carriers} "
-        f"avg_resistant_fraction={final_summary.avg_resistant_fraction:.4f} "
-        f"active_micro_episodes={len(micro.get_active_episodes())}"
-    )
-    print(f"run_dir={run_dir}")
-    print(f"macro_log_written daily={macro_daily_path} by_hospital={macro_daily_by_hospital_path}")
-    print(
-        "micro_log_written "
-        f"daily={micro_daily_path} "
-        f"by_hospital={micro_daily_by_hospital_path} "
-        f"patient_daily={micro_patient_daily_path} "
-        f"genotype={micro_daily_genotype_path} "
-        f"hospital_population={micro_hospital_population_path} "
-        f"strain_daily={micro_strain_daily_path} "
-        f"episode_gene_daily={micro_episode_gene_daily_path}"
-    )
+    if final_summary is not None:
+        if not settings.run.quiet:
+            print(
+                "run_end "
+                f"day={final_summary.day} susceptible={final_summary.susceptible} "
+                f"carriers={final_summary.carriers} "
+                f"avg_resistant_fraction={final_summary.avg_resistant_fraction:.4f} "
+                f"active_micro_episodes={len(micro.get_active_episodes())}"
+            )
+            print(f"run_dir={run_dir}")
+            print(
+                f"macro_log_written daily={macro_daily_path} by_hospital={macro_daily_by_hospital_path}"
+            )
+            print(
+                "micro_log_written "
+                f"daily={micro_daily_path} "
+                f"by_hospital={micro_daily_by_hospital_path} "
+                f"patient_daily={micro_patient_daily_path} "
+                f"genotype={micro_daily_genotype_path} "
+                f"hospital_population={micro_hospital_population_path} "
+                f"strain_daily={micro_strain_daily_path} "
+                f"episode_gene_daily={micro_episode_gene_daily_path}"
+            )
 
     visualize_results.run(
         data_dir=data_dir,
         plot_dir=plot_dir,
         quiet=True,
     )
+
+    return run_dir
+
+
+def main() -> None:
+    """Load the config, run the coupled simulation, and write outputs and plots."""
+    args = _parse_args()
+    config_path = args.config if args.config is not None else DEFAULT_CONFIG_PATH
+    settings = load_coupled_settings(config_path)
+    run(settings)
 
 
 if __name__ == "__main__":
