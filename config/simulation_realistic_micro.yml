@@ -1,33 +1,4 @@
 # config_realistic_micro.yml
-#
-# ZWECK
-# -----
-# Kopie von `simulation_realistic.yml` mit einem stärker an Literatur/Surveillance
-# verankerten MIKRO-Block. Der Makro-Block ist identisch zu `simulation_realistic.yml`
-# (vom Mitautor kalibriert) und wird hier NICHT verändert.
-#
-# Hintergrund: Im produktiven Lauf (`simulation_realistic.yml`) kollabiert der
-# within-host `resistant_fraction` ohne Antibiotikadruck binnen ~5 Tagen von 0.90
-# auf nahezu 0 (siehe `logs/MSS_Simulation_relaistic-6143.out`, avg_resistant_fraction
-# fällt von 0.30 auf ~0.001). Real persistiert MRSA-Trägerschaft jedoch Monate
-# (Median ~7.4–8.5 Monate spontane Clearance; Systematic Review 16 Studien ~88 Wochen).
-# Diese Datei verschiebt die Mikro-Parameter in Richtung der recherchierten Zielgrössen
-# und markiert die verbleibenden code-seitigen Stellhebel als Kalibrierungsziele.
-#
-# WICHTIG (Abgrenzung): Die dominante Ursache des Resistenz-Washouts (Fitness-Gap
-# S vs. R2 von ~0.78 vs. ~0.56 pro Schritt) sitzt in `genome.py`-Konstanten
-# (ResistanceCosts, GROWTH_BASE der Seed-Genome) und im fitness-inversen Death-Term
-# in `engine.py::selection_step`. Diese sind NICHT über die YAML erreichbar. Diese
-# Config mildert das Problem über die erreichbaren Schalter (Selektion, Wachstum/Tod,
-# Mutation/HGT-Zeitskala); die vollständige Korrektur erfordert eine kleine
-# Code-Kalibrierung (siehe config/calibration/cal5_micro_resistance_persistence.yml
-# und config/02_Mikro_Parameterübersicht.md, Abschnitt "Code-seitige Kalibrierung").
-#
-# TYP-LEGENDE (wie in 02_Mikro_Parameterübersicht.md):
-#   geschätzt  = Literatur/Surveillance liefert Zielgrösse oder Grössenordnung
-#   kalibrieren = effektiver Modellparameter; Literatur nur Richtung/Grössenordnung
-#   technisch   = numerisch/architektonisch
-#   Modellannahme = bewusste Strukturannahme des komprimierten Trait-Modells
 
 run:
   days: 365
@@ -51,7 +22,7 @@ population:
     compliance: 0.70
     immune_strength: 0.70 # kalibriert
     resistant_fraction: 0.90
-    dominant_genotype: R1
+    dominant_genotype: S
     relative_transmissibility: 1
     p_clearance: 0.005 # kalibriert | (konsistent mit Engine-Floor 0.003 + Logistik)
     severity_modifier: 1.2
@@ -87,7 +58,7 @@ macro:
   discharge_logistic_t_half: 3.0
 
   replacement_resistant_fraction: 0.90
-  replacement_dominant_genotype: "R1"
+  replacement_dominant_genotype: "S"
 
   carrier_isolation_probability: 0.65
   base_isolation_effectiveness: 0.45
