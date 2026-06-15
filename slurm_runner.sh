@@ -1,9 +1,10 @@
 #!/bin/bash -l
-#SBATCH -p h200
+#SBATCH -M calc-cpu
+#SBATCH -p cpu-daily
 #SBATCH -t 24:00:00
 #SBATCH --job-name=MSS_MicroSensitivity
 #SBATCH --mem=64G
-#SBATCH --cpus-per-task=100
+#SBATCH --cpus-per-task=350
 #SBATCH --output=logs/%x-%j.out
 
 # Absolute path to the repository on the host
