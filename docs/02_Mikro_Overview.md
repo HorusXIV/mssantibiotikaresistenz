@@ -20,10 +20,12 @@ Modelliert wird nicht ein einzelnes Bakterium, sondern eine **Population aus St�
 Jeder Stamm hat ein Genom als Vektor aus `NUM_GENES = 14` kontinuierlichen Genwerten,
 eine Populationsgrösse, ein Linienalter und eine angesammelte Schadenslast.
 
-Ein Makro-Tag wird in `steps_per_day` Schritte zerlegt (Standard 12; ein Schritt ist
-eine numerische Diskretisierung, kein festes biologisches Intervall, und sichert
-numerische Stabilität bei schnellen Populationsdynamiken). Pro Schritt läuft in dieser
-Reihenfolge:
+Ein Makro-Tag wird in `steps_per_day` Mikro-Schritte zerlegt; kalibriert sind 12. Die
+zwölf Schritte bilden ein nächtliches 12-Stunden-Aktivfenster ab, ein Schritt entspricht
+also rund einer realen Stunde. `time_calibration.py` rechnet die schrittbezogenen Raten
+um, falls die Auflösung wechselt; Herleitung und Validierung stehen in
+[`04_Micro_Time_Calibration.md`](04_Micro_Time_Calibration.md). Pro Schritt läuft in
+dieser Reihenfolge:
 
 1. **Selektion**: Wachstum und Tod aus Fitness, Immundruck, Antibiotika und
    Lebenszyklus-Kosten.

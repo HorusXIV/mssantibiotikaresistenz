@@ -21,11 +21,17 @@ MSS/
 │   ├── calibration/
 │   │   ├── cal1_simulation_single_ward.yml
 │   │   ├── cal2_proximity_decay.yml
-│   │   └── cal3_isolation_effectiveness.yml
+│   │   ├── cal3_isolation_effectiveness.yml
+│   │   └── cal4_micro_hourly_time_scale.yml
 │   ├── 01_Makro_Parameterübersicht.md
 │   ├── 02_Mikro_Parameterübersicht.md
+│   ├── cal5_micro_selection_strength.yml
+│   ├── cal6_micro_resistance_persistence.yml
+│   ├── cal_micro_sensitivity.yml
+│   ├── cal_micro_single_patient.yml
 │   ├── simulation_abx.yml
 │   ├── simulation_realistic.yml
+│   ├── simulation_realistic_micro.yml
 │   └── template.yml
 ├── containers/
 │   └── mss_image.def
@@ -34,6 +40,7 @@ MSS/
 │   ├── 01_Makro_Overview.md
 │   ├── 02_Mikro_Overview.md
 │   ├── 03_Modellverhalten_und_Methodik.md
+│   ├── 04_Micro_Time_Calibration.md
 │   ├── organizational/
 │   └── system_overview/
 │       ├── Flowchart_v0.mmd
@@ -60,6 +67,10 @@ MSS/
 │       ├── cli/
 │       │   ├── __init__.py
 │       │   ├── run_coupled_simulation.py
+│       │   ├── run_micro_resistance_calibration.py
+│       │   ├── run_micro_sensitivity.py
+│       │   ├── run_micro_single_patient.py
+│       │   ├── run_micro_time_calibration.py
 │       │   ├── run_parameter_sweep.py
 │       │   ├── run_single_ward_calibration.py
 │       │   └── visualize_results.py
@@ -76,9 +87,14 @@ MSS/
 │           │   └── simulator.py
 │           └── micro/
 │               ├── __init__.py
+│               ├── config.py
 │               ├── engine.py
 │               ├── genome.py
-│               └── simulator.py
+│               ├── models.py
+│               ├── simulator.py
+│               ├── single_patient.py
+│               ├── state.py
+│               └── time_calibration.py
 ├── tests/
 │   ├── __init__.py
 │   ├── conftest.py
@@ -124,8 +140,12 @@ Logik der Spital-Netzwerk-Simulation.
 Logik der bakteriellen Within-Host-Evolution.
 
 - `genome.py`: Genomdarstellung, Resistenz-Traits und Fitness-Helfer.
-- `engine.py`: Mikro-Konfiguration und die Stamm-Populations-Evolutions-Engine.
+- `engine.py`: Stamm-Populations-Evolutions-Engine mit 12 Schritten pro Makro-Tag (Selektion, Mutation, HGT, Konsolidierung).
+- `config.py`: strikte `SimulationConfig`-Dataclass der Mikro-Ebene; jeder biologische Parameter muss aus der YAML kommen, es gibt keine Code-Defaults.
 - `simulator.py`: Batch-Verarbeitungs-Schnittstelle und Verwaltung des Episoden-Lebenszyklus.
+- `state.py`: persistenter Episodenzustand pro Carrier-Patient über Tage hinweg.
+- `models.py`: gemeinsame Datenmodelle der Mikro-Ebene.
+- `single_patient.py`: Datenmodelle für den Einzelpatienten-Runner.
 - `time_calibration.py`: Umrechnung schrittbezogener Mikro-Parameter auf neue reale Zeitschrittdefinitionen und kontrollierte Diagnose-Ensembles.
 
 ### `src/mss/cli/`
@@ -136,6 +156,9 @@ Ausführbare Einstiegspunkte, die die Anwendung aus tieferliegenden Modulen zusa
 - `run_single_ward_calibration.py`: analytische β₀-Kalibrierung für eine Einzelstation. Leitet `base_transmission_rate` aus einer geschlossenen Formel ab und validiert sie per Simulation. `--n-runs > 1` führt ein stochastisches Ensemble über Seeds aus und aggregiert die Ergebnisse.
 - `run_parameter_sweep.py`: strukturierte Parameter-Sweep-Kalibrierung. Variiert einen YAML-Parameter über ein definiertes Gitter, führt die Simulation für jeden Wert aus und plottet den Effekt auf eine Zielgrösse.
 - `run_micro_time_calibration.py`: validiert die stündliche Mikro-Zeitskala als 12 einstündige Nachtfenster-Schritte und erzeugt Diagnose-Outputs bei alternativen Auflösungen.
+- `run_micro_resistance_calibration.py`: kalibriert die Within-Host-Persistenz resistenter Stämme (Kalibrierung 6) gegen die code-seitigen Fitness-Konstanten, damit der Resistenzanteil ohne Antibiotika nicht binnen Tagen verschwindet.
+- `run_micro_sensitivity.py`: Sensitivitätsanalyse der Mikro-Parameter (Kalibrierung 7). Variiert jeden kalibrierbaren YAML-Parameter einzeln und zeichnet die Reaktion zentraler Within-Host-Metriken über die Zeit auf.
+- `run_micro_single_patient.py`: führt eine einzelne Carrier-Episode durch die volle Mikro-Engine und erzeugt biologie-fokussierte Plots der Within-Host-Dynamik, ohne Makro-Simulation.
 - `visualize_results.py`: liest generierte Parquet-Outputs und schreibt Diagnose-Plots.
 
 ### `config/`
@@ -143,7 +166,10 @@ Ausführbare Einstiegspunkte, die die Anwendung aus tieferliegenden Modulen zusa
 Laufzeit-Konfigurationsdateien. Diese sollen umgebungs- oder szenariospezifisch sein, nicht codespezifisch.
 
 - `simulation_realistic.yml`: Haupt-Szenario der realistischen Simulation mit kalibrierten Parameterwerten.
+- `simulation_realistic_micro.yml`: realistisches Szenario mit aktivem Mikro-Layer und dem aktuell kalibrierten Mikro-Block (Referenz für `config/02_Mikro_Parameterübersicht.md`).
 - `simulation_abx.yml`: alternatives Szenario, abgestimmt auf antibiotika-fokussierte Läufe.
+- `cal5_micro_selection_strength.yml`, `cal6_micro_resistance_persistence.yml`: Mikro-Kalibrierkonfigurationen für Selektionsstärke und Resistenzpersistenz.
+- `cal_micro_sensitivity.yml`, `cal_micro_single_patient.yml`: Konfigurationen für die Mikro-Sensitivitätsanalyse und den Einzelpatienten-Runner.
 - `template.yml`: vollständig dokumentierte Referenzdatei, die jede unterstützte YAML-Variable mit Erklärungen auflistet. Zum Erstellen neuer Szenarien kopieren und anpassen.
 - `01_Makro_Parameterübersicht.md`: Parameter-Referenztabelle für die Makro-Ebene, mit Typen (geschätzt / Kontextualisierungsparameter / kalibriert / Referenzwert / nicht identifizierbar), Quellen und Kalibrierergebnissen.
 - `02_Mikro_Parameterübersicht.md`: Parameter-Referenz für die Mikro-Ebene (Within-Host-Evolution), inklusive Genmodell und Formeln.
@@ -239,6 +265,8 @@ Gekoppelte Makro/Mikro-Simulation ausführen:
 
 ```bash
 uv run mss-run --config config/simulation_realistic.yml
+# realistisches Szenario mit aktivem, kalibriertem Mikro-Layer:
+uv run mss-run --config config/simulation_realistic_micro.yml
 ```
 
 Plots aus vorhandenem Parquet-Output erzeugen (optional):
@@ -266,6 +294,19 @@ Mikro-Zeitskalen-Kalibrierung auf stündliche Schritte ausführen (Kalibrierung 
 
 ```bash
 uv run mss-micro-time-calibrate --config config/simulation_realistic.yml --target-steps-per-day 12 --active-window-hours 12
+```
+
+Mikro-Resistenzpersistenz kalibrieren (Kalibrierung 6):
+
+```bash
+uv run mss-micro-resistance-calibrate --config config/simulation_realistic_micro.yml
+```
+
+Mikro-Sensitivitätsanalyse und Einzelpatienten-Lauf ausführen (als Module, nicht als Konsolen-Skripte registriert):
+
+```bash
+uv run python -m mss.cli.run_micro_sensitivity --config config/cal_micro_sensitivity.yml
+uv run python -m mss.cli.run_micro_single_patient --config config/cal_micro_single_patient.yml
 ```
 
 Tests ausführen:

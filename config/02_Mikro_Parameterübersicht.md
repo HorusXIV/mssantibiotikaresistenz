@@ -1,6 +1,6 @@
 # Mikro-Parameterübersicht
 
-Diese Übersicht beschreibt die Mikrosimulation des Projekts. Referenz ist die produktive Konfiguration `config/simulation_realistic.yml`; die Code-Defaults in `src/mss/simulation/micro/engine.py` entsprechen diesen Werten.
+Diese Übersicht beschreibt die Mikrosimulation des Projekts. Referenz ist die kalibrierte Mikro-Konfiguration `config/simulation_realistic_micro.yml`. Die Werte stammen ausschliesslich aus der YAML: `SimulationConfig` in `src/mss/simulation/micro/config.py` setzt keine Defaults, sondern verlangt jeden Mikro-Parameter explizit aus der Konfiguration. `config/simulation_realistic.yml` trägt einen kompatiblen, etwas konservativeren Mikro-Block für gekoppelte Makro-Läufe.
 
 Den erzählenden Überblick (Datenfluss, Kopplung, Konzept) liefert `docs/02_Mikro_Overview.md`. Wie sich Mechanismen gezielt ein- und ausschalten lassen, steht in der Tabelle "Mechanismen-Steuerung" in `config/01_Makro_Parameterübersicht.md`.
 
@@ -24,7 +24,7 @@ Die Mikrosimulation ist ein zustandsbehaftetes Within-Host-Modell für Carrier-P
 - eine akkumulierte Schadenslast (`damage_loads`)
 - Strain-, Parent-, Donor- und Founder-IDs für Rohlogs
 
-Ein Makro-Tag wird in `steps_per_day` Mikro-Schritte zerlegt. In jedem Schritt passiert:
+Ein Makro-Tag wird in `steps_per_day` Mikro-Schritte zerlegt; kalibriert sind 12 Schritte, die ein nächtliches 12-Stunden-Aktivfenster abbilden (rund eine reale Stunde pro Schritt). In jedem Schritt passiert:
 
 1. **Selektion und Populationsdynamik**: Wachstum und Tod werden aus Fitness, Antibiotikadruck, Immundruck, Dormanz, Schaden und Alterung berechnet.
 2. **Mutation**: Genwerte einzelner Stämme werden verrauscht; daraus entstehen neue Teilstämme.
@@ -134,7 +134,7 @@ selection_fitness = baseline_fitness * abx_survival
 Resistenzkosten:
 
 ```text
-raw_costs = efflux * 0.15 + target_mod * 0.12 + permeability * 0.08
+raw_costs = efflux * 0.05 + target_mod * 0.04 + permeability * 0.03
 net_costs = raw_costs * (1 - 0.8 * metabolic_optimization)
 ```
 
@@ -142,8 +142,9 @@ Antibiotika-Überleben:
 
 ```text
 effective_kill = base_kill_rate * dose_multiplier * adherence
-protection = weighted_resistance / 1.5, capped at 0.95
-abx_survival = 1 - effective_kill * (1 - protection)
+weighted_resistance = efflux*efflux_efficacy + target_mod*target_mod_efficacy + permeability*permeability_efficacy
+protection = clip(weighted_resistance, 0, 0.99)
+abx_survival = clip(1 - effective_kill * (1 - protection)**2, 0.01, 1)
 ```
 
 Immun-Überleben:
@@ -163,7 +164,9 @@ selection_factor = relative_fitness ** effective_selection_strength
 growth = growth_rate_per_step * selection_factor * selection_fitness
 density_factor = 1 - total_population / carrying_capacity
 growth = growth * density_factor
+baseline_death = death_rate_per_step * (1 / (baseline_fitness + death_fitness_floor))
 antibiotic_kill = antibiotic_kill_scale * (1 - abx_survival)
+death = baseline_death + antibiotic_kill + turnover_pressure
 ```
 
 Dormanz reduziert Wachstum, kann aber Replikationsdruck, Schaden und Turnover senken. Schaden entsteht aus Basisverschleiss, Replikationsdruck und Umweltstress; Reparatur hängt von Reparatur-, Dormanz- und Stressgenen ab.
@@ -212,14 +215,16 @@ Pro HGT-Ereignis wird ein Donor populationsgewichtet gewählt. Für jedes transf
 if total_population <= 0: p_clearance = 1.0
 elif total_population < min_population: p_clearance = 1.0
 elif total_population < clearance_threshold: p_clearance = 0.95
-else: base_prob = 0.006 * (1 - total_population / carrying_capacity)
+else:
+    ratio = total_population / carrying_capacity
+    base_prob = 0.004 + 0.012 * (1 - ratio)
 
 immune_mult = immune_strength
 stealth_effect = 1 - avg_stealth * 0.5
-p_clearance = clip(base_prob * immune_mult * stealth_effect, 0.001, 0.95)
+p_clearance = clip(base_prob * immune_mult * stealth_effect, 0.003, 0.95)
 ```
 
-Der Vorfaktor `0.006` ist ein manuell abgestimmter Wert (nur im Code gesetzt, nicht in der YAML): so gewählt, dass die resultierende tägliche Clearance zur recherchierten makroseitigen `p_clearance` ≈ 0.0039/Tag (≈ 1/255 Tage mittlere MRSA-Tragezeit) passt.
+Die Konstanten `0.004` und `0.012` sowie der Floor `0.003` sind manuell abgestimmt (nur im Code, nicht in der YAML): so gewählt, dass die tägliche Clearance zur recherchierten makroseitigen `p_clearance` ≈ 0.0039/Tag (≈ 1/255 Tage mittlere MRSA-Tragezeit) passt und ein Träger nahe der Kapazität nicht unbegrenzt kolonisiert bleibt.
 
 ---
 
@@ -230,9 +235,9 @@ Der Vorfaktor `0.006` ist ein manuell abgestimmter Wert (nur im Code gesetzt, ni
 | Parameter | Typ | Wert | Wirkung | Einschätzung |
 |---|---|---:|---|---|
 | `micro.workers` | technisch | `null` | nutzt CPU-Anzahl; beeinflusst nur Performance | nicht biologisch kalibrieren |
-| `steps_per_day` | technisch / kalibrieren | `12` | Anzahl Mikro-Schritte pro Makro-Tag; mehr Schritte bedeuten mehr Selektions-, Mutations- und HGT-Gelegenheiten | primär numerische Zeitskala, aber mit Dynamik gekoppelt |
-| `max_strains` | technisch | `40` | maximale Anzahl aktiver Stämme pro Episode | Stabilitäts-/Speicherparameter; Sensitivität prüfen |
-| `strain_prune_threshold` | technisch / kalibrieren | `200` | entfernt Stämme unterhalb absoluter Populationsgrösse | beeinflusst Erhalt seltener Resistenzvarianten; Sensitivität nötig |
+| `steps_per_day` | technisch / kalibrieren | `12` | Mikro-Schritte pro Makro-Tag; an ein nächtliches 12h-Aktivfenster verankert (≈ 1h/Schritt); mehr Schritte bedeuten mehr Selektions-, Mutations- und HGT-Gelegenheiten | Zeitskala mit `time_calibration.py` umrechenbar; mit Dynamik gekoppelt |
+| `max_strains` | technisch | `50` | maximale Anzahl aktiver Stämme pro Episode | Stabilitäts-/Speicherparameter; Sensitivität prüfen |
+| `strain_prune_threshold` | technisch / kalibrieren | `300` | entfernt Stämme unterhalb absoluter Populationsgrösse | beeinflusst Erhalt seltener Resistenzvarianten; Sensitivität nötig |
 | `founder_pool_size` | technisch / Modellannahme | `32` | Grösse der globalen Founder-Bibliothek | Diversität der Startpopulation; nicht direkt messbar |
 | `founder_pool_seed` | technisch | `1` | deterministische Founder-Erzeugung | Reproduzierbarkeit |
 | `founder_pool_gene_noise_std` | Modellannahme | `0.02` | Rauschen um archetypische Founder-Genome | Trait-Modell-Skala, nicht direkt biologisch |
@@ -258,12 +263,12 @@ Diese Werte sind Code-Konstanten in `genome.py`, nicht YAML-Parameter.
 | ABX-Klasse | Efflux | Target Mod | Permeability | Base Kill | Einschätzung |
 |---|---:|---:|---:|---:|---|
 | `none` | 0.0 | 0.0 | 0.0 | 0.0 | technisch |
-| `beta_lactam` | 0.3 | 0.8 | 0.4 | 0.75 | online qualitativ ableitbar, quantitativ kalibrieren |
-| `fluoroquinolone` | 0.6 | 0.7 | 0.3 | 0.80 | online qualitativ ableitbar, quantitativ kalibrieren |
-| `aminoglycoside` | 0.4 | 0.5 | 0.6 | 0.70 | online qualitativ ableitbar, quantitativ kalibrieren |
-| `macrolide` | 0.7 | 0.4 | 0.3 | 0.65 | online qualitativ ableitbar, quantitativ kalibrieren |
-| `tetracycline` | 0.8 | 0.3 | 0.2 | 0.60 | online qualitativ ableitbar, quantitativ kalibrieren |
-| `glycopeptide` | 0.2 | 0.9 | 0.5 | 0.85 | online qualitativ ableitbar, quantitativ kalibrieren |
+| `beta_lactam` | 0.1 | 0.9 | 0.6 | 0.75 | online qualitativ ableitbar, quantitativ kalibrieren |
+| `fluoroquinolone` | 0.5 | 0.8 | 0.1 | 0.80 | online qualitativ ableitbar, quantitativ kalibrieren |
+| `aminoglycoside` | 0.2 | 0.7 | 0.7 | 0.70 | online qualitativ ableitbar, quantitativ kalibrieren |
+| `macrolide` | 0.7 | 0.7 | 0.2 | 0.65 | online qualitativ ableitbar, quantitativ kalibrieren |
+| `tetracycline` | 0.9 | 0.2 | 0.2 | 0.60 | online qualitativ ableitbar, quantitativ kalibrieren |
+| `glycopeptide` | 0.0 | 0.95 | 0.4 | 0.85 | online qualitativ ableitbar, quantitativ kalibrieren |
 
 Dosis-Multiplikatoren:
 
@@ -280,47 +285,48 @@ Antibiotikamechanismen sind gut identifizierbar, aber die Zahlen in diesem Trait
 | Parameter | Typ | Wert | Wirkung | Einschätzung |
 |---|---|---:|---|---|
 | `carrying_capacity` | geschätzt / kalibrieren | `5e8` | Obergrenze der Within-Host-Gesamtpopulation | CFU-Studien geben Grössenordnungen; Modellskala kalibrieren |
-| `min_population` | kalibrieren | `100` | Extinktions-Untergrenze: liegt die Gesamtpopulation darunter, gilt die Within-Host-Population als erloschen und die Trägerschaft wird geklärt (`p_clearance = 1.0`) | Default gesetzt, noch nicht kalibriert |
-| `clearance_threshold` | kalibrieren | `1000` | unterhalb davon ist `p_clearance = 0.95` | effektive Schwelle, mit Carrier-Dauer kalibrieren |
-| `growth_rate_per_step` | geschätzt / kalibrieren | `0.18` | Wachstum pro Schritt vor Fitness- und Dormanzkorrektur | S. aureus-Generationszeiten geben Obergrenzen; per-step-Wert kalibrieren |
-| `death_rate_per_step` | kalibrieren | `0.06` | basale Todesrate pro Schritt | effektiver Modellparameter |
-| `selection_strength` | kalibrieren | `2.5` | Basis-Exponent auf relative Fitness ohne Antibiotikadruck | hält unbehandelte Carrier näher an schwacher Drift |
-| `abx_selection_pressure_multiplier` | kalibrieren | `3.0` | verstärkt den Selektions-Exponent unter Antibiotikadruck | koppelt starke Richtungsselektion an ABX statt an globale Fitnesskosten |
-| `antibiotic_kill_scale` | kalibrieren | `0.08` | explizite Killrate pro Schritt für `antibiotic_kill = scale * (1 - abx_survival)` | lässt Antibiotika töten, aber mit starker Resistenzabhängigkeit statt globalem Fitness-Kollaps |
+| `min_population` | kalibrieren | `200` | Extinktions-Untergrenze: liegt die Gesamtpopulation darunter, gilt die Within-Host-Population als erloschen und die Trägerschaft wird geklärt (`p_clearance = 1.0`) | mit Carrier-Dauer kalibriert |
+| `clearance_threshold` | kalibrieren | `2000` | unterhalb davon ist `p_clearance = 0.95` | effektive Schwelle, mit Carrier-Dauer kalibriert |
+| `growth_rate_per_step` | geschätzt / kalibrieren | `0.22` | Wachstum pro Schritt vor Fitness- und Dormanzkorrektur | S. aureus-Generationszeiten geben Obergrenzen; per-step-Wert kalibriert |
+| `death_rate_per_step` | kalibrieren | `0.04` | basale Todesrate pro Schritt | effektiver Modellparameter |
+| `death_fitness_floor` | kalibrieren | `1.0` | Fitness-Floor im Sterbeterm `death_rate_per_step * 1/(baseline_fitness + floor)` | dämpft, wie stark niedrige Fitness die Todesrate hochtreibt |
+| `selection_strength` | kalibrieren | `1.8` | Basis-Exponent auf relative Fitness ohne Antibiotikadruck | hält unbehandelte Carrier näher an schwacher Drift |
+| `abx_selection_pressure_multiplier` | kalibrieren | `5.0` | verstärkt den Selektions-Exponent unter Antibiotikadruck | koppelt starke Richtungsselektion an ABX statt an globale Fitnesskosten |
+| `antibiotic_kill_scale` | kalibrieren | `0.15` | explizite Killrate pro Schritt für `antibiotic_kill = scale * (1 - abx_survival)` | lässt Antibiotika töten, aber mit starker Resistenzabhängigkeit statt globalem Fitness-Kollaps |
 
 ### Mutation und HGT
 
 | Parameter | Typ | Wert | Wirkung | Einschätzung |
 |---|---|---:|---|---|
-| `base_mutation_rate` | geschätzt / kalibrieren | `0.012` | Basismutation pro Gen und Schritt im Trait-Modell | echte S. aureus-Mutationsraten sind ableitbar; Mapping auf Trait-Schritte muss kalibriert werden |
-| `mutation_std` | kalibrieren | `0.025` | Grösse einer Trait-Veränderung | reine Modellskala |
-| `stress_mutation_boost` | geschätzt / kalibrieren | `40.0` | Mutationsboost unter Antibiotikastress | SOS-/Stressmutagenese ist belegt; Faktor im Modell kalibrieren |
-| `mutant_transfer_fraction` | kalibrieren | `0.03` | Populationsanteil pro Mutation, der vom Elternstamm in den neuen Mutanten verschoben wird | gibt neuen Mutanten genug Startmasse, um Pruning und Stochastik zu überleben |
-| `base_hgt_rate` | geschätzt / kalibrieren | `0.03` | Basiswahrscheinlichkeit eines HGT-Ereignisses pro eligiblem Stamm und Schritt | HGT bei S. aureus ist belegt; effektive Within-Host-Rate kalibrieren |
-| `hgt_gene_transfer_prob` | kalibrieren | `0.25` | Wahrscheinlichkeit pro transferierbarem Gen innerhalb eines HGT-Ereignisses | Trait-Mischparameter, nicht direkt messbar |
+| `base_mutation_rate` | geschätzt / kalibrieren | `0.015` | Basismutation pro Gen und Schritt im Trait-Modell | echte S. aureus-Mutationsraten sind ableitbar; Mapping auf Trait-Schritte muss kalibriert werden |
+| `mutation_std` | kalibrieren | `0.05` | Grösse einer Trait-Veränderung | reine Modellskala |
+| `stress_mutation_boost` | geschätzt / kalibrieren | `50.0` | Mutationsboost unter Antibiotikastress | SOS-/Stressmutagenese ist belegt (Lit.-Korridor 10–100x); Faktor im Modell kalibriert |
+| `mutant_transfer_fraction` | kalibrieren | `0.05` | Populationsanteil pro Mutation, der vom Elternstamm in den neuen Mutanten verschoben wird | gibt neuen Mutanten genug Startmasse, um Pruning und Stochastik zu überleben |
+| `base_hgt_rate` | geschätzt / kalibrieren | `0.04` | Basiswahrscheinlichkeit eines HGT-Ereignisses pro eligiblem Stamm und Schritt | HGT bei S. aureus ist belegt; effektive Within-Host-Rate kalibriert |
+| `hgt_gene_transfer_prob` | kalibrieren | `0.3` | Wahrscheinlichkeit pro transferierbarem Gen innerhalb eines HGT-Ereignisses | Trait-Mischparameter, nicht direkt messbar |
 
 ### Schaden, Lebenszyklus und Dormanz
 
 | Parameter | Typ | Wert | Wirkung | Einschätzung |
 |---|---|---:|---|---|
-| `base_damage_per_step` | kalibrieren | `0.004` | Hintergrundschaden pro Schritt | latent, nicht direkt beobachtbar |
-| `replication_damage_factor` | kalibrieren | `0.03` | zusätzlicher Schaden durch Replikationsdruck | effektiver Modellparameter |
-| `stress_damage_factor` | kalibrieren | `0.06` | zusätzlicher Schaden durch Umweltstress | effektiver Modellparameter |
-| `repair_rate_per_step` | kalibrieren | `0.08` | Abbau von Schadenslast | effektiver Modellparameter |
-| `age_mortality_scale` | kalibrieren | `0.001` | Einfluss des Linienalters auf Turnover | latent |
-| `damage_mortality_scale` | kalibrieren | `0.025` | Einfluss der Schadenslast auf Turnover | latent |
-| `lifecycle_half_life_steps` | kalibrieren | `200` | Zeitskala für Alterungsdruck | latent |
-| `max_damage_load` | technisch / kalibrieren | `5.0` | Sättigung der Schadenslast | numerische Skala |
-| `dormancy_growth_penalty` | geschätzt / kalibrieren | `0.55` | Wachstumsreduktion bei Dormanz | Persister-/Dormanzliteratur liefert Richtung, nicht diesen Koeffizienten |
-| `synergy_repair_dormancy_bonus` | kalibrieren | `0.25` | Bonus für Reparatur × Dormanz | Modellinteraktion |
-| `synergy_stress_tolerance_bonus` | kalibrieren | `0.20` | Bonus für Stressantwort × Toleranz | Modellinteraktion |
+| `base_damage_per_step` | kalibrieren | `0.005` | Hintergrundschaden pro Schritt | latent, nicht direkt beobachtbar |
+| `replication_damage_factor` | kalibrieren | `0.04` | zusätzlicher Schaden durch Replikationsdruck | effektiver Modellparameter |
+| `stress_damage_factor` | kalibrieren | `0.08` | zusätzlicher Schaden durch Umweltstress | effektiver Modellparameter |
+| `repair_rate_per_step` | kalibrieren | `0.07` | Abbau von Schadenslast | effektiver Modellparameter |
+| `age_mortality_scale` | kalibrieren | `0.002` | Einfluss des Linienalters auf Turnover | latent |
+| `damage_mortality_scale` | kalibrieren | `0.03` | Einfluss der Schadenslast auf Turnover | latent |
+| `lifecycle_half_life_steps` | kalibrieren | `150` | Zeitskala für Alterungsdruck | latent |
+| `max_damage_load` | technisch / kalibrieren | `4.0` | Sättigung der Schadenslast | numerische Skala |
+| `dormancy_growth_penalty` | geschätzt / kalibrieren | `0.6` | Wachstumsreduktion bei Dormanz | Persister-/Dormanzliteratur liefert Richtung, nicht diesen Koeffizienten |
+| `synergy_repair_dormancy_bonus` | kalibrieren | `0.3` | Bonus für Reparatur × Dormanz | Modellinteraktion |
+| `synergy_stress_tolerance_bonus` | kalibrieren | `0.25` | Bonus für Stressantwort × Toleranz | Modellinteraktion |
 
 ### Demografische Stochastik
 
 | Parameter | Typ | Wert | Wirkung | Einschätzung |
 |---|---|---:|---|---|
-| `stochastic_threshold` | technisch / kalibrieren | `10000` | darunter Poisson-Sampling, darüber Normalrauschen | beeinflusst Aussterben seltener Stämme |
-| `stochastic_noise_scale` | technisch / kalibrieren | `0.08` | Rauschstärke oberhalb der Schwelle | Sensitivität prüfen |
+| `stochastic_threshold` | technisch / kalibrieren | `20000` | darunter Poisson-Sampling, darüber Normalrauschen | beeinflusst Aussterben seltener Stämme |
+| `stochastic_noise_scale` | technisch / kalibrieren | `0.1` | Rauschstärke oberhalb der Schwelle | Sensitivität prüfen |
 
 ---
 
@@ -353,7 +359,7 @@ Diese Parameter sollten nicht direkt aus Literatur übernommen werden:
 |---|---|---|
 | Trait-Mutation | `base_mutation_rate`, `mutation_std`, `stress_mutation_boost`, `mutant_transfer_fraction` | echte Mutationen pro Base/Generation müssen auf 14 kontinuierliche Trait-Slots und 12 Schritte/Tag übersetzt werden |
 | HGT | `base_hgt_rate`, `hgt_gene_transfer_prob` | reale HGT-Raten sind kontext-, Stamm-, Plasmid- und Nischen-abhängig; das Modell nutzt eine effektive Ereignisrate |
-| Selektion/Kill | `selection_strength`, `abx_selection_pressure_multiplier`, `antibiotic_kill_scale`, `growth_rate_per_step`, `death_rate_per_step` | bestimmt Sweep-Geschwindigkeit und Populationsstabilität im Modell |
+| Selektion/Kill | `selection_strength`, `abx_selection_pressure_multiplier`, `antibiotic_kill_scale`, `growth_rate_per_step`, `death_rate_per_step`, `death_fitness_floor` | bestimmt Sweep-Geschwindigkeit und Populationsstabilität im Modell |
 | Population/Clearance | `carrying_capacity`, `min_population`, `clearance_threshold` | CFU-Werte sind messbar, aber die Modellpopulation ist eine normalisierte Binnenpopulation mit eigener Clearance-Logik |
 | Schaden/Alterung | `base_damage_per_step`, `replication_damage_factor`, `stress_damage_factor`, `repair_rate_per_step`, `age_mortality_scale`, `damage_mortality_scale`, `lifecycle_half_life_steps`, `max_damage_load` | latente Variablen ohne direkte klinische Messgrösse |
 | Dormanz-Synergien | `dormancy_growth_penalty`, `synergy_repair_dormancy_bonus`, `synergy_stress_tolerance_bonus` | Persister-Dormanz ist qualitativ belegt, aber die Modellinteraktionen sind frei gewählt |
