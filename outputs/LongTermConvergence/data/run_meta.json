@@ -1,11 +1,11 @@
 {
-  "run_timestamp": "20260615_144711",
-  "config_path": "/home/lukas/src/Sem4/MSS/config/simulation_realistic_micro.yml",
+  "run_timestamp": "20260615_145211",
+  "config_path": "/workspace/config/simulation_realistic_micro.yml",
   "git": {
-    "commit": "069a5275a9ec328edd6bf07a214bdef0ed56b5bc",
+    "commit": "c9d4ac04aeb4d393d7068b0b5b22503b1b773f3b",
     "dirty": true
   },
-  "python_version": "3.12.3",
+  "python_version": "3.13.12",
   "package_version": "0.2.0",
   "seed": 4,
   "run": {

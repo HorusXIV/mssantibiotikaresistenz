@@ -1,0 +1,35 @@
+INFO:    Environment variable SINGULARITY_DISABLE_CACHE is set, but APPTAINER_DISABLE_CACHE is preferred
+Audited 128 packages in 322ms
+Starting ensemble convergence test with 10 seeds...
+
+--- Run 1/10 (seed=1) ---
+plots_written to=/workspace/outputs/EnsembleConvergence/run_seed_1/plots
+
+--- Run 2/10 (seed=2) ---
+plots_written to=/workspace/outputs/EnsembleConvergence/run_seed_2/plots
+
+--- Run 3/10 (seed=3) ---
+plots_written to=/workspace/outputs/EnsembleConvergence/run_seed_3/plots
+
+--- Run 4/10 (seed=4) ---
+plots_written to=/workspace/outputs/EnsembleConvergence/run_seed_4/plots
+
+--- Run 5/10 (seed=5) ---
+plots_written to=/workspace/outputs/EnsembleConvergence/run_seed_5/plots
+
+--- Run 6/10 (seed=6) ---
+plots_written to=/workspace/outputs/EnsembleConvergence/run_seed_6/plots
+
+--- Run 7/10 (seed=7) ---
+plots_written to=/workspace/outputs/EnsembleConvergence/run_seed_7/plots
+
+--- Run 8/10 (seed=8) ---
+plots_written to=/workspace/outputs/EnsembleConvergence/run_seed_8/plots
+
+--- Run 9/10 (seed=9) ---
+plots_written to=/workspace/outputs/EnsembleConvergence/run_seed_9/plots
+
+--- Run 10/10 (seed=10) ---
+plots_written to=/workspace/outputs/EnsembleConvergence/run_seed_10/plots
+
+Ensemble test complete. Results saved to: /workspace/outputs/EnsembleConvergence
