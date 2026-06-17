@@ -30,6 +30,23 @@ class SimulationConfig:
     icu_abx_probability: float = 0.60
     ward_abx_probability: float = 0.15
 
+    # Antibiotic dose policy.
+    # abx_distribution True  -> each treated patient draws low/std/high uniformly (mixed ward).
+    # abx_distribution False -> every treated patient receives the fixed abx_dosage, e.g. for a
+    #   "what if everyone gets a high (or low) dose?" scenario.
+    # abx_dosage is one of low | std | high (std = standard/medium dose); only used when
+    # abx_distribution is False.
+    abx_distribution: bool = True
+    abx_dosage: str = "std"
+
+    # Antibiotic course length in days.
+    # 0  -> memoryless daily draw (a fresh on/off decision every day, no course).
+    # >0 -> once a patient starts antibiotics they stay on the same regimen for this
+    #       many days (a real treatment course). The daily initiation rate is scaled
+    #       to abx_probability / course_length so the long-run prevalence is preserved.
+    #       Courses are truncated at discharge (the at-home remainder is not modelled).
+    abx_course_length_days: int = 0
+
     # Detection / isolation of carriers
     carrier_isolation_probability: float = 0.30  # daily detection chance for non-isolated carriers
 
