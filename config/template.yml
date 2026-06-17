@@ -174,6 +174,21 @@ macro:
   icu_abx_probability: 0.85
   ward_abx_probability: 0.40
 
+  # Antibiotic dose policy.
+  # true  = each treated patient draws low/std/high uniformly (mixed ward, default).
+  # false = every treated patient receives the fixed abx_dosage below.
+  abx_distribution: true
+  # Fixed dose used only when abx_distribution is false. One of: low | std | high
+  # (std = standard/medium dose). Leave commented while abx_distribution is true.
+  # abx_dosage: high
+
+  # Antibiotic course length in days.
+  # 0  = memoryless daily draw (a fresh on/off decision every day, no course).
+  # >0 = once started, a patient stays on the same regimen for this many days
+  #      (a real treatment course; truncated at discharge). The daily initiation
+  #      rate is scaled to abx_probability / course_length to preserve prevalence.
+  abx_course_length_days: 14
+
   # Daily chance that a non-isolated carrier is detected and isolated.
   carrier_isolation_probability: 0.65
 
