@@ -88,6 +88,9 @@ class MacroSimulator:
         self._day = 0
         self._episode_counter = 0
         self._daily_transfers: List[Dict[str, str]] = []
+        # Length-of-stay record per departed patient (filled on discharge/death),
+        # consumed by the runner to write the discharge log for the LOS plot.
+        self._discharge_log: List[Dict[str, Any]] = []
         # In-hospital transmission counters for the spatial calibration:
         # how many S->C events had their source in the SAME grid cell (roommate)
         # vs. total. Their ratio is set by proximity_decay_alpha.
@@ -134,6 +137,18 @@ class MacroSimulator:
                 clear_fn = getattr(micro_simulator, "clear_episode", None)
                 if clear_fn is not None:
                     clear_fn(patient.episode_id)
+
+        # Record length of stay before the patient leaves the simulation.
+        admission_day = patient.admission_day if patient.admission_day is not None else self._day
+        self._discharge_log.append(
+            {
+                "los": self._day - admission_day,
+                "state": patient.state.value,
+                "department": patient.department.value,
+                "dominant_genotype": patient.dominant_genotype,
+                "is_isolated": patient.is_isolated,
+            }
+        )
 
         agent = self._patient_agents.pop(patient.patient_id, None)
         if agent is not None:
@@ -185,6 +200,11 @@ class MacroSimulator:
         if grid is None:
             return []
         return grid.cell_stats()
+
+    def get_discharge_log(self) -> List[Dict[str, Any]]:
+        """One record per departed patient: length of stay plus state, department,
+        dominant genotype and isolation flag at departure (for the LOS plot)."""
+        return self._discharge_log
 
     def get_colonization_count(self) -> int:
         """Cumulative count of in-hospital S->C transmissions (true nosocomial
@@ -469,16 +489,42 @@ class MacroSimulator:
         abx_prob = (
             cfg.icu_abx_probability if department == Department.ICU else cfg.ward_abx_probability
         )
-        if abx_draw < abx_prob:
-            class_idx = int(class_draw * len(_ABX_CLASSES)) % len(_ABX_CLASSES)
-            dose_idx = int(dose_draw * len(_DOSE_LEVELS)) % len(_DOSE_LEVELS)
+        if cfg.abx_course_length_days > 0 and patient.abx_days_remaining > 0:
+            # Course model: an ongoing course continues with the same class + dose.
             regimen = AntibioticRegimen(
                 on=True,
-                abx_class=_ABX_CLASSES[class_idx],
-                dose_level=_DOSE_LEVELS[dose_idx],
+                abx_class=patient.regimen.abx_class,
+                dose_level=patient.regimen.dose_level,
             )
+            patient.abx_days_remaining -= 1
         else:
-            regimen = AntibioticRegimen(on=False, abx_class="none", dose_level="std")
+            # Decide whether to start antibiotics today. With a course length, the
+            # daily initiation rate is scaled so the long-run prevalence still matches
+            # abx_prob (prevalence ~= initiation_rate * course_length).
+            if cfg.abx_course_length_days > 0:
+                mean_los = cfg.los_mean_icu if department == Department.ICU else cfg.los_mean_ward
+                effective_duration = min(cfg.abx_course_length_days, mean_los)
+                init_prob = abx_prob / effective_duration  # z.B. 0.326 / min(14, 5) = 0.326/5
+            else:
+                init_prob = abx_prob
+            if abx_draw < init_prob:
+                class_idx = int(class_draw * len(_ABX_CLASSES)) % len(_ABX_CLASSES)
+                if cfg.abx_distribution:
+                    dose_idx = int(dose_draw * len(_DOSE_LEVELS)) % len(_DOSE_LEVELS)
+                    dose_level = _DOSE_LEVELS[dose_idx]
+                else:
+                    # Fixed-dose scenario: every treated patient gets the same dose.
+                    # dose_draw is still consumed above to keep the RNG stream aligned.
+                    dose_level = cfg.abx_dosage
+                regimen = AntibioticRegimen(
+                    on=True,
+                    abx_class=_ABX_CLASSES[class_idx],
+                    dose_level=dose_level,
+                )
+                if cfg.abx_course_length_days > 0:
+                    patient.abx_days_remaining = cfg.abx_course_length_days - 1
+            else:
+                regimen = AntibioticRegimen(on=False, abx_class="none", dose_level="std")
 
         return PatientDailyContext(
             hospital_id=hospital_id,
