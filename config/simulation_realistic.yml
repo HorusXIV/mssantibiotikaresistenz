@@ -22,8 +22,8 @@ population:
     sociability: 1.0              # Kontaktintensitäts-Multiplikator [Referenz = 1.0] -> skaliert base_transmission_rate
 
   carrier_template:
-    compliance: 0.70              # Verhaltens-Compliance [0–1] -> leicht tiefer als Susceptible; wirkt via adherence im Mikro
-    immune_strength: 0.75         # Immunkompetenz-Multiplikator [Referenz = 1.0] -> 25% schwächer; wirkt im Mikro auf Immun-Clearance
+    compliance: 0.80              # Verhaltens-Compliance [0–1] -> identisch zu Susceptible; wirkt via adherence im Mikro
+    immune_strength: 1.0          # Immunkompetenz-Multiplikator [Referenz = 1.0] -> identisch zu Susceptible; wirkt im Mikro auf Immun-Clearance
     sociability: 1.0              # Kontaktintensitäts-Multiplikator [Referenz = 1.0] -> skaliert base_transmission_rate
     resistant_fraction: 0.90      # Anteil MRSA an Gesamt-S.aureus innerhalb des Carriers [0–1]
     dominant_genotype: R2         # Resistenzklasse [S | R1 | R2 | R3]
@@ -51,6 +51,11 @@ macro:
   # --- Antibiotikaverordnung ---
   icu_abx_probability: 0.62       # Antibiotikaverordnungs-Wahrscheinlichkeit ICU [Wahrscheinlichkeit / Patient*Tag]
   ward_abx_probability: 0.326     # Antibiotikaverordnungs-Wahrscheinlichkeit Normalstation [Wahrscheinlichkeit / Patient*Tag]
+
+  # --- Antibiotika-Dosis ---
+  abx_distribution: true          # true = behandelte Patienten ziehen low/std/high gleichverteilt (gemischte Station)
+  # abx_dosage: high              # nur bei abx_distribution=false: feste Dosis für ALLE Behandelten [low | std | high]
+  abx_course_length_days: 14      # Behandlungskurs in Tagen; 0 = tägliche Zufallsziehung (altes Verhalten)
 
   # --- Patientenfluss ---
   daily_admission_rate: 126.0           # Neuaufnahmen [Patienten / Tag] -> ≈ 21/Spital*Tag; bei LOS 5 Tage: Steady-State ≈ 105/Spital

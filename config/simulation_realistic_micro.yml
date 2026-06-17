@@ -14,14 +14,14 @@ population:
   initial_department: ward
 
   susceptible_template:
-    compliance: 0.80
+    compliance: 0.8
     immune_strength: 1.0
     sociability: 1.0
 
   carrier_template:
-    compliance: 0.70
-    immune_strength: 0.70 # kalibriert
-    resistant_fraction: 0.90
+    compliance: 0.8
+    immune_strength: 1.0
+    resistant_fraction: 0.0
     dominant_genotype: S
     relative_transmissibility: 1
     p_clearance: 0.005 # kalibriert | (konsistent mit Engine-Floor 0.003 + Logistik)
@@ -36,8 +36,8 @@ macro:
   dept_grid_icu_rows: 1
   network_grid_cols: 3
 
-  daily_contact_attempts: 14.0
-  base_hygiene: 0.75
+  daily_contact_attempts: 20.0
+  base_hygiene: 0.3
   base_transmission_rate: 0.07
 
   los_mean_ward: 5.0
@@ -46,6 +46,11 @@ macro:
 
   icu_abx_probability: 0.62
   ward_abx_probability: 0.326
+
+  # Antibiotika-Dosis: true = low/std/high gleichverteilt; bei false feste abx_dosage für ALLE.
+  abx_distribution: false
+  abx_dosage: high             # nur bei abx_distribution=false aktiv [low | std | high]
+  abx_course_length_days: 14   # Behandlungskurs in Tagen; 0 = tägliche Zufallsziehung
 
   daily_admission_rate: 126.0
   community_carrier_fraction: 0.017
@@ -57,7 +62,7 @@ macro:
   discharge_logistic_k: 1.0
   discharge_logistic_t_half: 3.0
 
-  replacement_resistant_fraction: 0.90
+  replacement_resistant_fraction: 0.0
   replacement_dominant_genotype: "S"
 
   carrier_isolation_probability: 0.65
