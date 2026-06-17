@@ -6,18 +6,22 @@ Usage:
     python visualize_results.py --interactive
 
 Produces diagnostic plots that show whether the simulation is behaving
-realistically:
+realistically. Macro-level plots come first (01-10), micro-level after (11-15):
   01_population_overview.png   — population size, prevalence, resistance, clinical load
   02_occupancy_stability.png   — per-hospital occupancy (validates Poisson ↔ discharge)
   03_hospital_prevalence.png   — per-hospital carrier prevalence (spatial distribution)
   04_department_mix.png        — Ward / ICU patient counts + isolated patients over time
   05_hospital_grid_heatmap.png — 3×2 grid coloured by final-day carrier prevalence
   06_department_grid.png       — per-hospital department-zone density view
-  07_micro_evolution_overview.png  — micro dynamics over time
-  08_micro_genotype_stream.png     — dominant-genotype composition over time
-  09_micro_hospital_heatmap.png    — hospital-level mean resistance over time
-  10_micro_patient_phase_space.png — patient-level resistance vs clearance (final day)
-  11_micro_genotype_persistence.png — how long patient genotype categories persist
+  07_incidence.png             — nosocomial new-case incidence over time
+  08_carrier_origin.png        — carrier origin (seed / community / hospital-acquired)
+  09_abx_pressure_vs_resistance.png — antibiotic exposure vs within-host resistance
+  10_length_of_stay.png        — length-of-stay distribution by carrier status & department
+  11_micro_evolution_overview.png  — micro dynamics over time
+  12_micro_genotype_stream.png     — dominant-genotype composition over time
+  13_micro_hospital_heatmap.png    — hospital-level mean resistance over time
+  14_micro_patient_phase_space.png — patient-level resistance vs clearance (final day)
+  15_micro_genotype_persistence.png — how long patient genotype categories persist
 """
 
 from __future__ import annotations
@@ -463,13 +467,230 @@ def plot_department_grid(cell_df: pd.DataFrame, plot_dir: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Plot 7: Micro Evolution Overview
+# Plot 7: Acquisition Incidence (nosocomial new cases per day)
+# ---------------------------------------------------------------------------
+
+
+def plot_incidence(daily: pd.DataFrame, plot_dir: Path) -> None:
+    if daily.empty or "new_cases" not in daily.columns:
+        print("  skipped 07_incidence.png (no new_cases column — re-run the simulation)")
+        return
+
+    days = daily["day"]
+    new_cases = _series(daily, "new_cases")
+    susceptible = _series(daily, "susceptible")
+    # Incidence density: new hospital-acquired carriers per 1000 susceptible-days.
+    rate = (new_cases / susceptible.where(susceptible > 0)).fillna(0.0) * 1000.0
+
+    fig, ax = plt.subplots(figsize=(11, 5))
+    fig.suptitle("Nosocomial Acquisition Incidence", fontsize=14, fontweight="bold")
+
+    ax.bar(days, new_cases, color="firebrick", alpha=0.25, width=1.0, label="New cases / day")
+    ax.plot(days, _rolling(new_cases), color="firebrick", lw=2, label=f"{ROLLING_WINDOW}d mean")
+    ax.set_xlabel("Day (d)")
+    ax.set_ylabel("Hospital-acquired carriers (count/day)", color="firebrick")
+    ax.tick_params(axis="y", labelcolor="firebrick")
+    ax.set_ylim(0, None)
+    ax.grid(alpha=0.3)
+
+    ax2 = ax.twinx()
+    ax2.plot(
+        days,
+        _rolling(rate),
+        color="steelblue",
+        lw=1.8,
+        ls="--",
+        label="Incidence / 1000 susc.-days",
+    )
+    ax2.set_ylabel("Incidence per 1000 susceptible-days", color="steelblue")
+    ax2.tick_params(axis="y", labelcolor="steelblue")
+    ax2.set_ylim(0, None)
+
+    lines1, labels1 = ax.get_legend_handles_labels()
+    lines2, labels2 = ax2.get_legend_handles_labels()
+    ax.legend(lines1 + lines2, labels1 + labels2, fontsize=8, loc="upper right")
+
+    fig.tight_layout()
+    _save(fig, plot_dir / "07_incidence.png")
+
+
+# ---------------------------------------------------------------------------
+# Plot 8: Carrier Origin (seed / community import / hospital-acquired)
+# ---------------------------------------------------------------------------
+
+
+def plot_carrier_origin(daily: pd.DataFrame, plot_dir: Path) -> None:
+    origin_cols = ["carriers_seed", "carriers_community", "carriers_acquired"]
+    if daily.empty or not all(c in daily.columns for c in origin_cols):
+        print("  skipped 08_carrier_origin.png (no carrier-origin columns — re-run the simulation)")
+        return
+
+    days = daily["day"].values
+    seed = _series(daily, "carriers_seed").values
+    community = _series(daily, "carriers_community").values
+    acquired = _series(daily, "carriers_acquired").values
+
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+    fig.suptitle("Carrier Origin Over Time", fontsize=14, fontweight="bold")
+
+    labels = ["Seed (day 0)", "Community import", "Hospital-acquired"]
+    colors = ["#999999", "#377eb8", "#e41a1c"]
+
+    # --- Absolute counts ---
+    ax = axes[0]
+    ax.stackplot(days, seed, community, acquired, labels=labels, colors=colors, alpha=0.8)
+    ax.set_title("Carriers by origin (count)")
+    ax.set_xlabel("Day (d)")
+    ax.set_ylabel("Carriers (count)")
+    ax.legend(loc="upper left", fontsize=8)
+    ax.grid(alpha=0.3)
+
+    # --- Share (%) ---
+    total = seed + community + acquired
+    total_safe = np.where(total > 0, total, 1.0)
+    ax = axes[1]
+    ax.stackplot(
+        days,
+        seed / total_safe * 100,
+        community / total_safe * 100,
+        acquired / total_safe * 100,
+        labels=labels,
+        colors=colors,
+        alpha=0.8,
+    )
+    ax.set_title("Carriers by origin (share %)")
+    ax.set_xlabel("Day (d)")
+    ax.set_ylabel("Share of carriers (%)")
+    ax.set_ylim(0, 100)
+    ax.legend(loc="upper left", fontsize=8)
+    ax.grid(alpha=0.3)
+
+    fig.tight_layout()
+    _save(fig, plot_dir / "08_carrier_origin.png")
+
+
+# ---------------------------------------------------------------------------
+# Plot 9: Antibiotic Pressure vs Resistance
+# ---------------------------------------------------------------------------
+
+
+def plot_abx_pressure_vs_resistance(daily: pd.DataFrame, plot_dir: Path) -> None:
+    if daily.empty or "abx_on_count" not in daily.columns:
+        print("  skipped 09_abx_pressure_vs_resistance.png (no abx_on_count column)")
+        return
+
+    days = daily["day"]
+    total = _series(daily, "total_patients")
+    abx_share = (_series(daily, "abx_on_count") / total.where(total > 0)).fillna(0.0) * 100
+    res = _series(daily, "avg_resistant_fraction") * 100
+
+    fig, ax = plt.subplots(figsize=(11, 5))
+    fig.suptitle("Antibiotic Pressure vs Resistance", fontsize=14, fontweight="bold")
+
+    ax.plot(days, _rolling(abx_share), color="teal", lw=2, label="Patients on ABX (%)")
+    ax.set_xlabel("Day (d)")
+    ax.set_ylabel("Patients on antibiotics (%)", color="teal")
+    ax.tick_params(axis="y", labelcolor="teal")
+    ax.set_ylim(0, None)
+    ax.grid(alpha=0.3)
+
+    ax2 = ax.twinx()
+    ax2.plot(days, _rolling(res), color="darkorange", lw=2, label="Mean resistant fraction (%)")
+    ax2.set_ylabel("Within-host resistant fraction (%)", color="darkorange")
+    ax2.tick_params(axis="y", labelcolor="darkorange")
+    ax2.set_ylim(0, 100)
+
+    lines1, labels1 = ax.get_legend_handles_labels()
+    lines2, labels2 = ax2.get_legend_handles_labels()
+    ax.legend(lines1 + lines2, labels1 + labels2, fontsize=8, loc="upper right")
+
+    fig.tight_layout()
+    _save(fig, plot_dir / "09_abx_pressure_vs_resistance.png")
+
+
+# ---------------------------------------------------------------------------
+# Plot 10: Length of Stay (by carrier status and department)
+# ---------------------------------------------------------------------------
+
+
+def plot_length_of_stay(discharges: pd.DataFrame, plot_dir: Path) -> None:
+    if discharges.empty or "los" not in discharges.columns:
+        print("  skipped 10_length_of_stay.png (no discharge data — re-run the simulation)")
+        return
+
+    los = pd.to_numeric(discharges["los"], errors="coerce").fillna(0.0)
+    state = discharges["state"].astype(str) if "state" in discharges.columns else None
+    dept = discharges["department"].astype(str) if "department" in discharges.columns else None
+
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+    fig.suptitle("Length of Stay at Discharge", fontsize=14, fontweight="bold")
+
+    max_los = float(los.max()) if len(los) else 1.0
+    bins = np.arange(0, max(max_los, 1.0) + 2, 1.0)
+
+    # --- Carrier vs susceptible ---
+    ax = axes[0]
+    if state is not None:
+        carrier_los = los[state == "C"]
+        susc_los = los[state == "S"]
+        for series, color, label in (
+            (susc_los, "steelblue", "Susceptible"),
+            (carrier_los, "firebrick", "Carrier"),
+        ):
+            if len(series) > 0:
+                ax.hist(
+                    series,
+                    bins=bins,
+                    color=color,
+                    alpha=0.55,
+                    density=True,
+                    label=f"{label} (median {np.median(series):.0f}d, n={len(series)})",
+                )
+        ax.legend(fontsize=8)
+    else:
+        ax.hist(los, bins=bins, color="gray", alpha=0.7, density=True)
+    ax.set_title("By carrier status at discharge")
+    ax.set_xlabel("Length of stay (days)")
+    ax.set_ylabel("Density")
+    ax.grid(alpha=0.3)
+
+    # --- Ward vs ICU ---
+    ax = axes[1]
+    if dept is not None:
+        for value, color, label in (
+            ("ward", "seagreen", "Ward"),
+            ("icu", "darkorange", "ICU"),
+        ):
+            series = los[dept == value]
+            if len(series) > 0:
+                ax.hist(
+                    series,
+                    bins=bins,
+                    color=color,
+                    alpha=0.55,
+                    density=True,
+                    label=f"{label} (median {np.median(series):.0f}d, n={len(series)})",
+                )
+        ax.legend(fontsize=8)
+    else:
+        ax.hist(los, bins=bins, color="gray", alpha=0.7, density=True)
+    ax.set_title("By department")
+    ax.set_xlabel("Length of stay (days)")
+    ax.set_ylabel("Density")
+    ax.grid(alpha=0.3)
+
+    fig.tight_layout()
+    _save(fig, plot_dir / "10_length_of_stay.png")
+
+
+# ---------------------------------------------------------------------------
+# Plot 11: Micro Evolution Overview
 # ---------------------------------------------------------------------------
 
 
 def plot_micro_evolution_overview(micro_daily: pd.DataFrame, plot_dir: Path) -> None:
     if micro_daily.empty or "day" not in micro_daily.columns:
-        print("  skipped 07_micro_evolution_overview.png (no micro daily data)")
+        print("  skipped 11_micro_evolution_overview.png (no micro daily data)")
         return
 
     micro_daily = micro_daily.sort_values("day")
@@ -542,17 +763,17 @@ def plot_micro_evolution_overview(micro_daily: pd.DataFrame, plot_dir: Path) -> 
     ax.grid(alpha=0.3)
 
     fig.tight_layout()
-    _save(fig, plot_dir / "07_micro_evolution_overview.png")
+    _save(fig, plot_dir / "11_micro_evolution_overview.png")
 
 
 # ---------------------------------------------------------------------------
-# Plot 8: Micro Dominant-Genotype Stream
+# Plot 12: Micro Dominant-Genotype Stream
 # ---------------------------------------------------------------------------
 
 
 def plot_micro_genotype_stream(micro_genotype: pd.DataFrame, plot_dir: Path) -> None:
     if micro_genotype.empty or "day" not in micro_genotype.columns:
-        print("  skipped 08_micro_genotype_stream.png (no micro genotype data)")
+        print("  skipped 12_micro_genotype_stream.png (no micro genotype data)")
         return
 
     pivot = (
@@ -567,7 +788,7 @@ def plot_micro_genotype_stream(micro_genotype: pd.DataFrame, plot_dir: Path) -> 
         .fillna(0.0)
     )
     if pivot.empty:
-        print("  skipped 08_micro_genotype_stream.png (empty genotype pivot)")
+        print("  skipped 12_micro_genotype_stream.png (empty genotype pivot)")
         return
 
     preferred_order = ["S", "R1", "R2", "R3", "OTHER"]
@@ -597,17 +818,17 @@ def plot_micro_genotype_stream(micro_genotype: pd.DataFrame, plot_dir: Path) -> 
     ax.grid(alpha=0.25)
 
     fig.tight_layout()
-    _save(fig, plot_dir / "08_micro_genotype_stream.png")
+    _save(fig, plot_dir / "12_micro_genotype_stream.png")
 
 
 # ---------------------------------------------------------------------------
-# Plot 9: Micro Hospital Resistance Heatmap (day × hospital)
+# Plot 13: Micro Hospital Resistance Heatmap (day × hospital)
 # ---------------------------------------------------------------------------
 
 
 def plot_micro_hospital_heatmap(micro_hosp: pd.DataFrame, plot_dir: Path) -> None:
     if micro_hosp.empty or "hospital_id" not in micro_hosp.columns:
-        print("  skipped 09_micro_hospital_heatmap.png (no micro hospital data)")
+        print("  skipped 13_micro_hospital_heatmap.png (no micro hospital data)")
         return
 
     heat = (
@@ -624,7 +845,7 @@ def plot_micro_hospital_heatmap(micro_hosp: pd.DataFrame, plot_dir: Path) -> Non
         .fillna(0.0)
     )
     if heat.empty:
-        print("  skipped 09_micro_hospital_heatmap.png (empty heatmap data)")
+        print("  skipped 13_micro_hospital_heatmap.png (empty heatmap data)")
         return
 
     fig, ax = plt.subplots(figsize=(12, max(4, 0.5 * len(heat.index) + 2)))
@@ -642,23 +863,23 @@ def plot_micro_hospital_heatmap(micro_hosp: pd.DataFrame, plot_dir: Path) -> Non
     cbar.set_label("Mean resistant fraction (%)")
 
     fig.tight_layout()
-    _save(fig, plot_dir / "09_micro_hospital_heatmap.png")
+    _save(fig, plot_dir / "13_micro_hospital_heatmap.png")
 
 
 # ---------------------------------------------------------------------------
-# Plot 10: Micro Patient Phase Space (final day)
+# Plot 14: Micro Patient Phase Space (final day)
 # ---------------------------------------------------------------------------
 
 
 def plot_micro_patient_phase_space(micro_patient: pd.DataFrame, plot_dir: Path) -> None:
     if micro_patient.empty or "day" not in micro_patient.columns:
-        print("  skipped 10_micro_patient_phase_space.png (no micro patient data)")
+        print("  skipped 14_micro_patient_phase_space.png (no micro patient data)")
         return
 
     last_day = int(micro_patient["day"].max())
     final = micro_patient[micro_patient["day"] == last_day].copy()
     if final.empty:
-        print("  skipped 10_micro_patient_phase_space.png (empty final-day micro data)")
+        print("  skipped 14_micro_patient_phase_space.png (empty final-day micro data)")
         return
 
     x = _series(final, "resistant_fraction") * 100
@@ -695,11 +916,11 @@ def plot_micro_patient_phase_space(micro_patient: pd.DataFrame, plot_dir: Path) 
     ax.legend(handles=handles, title="Genotype", fontsize=8, title_fontsize=9, loc="upper right")
 
     fig.tight_layout()
-    _save(fig, plot_dir / "10_micro_patient_phase_space.png")
+    _save(fig, plot_dir / "14_micro_patient_phase_space.png")
 
 
 # ---------------------------------------------------------------------------
-# Plot 11: Micro Genotype Persistence / Half-Life
+# Plot 15: Micro Genotype Persistence / Half-Life
 # ---------------------------------------------------------------------------
 
 
@@ -787,7 +1008,7 @@ def _build_genotype_streaks(micro_patient: pd.DataFrame) -> pd.DataFrame:
 def plot_micro_genotype_persistence(micro_patient: pd.DataFrame, plot_dir: Path) -> None:
     streaks = _build_genotype_streaks(micro_patient)
     if streaks.empty:
-        print("  skipped 11_micro_genotype_persistence.png (no genotype streak data)")
+        print("  skipped 15_micro_genotype_persistence.png (no genotype streak data)")
         return
 
     genotype_order = ["S", "R1", "R2", "R3", "OTHER"]
@@ -872,7 +1093,7 @@ def plot_micro_genotype_persistence(micro_patient: pd.DataFrame, plot_dir: Path)
         cbar.set_label("Median duration (days)")
 
     fig.tight_layout()
-    _save(fig, plot_dir / "11_micro_genotype_persistence.png")
+    _save(fig, plot_dir / "15_micro_genotype_persistence.png")
 
 
 # ---------------------------------------------------------------------------
@@ -1005,6 +1226,9 @@ def run(
     cell_path = data_dir / "macro_cell_daily.parquet"
     cell_df = pd.read_parquet(cell_path) if cell_path.exists() else pd.DataFrame()
 
+    discharge_path = data_dir / "discharges.parquet"
+    discharges = pd.read_parquet(discharge_path) if discharge_path.exists() else pd.DataFrame()
+
     if not quiet:
         print(f"Reading data from: {data_dir}")
         print(f"  macro_daily:             {len(daily)} rows")
@@ -1015,12 +1239,18 @@ def run(
         print(f"  micro_daily_genotype:    {len(micro_genotype)} rows")
         print(f"\nGenerating plots → {plot_dir}")
 
+    # Macro-level plots (01-10)
     plot_population_overview(daily, plot_dir)
     plot_occupancy_stability(hosp, plot_dir)
     plot_hospital_prevalence(hosp, plot_dir)
     plot_department_mix(daily, plot_dir)
     plot_hospital_grid_heatmap(hosp, plot_dir)
     plot_department_grid(cell_df, plot_dir)
+    plot_incidence(daily, plot_dir)
+    plot_carrier_origin(daily, plot_dir)
+    plot_abx_pressure_vs_resistance(daily, plot_dir)
+    plot_length_of_stay(discharges, plot_dir)
+    # Micro-level plots (11-15)
     plot_micro_evolution_overview(micro_daily, plot_dir)
     plot_micro_genotype_stream(micro_genotype, plot_dir)
     plot_micro_hospital_heatmap(micro_hosp, plot_dir)
