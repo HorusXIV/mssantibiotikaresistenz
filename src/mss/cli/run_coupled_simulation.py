@@ -95,6 +95,10 @@ _DAILY_FIELDS = [
     "abx_on_count",
     "ward_count",
     "icu_count",
+    "new_cases",
+    "carriers_seed",
+    "carriers_community",
+    "carriers_acquired",
 ]
 
 _DAILY_BY_HOSPITAL_FIELDS = [
@@ -252,6 +256,15 @@ _TRANSFER_DAILY_FIELDS = [
     "from_hospital",
     "to_hospital",
     "transfers",
+]
+
+_DISCHARGE_FIELDS = [
+    "run_id",
+    "los",
+    "state",
+    "department",
+    "dominant_genotype",
+    "is_isolated",
 ]
 
 
@@ -512,6 +525,13 @@ def _collect_patient_stats(patients: list[Patient]) -> dict[str, float | int]:
     icu_count = sum(1 for p in patients if p.department == Department.ICU)
     prevalence = len(carriers) / total if total else 0.0
 
+    # Carrier origin from the current episode_id prefix: initial seeds, community
+    # imports, and hospital-acquired (transmission). Anything else folds into
+    # acquired, so the three counts always sum to the carrier total.
+    carriers_seed = sum(1 for p in carriers if str(p.episode_id).startswith("seed_ep_"))
+    carriers_community = sum(1 for p in carriers if str(p.episode_id).startswith("community_ep_"))
+    carriers_acquired = len(carriers) - carriers_seed - carriers_community
+
     return {
         "total_patients": total,
         "susceptible": susceptible,
@@ -522,6 +542,9 @@ def _collect_patient_stats(patients: list[Patient]) -> dict[str, float | int]:
         "abx_on_count": abx_on_count,
         "ward_count": ward_count,
         "icu_count": icu_count,
+        "carriers_seed": carriers_seed,
+        "carriers_community": carriers_community,
+        "carriers_acquired": carriers_acquired,
     }
 
 
@@ -1314,6 +1337,10 @@ def run(
     micro_strain_daily_writer.append_rows(initial_strain_rows)
     micro_episode_gene_daily_writer.append_rows(initial_gene_rows)
 
+    # Cumulative nosocomial acquisitions before the first step; the per-day delta
+    # is the hospital-acquired incidence (community imports / seeds excluded).
+    prev_colonizations = macro.get_colonization_count()
+
     for day in range(1, settings.run.days + 1):
         macro.step(
             micro_simulator=coupled_micro,
@@ -1333,6 +1360,9 @@ def run(
             day=day,
             run_id=settings.run.run_id,
         )
+        colonizations = macro.get_colonization_count()
+        global_row["new_cases"] = colonizations - prev_colonizations
+        prev_colonizations = colonizations
         macro_daily_writer.append_rows([global_row])
         macro_daily_by_hospital_writer.append_rows(hospital_rows)
         macro_cell_daily_writer.append_rows(
@@ -1409,6 +1439,12 @@ def run(
     micro_strain_daily_writer.close()
     micro_episode_gene_daily_writer.close()
     transfer_daily_writer.close()
+
+    # Per-patient length-of-stay log (written once at the end of the run).
+    discharge_rows = [
+        {"run_id": settings.run.run_id, **record} for record in macro.get_discharge_log()
+    ]
+    _write_parquet(data_dir / "discharges.parquet", discharge_rows, _DISCHARGE_FIELDS)
 
     if final_summary is not None:
         if not settings.run.quiet:

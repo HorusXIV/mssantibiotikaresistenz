@@ -83,6 +83,9 @@ class Patient:
     # Treatment info (patient-specific)
     adherence: float = 1.0  # 0..1, can be derived from compliance each day
     regimen: AntibioticRegimen = field(default_factory=AntibioticRegimen)
+    # Days left in the current antibiotic course (course model). 0 = not on a course.
+    # Macro-owned; only used when SimulationConfig.abx_course_length_days > 0.
+    abx_days_remaining: int = 0
 
     # Medical history flags
     history_flags: Set[str] = field(default_factory=set)
